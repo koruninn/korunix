@@ -30,12 +30,28 @@ in {
 
   home.file.".local/share/icons/Hatter-Green".source = "${inputs.hatter}/Hatter-Green";
 
+  # Snippet Noctalia para Obsidian
+  home.file.".obsidian/snippets/noctalia.css" = {
+    source = config.lib.file.mkOutOfStoreSymlink "/home/koru/.korunix/modules/home/window-manager/noctalia/themes/obsidian/obsidian.css";
+    force = true;
+  };
+
+  # Tema para Heroic Games Launcher
+  home.file.".config/heroic/themes/noctalia.css" = {
+    source = config.lib.file.mkOutOfStoreSymlink "/home/koru/.korunix/modules/home/window-manager/noctalia/themes/heroic/noctalia.css";
+    force = true;
+  };
+
   # Configuración GTK
   gtk = {
     enable = true;
 
     iconTheme = {
       name = "Hatter-Green";
+    };
+    cursorTheme = {
+      name = "Bibata-Modern-Classic";
+      package = pkgs.bibata-cursors;
     };
   };
 
