@@ -39,7 +39,7 @@
       launcher_icon = "grid-dots"; # Tabler glyph for the launcher button
 
       # Desktop entry IDs, StartupWMClass, or human-readable names
-      pinned = ["firefox" "org.gnome.Nautilus" "spotify" "steam" "net.lutris.Lutris" "moe.launcher.an-anime-game-launcher" "moe.launcher.the-honkers-railway-launcher" "vesktop" "affinity.exe" "localsend_app" "code" "com.obsproject.Studio" "org.kde.kdenlive" "heroic" "ONLYOFFICE" "birdfont"];
+      pinned = ["firefox" "org.gnome.Nautilus" "spotify" "steam" "net.lutris.Lutris" "moe.launcher.an-anime-game-launcher" "moe.launcher.the-honkers-railway-launcher" "vesktop" "localsend_app" "code" "com.obsproject.Studio" "org.kde.kdenlive" "heroic" "ONLYOFFICE" "birdfont"];
     };
   };
 }

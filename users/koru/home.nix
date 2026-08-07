@@ -19,24 +19,23 @@ in {
     ../../modules/nixos/apps/spicetify.nix
   ];
 
-  programs.home-manager = {
-    enable = true;
-  };
+  programs.home-manager.enable = true;
 
-  i18n.inputMethod = {
-    enabled = null;
-    # Evita que Home Manager intente preconfigurar IBus/Fcitx de forma genérica
-  };
+  i18n.inputMethod.enabled = null;
 
-  # Enlazamos el archivo de configuración de Fish fuera del /nix/store/
-  xdg.configFile."fish/config.fish".source = config.lib.file.mkOutOfStoreSymlink "/home/koru/.korunix/config.fish";
+  xdg.configFile."fish/config.fish".source =
+    config.lib.file.mkOutOfStoreSymlink "/home/koru/.korunix/config.fish";
 
-  # CONFIGURACIÓN DEL TEMA DE ICONOS GTK PARA NIRI
+  # Instalar el tema de iconos
+  home.file.".local/share/icons/Hatter-Green".source =
+    /home/koru/.korunix/modules/home/window-manager/noctalia/Hatter/Hatter-Green;
+
+  # Configuración GTK
   gtk = {
     enable = true;
+
     iconTheme = {
       name = "Hatter-Green";
-      package = pkgs.hatter-icon-theme or null;
     };
   };
 }
