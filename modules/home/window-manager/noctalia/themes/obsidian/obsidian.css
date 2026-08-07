@@ -2,296 +2,296 @@
 
 .theme-dark {
   /* Background layers */
-  --background-primary:         {{colors.surface.default.hex}};
-  --background-primary-alt:     {{colors.surface_container_low.default.hex}};
-  --background-secondary:       {{colors.surface_container.default.hex}};
-  --background-secondary-alt:   {{colors.surface_container_high.default.hex}};
-  --background-modifier-border: {{colors.outline_variant.default.hex}};
-  --background-modifier-form-field: {{colors.surface_container_lowest.default.hex}};
-  --background-modifier-form-field-highlighted: {{colors.surface_container_low.default.hex}};
-  --background-modifier-box-shadow: {{colors.shadow.default.hex}};
-  --background-modifier-success: {{colors.primary.default.hex | set_alpha 0.15}};
-  --background-modifier-error:  {{colors.error.default.hex | set_alpha 0.15}};
-  --background-modifier-error-rgb: {{colors.error.default.rgb_csv}};
-  --background-modifier-error-hover: {{colors.error.default.hex | set_alpha 0.25}};
-  --background-modifier-cover:  {{colors.shadow.default.hex | set_alpha 0.6}};
+  --background-primary:         #232a2e;
+  --background-primary-alt:     #282f34;
+  --background-secondary:       #2d353b;
+  --background-secondary-alt:   #363f47;
+  --background-modifier-border: #555c54;
+  --background-modifier-form-field: #252c30;
+  --background-modifier-form-field-highlighted: #282f34;
+  --background-modifier-box-shadow: #475258;
+  --background-modifier-success: #a7c080;
+  --background-modifier-error:  #e67e80;
+  --background-modifier-error-rgb: 230,126,128;
+  --background-modifier-error-hover: #e67e80;
+  --background-modifier-cover:  #475258;
 
   /* Text colors */
-  --text-normal:                {{colors.on_surface.default.hex}};
-  --text-muted:                 {{colors.on_surface_variant.default.hex}};
-  --text-faint:                 {{colors.outline.default.hex}};
-  --text-on-accent:             {{colors.on_primary.default.hex}};
-  --text-on-accent-inverted:    {{colors.primary.default.hex}};
-  --text-error:                 {{colors.error.default.hex}};
-  --text-success:               {{colors.primary.default.hex}};
-  --text-selection:             {{colors.primary.default.hex | set_alpha 0.2}};
-  --text-accent:                {{colors.primary.default.hex}};
-  --text-highlight-bg:          {{colors.tertiary.default.hex | set_alpha 0.25}};
+  --text-normal:                #859289;
+  --text-muted:                 #d3c6aa;
+  --text-faint:                 #7a8478;
+  --text-on-accent:             #232a2e;
+  --text-on-accent-inverted:    #a7c080;
+  --text-error:                 #e67e80;
+  --text-success:               #a7c080;
+  --text-selection:             #a7c080;
+  --text-accent:                #a7c080;
+  --text-highlight-bg:          #9da9a0;
 
   /* Interactive accent */
-  --interactive-normal:         {{colors.surface_container.default.hex}};
-  --interactive-hover:          {{colors.surface_container_high.default.hex}};
-  --interactive-accent:         {{colors.primary.default.hex}};
-  --interactive-accent-hover:   {{colors.primary.default.hex | lighten 0.08}};
-  --interactive-accent-rgb:     {{colors.primary.default.rgb_csv}};
-  --interactive-success:        {{colors.primary.default.hex}};
+  --interactive-normal:         #2d353b;
+  --interactive-hover:          #363f47;
+  --interactive-accent:         #a7c080;
+  --interactive-accent-hover:   #a7c080;
+  --interactive-accent-rgb:     167,192,128;
+  --interactive-success:        #a7c080;
 
   /* Scrollbar */
-  --scrollbar-bg:               {{colors.surface.default.hex}};
-  --scrollbar-thumb-bg:         {{colors.outline_variant.default.hex | set_alpha 0.3}};
-  --scrollbar-active-thumb-bg:  {{colors.outline.default.hex | set_alpha 0.5}};
+  --scrollbar-bg:               #232a2e;
+  --scrollbar-thumb-bg:         #555c54;
+  --scrollbar-active-thumb-bg:  #7a8478;
 
   /* Tab styling */
-  --tab-text-color:             {{colors.on_surface_variant.default.hex}};
-  --tab-text-color-focused:     {{colors.on_surface.default.hex}};
-  --tab-text-color-focused-active: {{colors.primary.default.hex}};
-  --tab-background-active:      {{colors.surface.default.hex}};
-  --tab-divider-color:          {{colors.outline_variant.default.hex}};
+  --tab-text-color:             #d3c6aa;
+  --tab-text-color-focused:     #859289;
+  --tab-text-color-focused-active: #a7c080;
+  --tab-background-active:      #232a2e;
+  --tab-divider-color:          #555c54;
 
   /* Navigation */
-  --nav-item-color:             {{colors.on_surface_variant.default.hex}};
-  --nav-item-color-hover:       {{colors.on_surface.default.hex}};
-  --nav-item-color-active:      {{colors.on_primary.default.hex}};
-  --nav-item-background-hover:  {{colors.surface_container_high.default.hex}};
-  --nav-item-background-active: {{colors.primary.default.hex | set_alpha 0.12}};
-  --nav-collapse-icon-color:    {{colors.outline.default.hex}};
+  --nav-item-color:             #d3c6aa;
+  --nav-item-color-hover:       #859289;
+  --nav-item-color-active:      #232a2e;
+  --nav-item-background-hover:  #363f47;
+  --nav-item-background-active: #a7c080;
+  --nav-collapse-icon-color:    #7a8478;
 
   /* Titlebar */
-  --titlebar-background:        {{colors.surface_container.default.hex}};
-  --titlebar-background-focused: {{colors.surface_container.default.hex}};
-  --titlebar-text-color:        {{colors.on_surface.default.hex}};
-  --titlebar-text-color-focused: {{colors.on_surface.default.hex}};
+  --titlebar-background:        #2d353b;
+  --titlebar-background-focused: #2d353b;
+  --titlebar-text-color:        #859289;
+  --titlebar-text-color-focused: #859289;
 
   /* Tags */
-  --tag-color:                  {{colors.secondary.default.hex}};
-  --tag-background:             {{colors.secondary.default.rgba | set_alpha 0.12}};
-  --tag-color-hover:            {{colors.secondary.default.hex | lighten 0.1}};
-  --tag-background-hover:       {{colors.secondary.default.rgba | set_alpha 0.2}};
+  --tag-color:                  #d3c6aa;
+  --tag-background:             rgba(211, 198, 170, 0.12);
+  --tag-color-hover:            #d3c6aa;
+  --tag-background-hover:       rgba(211, 198, 170, 0.2);
 
   /* Headings */
-  --h1-color:                   {{colors.primary.default.hex}};
-  --h2-color:                   {{colors.primary.default.hex | darken 0.05}};
-  --h3-color:                   {{colors.secondary.default.hex}};
-  --h4-color:                   {{colors.secondary.default.hex | darken 0.05}};
-  --h5-color:                   {{colors.tertiary.default.hex}};
-  --h6-color:                   {{colors.tertiary.default.hex | darken 0.05}};
+  --h1-color:                   #a7c080;
+  --h2-color:                   #a7c080;
+  --h3-color:                   #d3c6aa;
+  --h4-color:                   #d3c6aa;
+  --h5-color:                   #9da9a0;
+  --h6-color:                   #9da9a0;
 
   /* Links */
-  --link-color:                 {{colors.primary.default.hex}};
-  --link-color-hover:           {{colors.primary.default.hex | lighten 0.1}};
-  --link-decoration-color:      {{colors.primary.default.hex | set_alpha 0.4}};
-  --link-external-color:        {{colors.tertiary.default.hex}};
-  --link-external-color-hover:  {{colors.tertiary.default.hex | lighten 0.1}};
-  --link-unresolved-color:      {{colors.error.default.hex | set_alpha 0.7}};
+  --link-color:                 #a7c080;
+  --link-color-hover:           #a7c080;
+  --link-decoration-color:      #a7c080;
+  --link-external-color:        #9da9a0;
+  --link-external-color-hover:  #9da9a0;
+  --link-unresolved-color:      #e67e80;
 
   /* Code */
-  --code-normal:                {{colors.secondary.default.hex}};
-  --code-background:            {{colors.surface_container_highest.default.hex}};
-  --code-comment:               {{colors.outline.default.hex}};
+  --code-normal:                #d3c6aa;
+  --code-background:            #3f4a52;
+  --code-comment:               #7a8478;
 
   /* Blockquotes */
-  --blockquote-border-color:    {{colors.primary.default.hex | set_alpha 0.5}};
+  --blockquote-border-color:    #a7c080;
 
   /* Checkbox */
-  --checkbox-color:             {{colors.primary.default.hex}};
-  --checkbox-color-hover:       {{colors.primary.default.hex | lighten 0.08}};
-  --checkbox-border-color:      {{colors.outline.default.hex}};
+  --checkbox-color:             #a7c080;
+  --checkbox-color-hover:       #a7c080;
+  --checkbox-border-color:      #7a8478;
 
   /* Graph view */
-  --graph-line:                 {{colors.outline_variant.default.hex | set_alpha 0.4}};
-  --graph-node:                 {{colors.primary.default.hex}};
-  --graph-node-focused:         {{colors.tertiary.default.hex}};
-  --graph-node-tag:             {{colors.secondary.default.hex}};
-  --graph-node-attachment:      {{colors.tertiary.default.hex}};
+  --graph-line:                 #555c54;
+  --graph-node:                 #a7c080;
+  --graph-node-focused:         #9da9a0;
+  --graph-node-tag:             #d3c6aa;
+  --graph-node-attachment:      #9da9a0;
 
   /* Vault name */
-  --vault-name-color:           {{colors.on_surface.default.hex}};
+  --vault-name-color:           #859289;
 
   /* Indentation guide */
-  --indentation-guide-color:    {{colors.outline_variant.default.hex | set_alpha 0.3}};
-  --indentation-guide-color-active: {{colors.outline_variant.default.hex | set_alpha 0.6}};
+  --indentation-guide-color:    #555c54;
+  --indentation-guide-color-active: #555c54;
 
   /* Obsidian 1.0+ variables */
-  --color-accent:               {{colors.primary.default.hex}};
-  --color-accent-1:             {{colors.primary.default.hex | set_alpha 0.12}};
-  --color-accent-2:             {{colors.primary.default.hex | set_alpha 0.25}};
+  --color-accent:               #a7c080;
+  --color-accent-1:             #a7c080;
+  --color-accent-2:             #a7c080;
 
   /* Icon colors */
-  --icon-color:                 {{colors.on_surface_variant.default.hex}};
-  --icon-color-hover:           {{colors.on_surface.default.hex}};
-  --icon-color-active:          {{colors.primary.default.hex}};
-  --icon-color-focused:         {{colors.primary.default.hex}};
+  --icon-color:                 #d3c6aa;
+  --icon-color-hover:           #859289;
+  --icon-color-active:          #a7c080;
+  --icon-color-focused:         #a7c080;
 
   /* Divider */
-  --divider-color:              {{colors.outline_variant.default.hex}};
-  --divider-color-hover:        {{colors.outline.default.hex}};
+  --divider-color:              #555c54;
+  --divider-color-hover:        #7a8478;
 
   /* Status bar */
-  --status-bar-background:      {{colors.surface_container.default.hex}};
-  --status-bar-text-color:      {{colors.on_surface_variant.default.hex}};
+  --status-bar-background:      #2d353b;
+  --status-bar-text-color:      #d3c6aa;
 
   /* Modal */
-  --modal-background:           {{colors.surface_container.default.hex}};
-  --modal-border-color:         {{colors.outline_variant.default.hex}};
+  --modal-background:           #2d353b;
+  --modal-border-color:         #555c54;
 
   /* Prompt / suggestion */
-  --prompt-border-color:        {{colors.outline_variant.default.hex}};
+  --prompt-border-color:        #555c54;
 
   /* Inline title */
-  --inline-title-color:         {{colors.on_surface.default.hex}};
+  --inline-title-color:         #859289;
 
   /* Bold / italic */
-  --bold-color:                 {{colors.on_surface.default.hex}};
-  --italic-color:               {{colors.on_surface.default.hex}};
+  --bold-color:                 #859289;
+  --italic-color:               #859289;
 
   /* List markers */
-  --list-marker-color:          {{colors.primary.default.hex | set_alpha 0.7}};
+  --list-marker-color:          #a7c080;
 }
 
 .theme-light {
   /* Background layers */
-  --background-primary:         {{colors.surface.light.hex}};
-  --background-primary-alt:     {{colors.surface_container_low.light.hex}};
-  --background-secondary:       {{colors.surface_container.light.hex}};
-  --background-secondary-alt:   {{colors.surface_container_high.light.hex}};
-  --background-modifier-border: {{colors.outline_variant.light.hex}};
-  --background-modifier-form-field: {{colors.surface_container_lowest.light.hex}};
-  --background-modifier-form-field-highlighted: {{colors.surface_container_low.light.hex}};
-  --background-modifier-box-shadow: {{colors.shadow.light.hex}};
-  --background-modifier-success: {{colors.primary.light.hex | set_alpha 0.1}};
-  --background-modifier-error:  {{colors.error.light.hex | set_alpha 0.1}};
-  --background-modifier-error-rgb: {{colors.error.light.rgb_csv}};
-  --background-modifier-error-hover: {{colors.error.light.hex | set_alpha 0.2}};
-  --background-modifier-cover:  {{colors.shadow.light.hex | set_alpha 0.4}};
+  --background-primary:         #9da9a0;
+  --background-primary-alt:     #adb7a9;
+  --background-secondary:       #bec5b2;
+  --background-secondary-alt:   #b4bca6;
+  --background-modifier-border: #445259;
+  --background-modifier-form-field: #a3aea3;
+  --background-modifier-form-field-highlighted: #adb7a9;
+  --background-modifier-box-shadow: #ecf5ed;
+  --background-modifier-success: #434f55;
+  --background-modifier-error:  #e66868;
+  --background-modifier-error-rgb: 230,104,104;
+  --background-modifier-error-hover: #e66868;
+  --background-modifier-cover:  #ecf5ed;
 
   /* Text colors */
-  --text-normal:                {{colors.on_surface.light.hex}};
-  --text-muted:                 {{colors.on_surface_variant.light.hex}};
-  --text-faint:                 {{colors.outline.light.hex}};
-  --text-on-accent:             {{colors.on_primary.light.hex}};
-  --text-on-accent-inverted:    {{colors.primary.light.hex}};
-  --text-error:                 {{colors.error.light.hex}};
-  --text-success:               {{colors.primary.light.hex}};
-  --text-selection:             {{colors.primary.light.hex | set_alpha 0.15}};
-  --text-accent:                {{colors.primary.light.hex}};
-  --text-highlight-bg:          {{colors.tertiary.light.hex | set_alpha 0.2}};
+  --text-normal:                #232a2e;
+  --text-muted:                 #333c43;
+  --text-faint:                 #232a2e;
+  --text-on-accent:             #d3c6aa;
+  --text-on-accent-inverted:    #434f55;
+  --text-error:                 #e66868;
+  --text-success:               #434f55;
+  --text-selection:             #434f55;
+  --text-accent:                #434f55;
+  --text-highlight-bg:          #333c43;
 
   /* Interactive accent */
-  --interactive-normal:         {{colors.surface_container.light.hex}};
-  --interactive-hover:          {{colors.surface_container_high.light.hex}};
-  --interactive-accent:         {{colors.primary.light.hex}};
-  --interactive-accent-hover:   {{colors.primary.light.hex | darken 0.05}};
-  --interactive-accent-rgb:     {{colors.primary.light.rgb_csv}};
-  --interactive-success:        {{colors.primary.light.hex}};
+  --interactive-normal:         #bec5b2;
+  --interactive-hover:          #b4bca6;
+  --interactive-accent:         #434f55;
+  --interactive-accent-hover:   #434f55;
+  --interactive-accent-rgb:     67,79,85;
+  --interactive-success:        #434f55;
 
   /* Scrollbar */
-  --scrollbar-bg:               {{colors.surface.light.hex}};
-  --scrollbar-thumb-bg:         {{colors.outline_variant.light.hex | set_alpha 0.3}};
-  --scrollbar-active-thumb-bg:  {{colors.outline.light.hex | set_alpha 0.5}};
+  --scrollbar-bg:               #9da9a0;
+  --scrollbar-thumb-bg:         #445259;
+  --scrollbar-active-thumb-bg:  #232a2e;
 
   /* Tab styling */
-  --tab-text-color:             {{colors.on_surface_variant.light.hex}};
-  --tab-text-color-focused:     {{colors.on_surface.light.hex}};
-  --tab-text-color-focused-active: {{colors.primary.light.hex}};
-  --tab-background-active:      {{colors.surface.light.hex}};
-  --tab-divider-color:          {{colors.outline_variant.light.hex}};
+  --tab-text-color:             #333c43;
+  --tab-text-color-focused:     #232a2e;
+  --tab-text-color-focused-active: #434f55;
+  --tab-background-active:      #9da9a0;
+  --tab-divider-color:          #445259;
 
   /* Navigation */
-  --nav-item-color:             {{colors.on_surface_variant.light.hex}};
-  --nav-item-color-hover:       {{colors.on_surface.light.hex}};
-  --nav-item-color-active:      {{colors.on_primary.light.hex}};
-  --nav-item-background-hover:  {{colors.surface_container_high.light.hex}};
-  --nav-item-background-active: {{colors.primary.light.hex | set_alpha 0.1}};
-  --nav-collapse-icon-color:    {{colors.outline.light.hex}};
+  --nav-item-color:             #333c43;
+  --nav-item-color-hover:       #232a2e;
+  --nav-item-color-active:      #d3c6aa;
+  --nav-item-background-hover:  #b4bca6;
+  --nav-item-background-active: #434f55;
+  --nav-collapse-icon-color:    #232a2e;
 
   /* Titlebar */
-  --titlebar-background:        {{colors.surface_container.light.hex}};
-  --titlebar-background-focused: {{colors.surface_container.light.hex}};
-  --titlebar-text-color:        {{colors.on_surface.light.hex}};
-  --titlebar-text-color-focused: {{colors.on_surface.light.hex}};
+  --titlebar-background:        #bec5b2;
+  --titlebar-background-focused: #bec5b2;
+  --titlebar-text-color:        #232a2e;
+  --titlebar-text-color-focused: #232a2e;
 
   /* Tags */
-  --tag-color:                  {{colors.secondary.light.hex}};
-  --tag-background:             {{colors.secondary.light.rgba | set_alpha 0.1}};
-  --tag-color-hover:            {{colors.secondary.light.hex | darken 0.08}};
-  --tag-background-hover:       {{colors.secondary.light.rgba | set_alpha 0.18}};
+  --tag-color:                  #232a2e;
+  --tag-background:             rgba(35, 42, 46, 0.1);
+  --tag-color-hover:            #232a2e;
+  --tag-background-hover:       rgba(35, 42, 46, 0.18);
 
   /* Headings */
-  --h1-color:                   {{colors.primary.light.hex}};
-  --h2-color:                   {{colors.primary.light.hex | lighten 0.03}};
-  --h3-color:                   {{colors.secondary.light.hex}};
-  --h4-color:                   {{colors.secondary.light.hex | lighten 0.03}};
-  --h5-color:                   {{colors.tertiary.light.hex}};
-  --h6-color:                   {{colors.tertiary.light.hex | lighten 0.03}};
+  --h1-color:                   #434f55;
+  --h2-color:                   #434f55;
+  --h3-color:                   #232a2e;
+  --h4-color:                   #232a2e;
+  --h5-color:                   #333c43;
+  --h6-color:                   #333c43;
 
   /* Links */
-  --link-color:                 {{colors.primary.light.hex}};
-  --link-color-hover:           {{colors.primary.light.hex | darken 0.08}};
-  --link-decoration-color:      {{colors.primary.light.hex | set_alpha 0.4}};
-  --link-external-color:        {{colors.tertiary.light.hex}};
-  --link-external-color-hover:  {{colors.tertiary.light.hex | darken 0.08}};
-  --link-unresolved-color:      {{colors.error.light.hex | set_alpha 0.7}};
+  --link-color:                 #434f55;
+  --link-color-hover:           #434f55;
+  --link-decoration-color:      #434f55;
+  --link-external-color:        #333c43;
+  --link-external-color-hover:  #333c43;
+  --link-unresolved-color:      #e66868;
 
   /* Code */
-  --code-normal:                {{colors.secondary.light.hex}};
-  --code-background:            {{colors.surface_container_highest.light.hex}};
-  --code-comment:               {{colors.outline.light.hex}};
+  --code-normal:                #232a2e;
+  --code-background:            #aab39b;
+  --code-comment:               #232a2e;
 
   /* Blockquotes */
-  --blockquote-border-color:    {{colors.primary.light.hex | set_alpha 0.5}};
+  --blockquote-border-color:    #434f55;
 
   /* Checkbox */
-  --checkbox-color:             {{colors.primary.light.hex}};
-  --checkbox-color-hover:       {{colors.primary.light.hex | darken 0.05}};
-  --checkbox-border-color:      {{colors.outline.light.hex}};
+  --checkbox-color:             #434f55;
+  --checkbox-color-hover:       #434f55;
+  --checkbox-border-color:      #232a2e;
 
   /* Graph view */
-  --graph-line:                 {{colors.outline_variant.light.hex | set_alpha 0.4}};
-  --graph-node:                 {{colors.primary.light.hex}};
-  --graph-node-focused:         {{colors.tertiary.light.hex}};
-  --graph-node-tag:             {{colors.secondary.light.hex}};
-  --graph-node-attachment:      {{colors.tertiary.light.hex}};
+  --graph-line:                 #445259;
+  --graph-node:                 #434f55;
+  --graph-node-focused:         #333c43;
+  --graph-node-tag:             #232a2e;
+  --graph-node-attachment:      #333c43;
 
   /* Vault name */
-  --vault-name-color:           {{colors.on_surface.light.hex}};
+  --vault-name-color:           #232a2e;
 
   /* Indentation guide */
-  --indentation-guide-color:    {{colors.outline_variant.light.hex | set_alpha 0.3}};
-  --indentation-guide-color-active: {{colors.outline_variant.light.hex | set_alpha 0.6}};
+  --indentation-guide-color:    #445259;
+  --indentation-guide-color-active: #445259;
 
   /* Obsidian 1.0+ variables */
-  --color-accent:               {{colors.primary.light.hex}};
-  --color-accent-1:             {{colors.primary.light.hex | set_alpha 0.1}};
-  --color-accent-2:             {{colors.primary.light.hex | set_alpha 0.2}};
+  --color-accent:               #434f55;
+  --color-accent-1:             #434f55;
+  --color-accent-2:             #434f55;
 
   /* Icon colors */
-  --icon-color:                 {{colors.on_surface_variant.light.hex}};
-  --icon-color-hover:           {{colors.on_surface.light.hex}};
-  --icon-color-active:          {{colors.primary.light.hex}};
-  --icon-color-focused:         {{colors.primary.light.hex}};
+  --icon-color:                 #333c43;
+  --icon-color-hover:           #232a2e;
+  --icon-color-active:          #434f55;
+  --icon-color-focused:         #434f55;
 
   /* Divider */
-  --divider-color:              {{colors.outline_variant.light.hex}};
-  --divider-color-hover:        {{colors.outline.light.hex}};
+  --divider-color:              #445259;
+  --divider-color-hover:        #232a2e;
 
   /* Status bar */
-  --status-bar-background:      {{colors.surface_container.light.hex}};
-  --status-bar-text-color:      {{colors.on_surface_variant.light.hex}};
+  --status-bar-background:      #bec5b2;
+  --status-bar-text-color:      #333c43;
 
   /* Modal */
-  --modal-background:           {{colors.surface_container.light.hex}};
-  --modal-border-color:         {{colors.outline_variant.light.hex}};
+  --modal-background:           #bec5b2;
+  --modal-border-color:         #445259;
 
   /* Prompt / suggestion */
-  --prompt-border-color:        {{colors.outline_variant.light.hex}};
+  --prompt-border-color:        #445259;
 
   /* Inline title */
-  --inline-title-color:         {{colors.on_surface.light.hex}};
+  --inline-title-color:         #232a2e;
 
   /* Bold / italic */
-  --bold-color:                 {{colors.on_surface.light.hex}};
-  --italic-color:               {{colors.on_surface.light.hex}};
+  --bold-color:                 #232a2e;
+  --italic-color:               #232a2e;
 
   /* List markers */
-  --list-marker-color:          {{colors.primary.light.hex | set_alpha 0.7}};
+  --list-marker-color:          #434f55;
 }

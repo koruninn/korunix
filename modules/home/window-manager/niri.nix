@@ -83,6 +83,11 @@
         scale 1
     }
 
+    cursor {
+        xcursor-theme "Bibata-Modern-Classic"
+        xcursor-size 24
+    }
+
     hotkey-overlay {
         // Uncomment this line to disable the "Important Hotkeys" pop-up at startup.
         skip-at-startup
