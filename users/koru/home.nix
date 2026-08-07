@@ -21,14 +21,12 @@ in {
 
   programs.home-manager.enable = true;
 
-  i18n.inputMethod.enabled = null;
-
   xdg.configFile."fish/config.fish".source =
     config.lib.file.mkOutOfStoreSymlink "/home/koru/.korunix/config.fish";
 
   home.file.".local/share/icons/Hatter".source = "${inputs.hatter}/Hatter";
 
-  home.file.".local/share/icons/Hatter-Green".source = "${inputs.hatter}/Hatter-Green";
+  home.file.".local/share/icons/Hatter-Slate".source = "${inputs.hatter}/Hatter-Slate";
 
   # Snippet Noctalia para Obsidian
   home.file.".obsidian/snippets/noctalia.css" = {
@@ -47,7 +45,7 @@ in {
     enable = true;
 
     iconTheme = {
-      name = "Hatter-Green";
+      name = "Hatter-Slate";
     };
     cursorTheme = {
       name = "Bibata-Modern-Classic";
@@ -57,7 +55,7 @@ in {
 
   dconf.settings = {
     "org/gnome/desktop/interface" = {
-      icon-theme = "Hatter-Green";
+      icon-theme = "Hatter-Slate";
     };
   };
 }

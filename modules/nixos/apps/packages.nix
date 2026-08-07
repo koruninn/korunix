@@ -32,6 +32,7 @@
     polyglot
     prismlauncher
     protonplus
+    pywalfox-native
     rapidraw
     rar
     scrcpy
