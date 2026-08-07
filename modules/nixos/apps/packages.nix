@@ -9,24 +9,32 @@
     android-tools
     birdfont
     eog
+    darktable
     fastfetch
     figma-linux
     fontforge
     git
+    gimp
     google-chrome
     heroic
+    inkscape
+    krita
     just
     kdePackages.kate
     kdePackages.kdenlive
     lutris
     nautilus
     nautilus-open-any-terminal
+    obsidian
     onlyoffice-desktopeditors
     peazip
     polyglot
+    prismlauncher
     protonplus
+    rapidraw
     rar
     scrcpy
+    spotdl
     sunshine
     thunderbird
     tree

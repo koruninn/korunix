@@ -29,6 +29,8 @@
     "electron-40.10.5"
   ];
 
+  nixpkgs.overlays = [ inputs.millennium.overlays.default ];
+
   # Define a user account.
   users.users."koru" = {
     isNormalUser = true;

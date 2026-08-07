@@ -26,9 +26,9 @@ in {
   xdg.configFile."fish/config.fish".source =
     config.lib.file.mkOutOfStoreSymlink "/home/koru/.korunix/config.fish";
 
-  # Instalar el tema de iconos
-  home.file.".local/share/icons/Hatter-Green".source =
-    /home/koru/.korunix/modules/home/window-manager/noctalia/Hatter/Hatter-Green;
+  home.file.".local/share/icons/Hatter".source = "${inputs.hatter}/Hatter";
+
+  home.file.".local/share/icons/Hatter-Green".source = "${inputs.hatter}/Hatter-Green";
 
   # Configuración GTK
   gtk = {
@@ -36,6 +36,12 @@ in {
 
     iconTheme = {
       name = "Hatter-Green";
+    };
+  };
+
+  dconf.settings = {
+    "org/gnome/desktop/interface" = {
+      icon-theme = "Hatter-Green";
     };
   };
 }
