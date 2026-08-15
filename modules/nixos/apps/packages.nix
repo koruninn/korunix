@@ -12,6 +12,7 @@
     eog
     darktable
     fastfetch
+    fetch
     figma-linux
     fontforge
     git

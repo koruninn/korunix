@@ -13,7 +13,7 @@ in {
       spicyLyrics
       oneko
     ];
-    theme = spicePkgs.themes.comfy;
-    colorScheme = "Everforest";
+    theme = spicePkgs.themes.defaultDynamic;
+    #colorScheme = "Everforest";
   };
 }

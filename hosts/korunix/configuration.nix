@@ -29,13 +29,13 @@
     "electron-40.10.5"
   ];
 
-  nixpkgs.overlays = [ inputs.millennium.overlays.default ];
+  nixpkgs.overlays = [inputs.millennium.overlays.default];
 
   # Define a user account.
   users.users."koru" = {
     isNormalUser = true;
     description = "André";
-    extraGroups = ["networkmanager" "input" "uinput" "wheel" "lp" "scanner" "adbusers"];
+    extraGroups = ["networkmanager" "Libvirtd" "kvm" "input" "uinput" "wheel" "lp" "scanner" "adbusers"];
     shell = pkgs.fish;
   };
 
@@ -54,6 +54,31 @@
   hardware.graphics = {
     enable = true;
     enable32Bit = true;
+  };
+
+  programs.virt-manager.enable = true;
+
+  virtualisation.libvirtd.enable = true;
+
+  systemd.services.libvirt-default-network = {
+    description = "Activate libvirt default network";
+
+    wantedBy = ["multi-user.target"];
+    after = ["libvirtd.service"];
+
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      ${pkgs.libvirt}/bin/virsh net-autostart default
+
+      if ! ${pkgs.libvirt}/bin/virsh net-info default \
+        | grep -q "Active:.*yes"; then
+        ${pkgs.libvirt}/bin/virsh net-start default
+      fi
+    '';
   };
 
   system.stateVersion = "26.05";
