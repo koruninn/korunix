@@ -20,6 +20,46 @@
 
   accountNameFor = userId: profiles.${userId}.accountName or userId;
 
+  # La interfaz trabaja con capacidades humanas. Esta lista impide aceptar un
+  # nombre inventado que luego no tenga una traducción real en el sistema.
+  knownCapabilities = [
+    "android"
+    "printing"
+    "sunshine"
+    "virtualization"
+  ];
+
+  accountNames = map accountNameFor cfg.users;
+
+  administratorIds =
+    lib.filter
+    (userId: profiles.${userId}.administrator or false)
+    cfg.users;
+
+  # En systemd 258 Android ya no necesita un grupo adbusers. La capacidad sigue
+  # siendo humana, pero su implementación es android-tools + uaccess automático.
+  androidRequested =
+    lib.any
+    (
+      userId:
+        lib.elem "android" (profiles.${userId}.capabilities or [])
+    )
+    cfg.users;
+
+  unknownCapabilities =
+    lib.concatMap
+    (
+      userId:
+        map
+        (capability: "${userId}:${capability}")
+        (
+          lib.filter
+          (capability: !(lib.elem capability knownCapabilities))
+          (profiles.${userId}.capabilities or [])
+        )
+    )
+    cfg.users;
+
   groupsFor = profile:
     lib.unique (
       ["networkmanager"]
@@ -36,6 +76,10 @@
         "lp"
         "scanner"
       ]
+      # Al adoptar una cuenta existente pueden aparecer grupos cuya intención
+      # Korunix todavía no conoce. Se preservan como estado técnico de migración
+      # en lugar de borrarlos o convertirlos en capacidades inventadas.
+      ++ (profile.preservedGroups or [])
     );
 
   usersConfig = lib.listToAttrs (map (
@@ -230,6 +274,36 @@
   '';
 in {
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.users != [];
+        message = "Korunix necesita al menos una persona asignada al host.";
+      }
+      {
+        assertion = administratorIds != [];
+        message = "Korunix no permite dejar un host sin ningún administrador declarado.";
+      }
+      {
+        assertion =
+          builtins.length accountNames
+          == builtins.length (lib.unique accountNames);
+        message = "Dos perfiles Korunix no pueden administrar la misma cuenta UNIX en un host.";
+      }
+      {
+        assertion =
+          !androidRequested
+          || lib.elem "android-tools" config.korunix.applications;
+        message =
+          "La capacidad Android necesita que android-tools esté instalado en el host.";
+      }
+      {
+        assertion = unknownCapabilities == [];
+        message =
+          "Korunix no conoce estas capacidades de usuario: "
+          + lib.concatStringsSep ", " unknownCapabilities;
+      }
+    ];
+
     # mutableUsers conserva las contraseñas creadas por Calamares. Korunix declara
     # identidad y capacidades, pero no coloca hashes de contraseñas en Git.
     users.mutableUsers = true;

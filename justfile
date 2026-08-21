@@ -6,6 +6,10 @@
 default:
     ./scripts/korunix
 
+# Muestra las personas, perfiles y estado de adopción del equipo.
+users:
+    ./scripts/korunix users
+
 # Detecta el hardware local y comprueba los hechos adoptados por Korunix.
 hardware:
     ./scripts/korunix hardware
