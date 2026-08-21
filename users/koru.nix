@@ -5,6 +5,10 @@
   fullName = "André";
   language = "es";
 
+  # Los métodos de entrada avanzados son una preferencia portable.
+  # Una lista vacía significa que esta persona solo necesita el teclado normal.
+  inputMethods = [];
+
   # Las capacidades describen lo que la persona quiere poder hacer. Un equipo
   # que temporalmente no pueda satisfacer alguna la conserva como aplazada en
   # su estado local en vez de borrar la intención del perfil.

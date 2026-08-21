@@ -14,6 +14,7 @@
       homeDirectory = "/home/koru";
       administrator = true;
       deferredCapabilities = [];
+      deferredInputMethods = [];
       preservedGroups = [];
     };
   };
@@ -28,7 +29,6 @@
     # Este valor conserva la compatibilidad histórica de NixOS. No representa el
     # canal estable/inestable y no debe actualizarse automáticamente.
     stateVersion = "26.05";
-
 
     localization = {
       # El idioma del sistema, los formatos y la región son estado de este host.

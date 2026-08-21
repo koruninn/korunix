@@ -54,6 +54,93 @@
     )
     (requestedCapabilitiesFor userId);
 
+  requestedInputMethodsFor = userId:
+    profiles.${userId}.inputMethods or [];
+
+  deferredInputMethodsFor = userId:
+    (settingsFor userId).deferredInputMethods or [];
+
+  enabledInputMethodsFor = userId:
+    lib.filter
+    (
+      inputMethod:
+        !(lib.elem inputMethod (deferredInputMethodsFor userId))
+    )
+    (requestedInputMethodsFor userId);
+
+  # El perfil portable solo conoce decisiones humanas. La traducción a motores
+  # y paquetes concretos pertenece a este módulo del host.
+  inputMethodCatalog = [
+    {
+      id = "chinese-pinyin";
+      label = "Chino — Pinyin";
+      engine = "pinyin";
+    }
+    {
+      id = "korean-hangul";
+      label = "Coreano — Hangul";
+      engine = "hangul";
+    }
+    {
+      id = "japanese-mozc";
+      label = "Japonés — Mozc";
+      engine = "mozc";
+    }
+    {
+      id = "vietnamese-unikey";
+      label = "Vietnamita — Unikey";
+      engine = "unikey";
+    }
+  ];
+
+  knownInputMethods = map (entry: entry.id) inputMethodCatalog;
+
+  inputMethodEntryFor = inputMethod:
+    lib.findFirst
+    (entry: entry.id == inputMethod)
+    (throw "Korunix no conoce el método de entrada ${inputMethod}.")
+    inputMethodCatalog;
+
+  fcitxEngineFor = inputMethod:
+    (inputMethodEntryFor inputMethod).engine;
+
+  fcitxAddonFor = inputMethod:
+    if inputMethod == "chinese-pinyin"
+    then pkgs.qt6Packages.fcitx5-chinese-addons
+    else if inputMethod == "korean-hangul"
+    then pkgs.fcitx5-hangul
+    else if inputMethod == "japanese-mozc"
+    then pkgs.fcitx5-mozc
+    else if inputMethod == "vietnamese-unikey"
+    then pkgs.qt6Packages.fcitx5-unikey
+    else throw "Korunix no tiene un addon para ${inputMethod}.";
+
+  # Filtrar primero permite que una preferencia desconocida llegue a una
+  # assertion humana en vez de provocar un error opaco al resolver paquetes.
+  usableInputMethodsFor = userId:
+    lib.filter
+    (inputMethod: lib.elem inputMethod knownInputMethods)
+    (enabledInputMethodsFor userId);
+
+  hostInputMethods = lib.unique (
+    lib.concatMap usableInputMethodsFor cfg.users
+  );
+
+  advancedInputMethodsEnabled = hostInputMethods != [];
+
+  fcitxAddons = map fcitxAddonFor hostInputMethods;
+
+  # Fcitx5 usa layout-variante para identificar dinámicamente un teclado XKB.
+  fcitxDefaultLayout =
+    if config.korunix.localization.keyboard.variant == ""
+    then config.korunix.localization.keyboard.layout
+    else
+      config.korunix.localization.keyboard.layout
+      + "-"
+      + config.korunix.localization.keyboard.variant;
+
+  fcitxKeyboard = "keyboard-" + fcitxDefaultLayout;
+
   preservedGroupsFor = userId:
     (settingsFor userId).preservedGroups or [];
 
@@ -130,6 +217,51 @@
     )
     cfg.users;
 
+  unknownInputMethods =
+    lib.concatMap
+    (
+      userId:
+        map
+        (inputMethod: "${userId}:${inputMethod}")
+        (
+          lib.filter
+          (inputMethod: !(lib.elem inputMethod knownInputMethods))
+          (requestedInputMethodsFor userId)
+        )
+    )
+    cfg.users;
+
+  unknownDeferredInputMethods =
+    lib.concatMap
+    (
+      userId:
+        map
+        (inputMethod: "${userId}:${inputMethod}")
+        (
+          lib.filter
+          (inputMethod: !(lib.elem inputMethod knownInputMethods))
+          (deferredInputMethodsFor userId)
+        )
+    )
+    cfg.users;
+
+  invalidDeferredInputMethods =
+    lib.concatMap
+    (
+      userId:
+        map
+        (inputMethod: "${userId}:${inputMethod}")
+        (
+          lib.filter
+          (
+            inputMethod:
+              !(lib.elem inputMethod (requestedInputMethodsFor userId))
+          )
+          (deferredInputMethodsFor userId)
+        )
+    )
+    cfg.users;
+
   # En systemd 258 Android ya no necesita adbusers. Si está activa en este host,
   # android-tools es la implementación que debe existir.
   androidRequested =
@@ -180,7 +312,6 @@
     )
     cfg.users);
 
-
   # El mismo servicio existe en cada sesión, pero solo continúa si la cuenta
   # actual pertenece al host. Esto permite varios usuarios sin duplicar módulos.
   accountCases = lib.concatStringsSep "\n" (map (
@@ -189,10 +320,20 @@
         accountName = accountNameFor userId;
         avatar = profile.avatar or null;
         language = profile.language or config.korunix.localization.systemLanguage;
+        inputMethods = usableInputMethodsFor userId;
+        fcitxMethods = map fcitxEngineFor inputMethods;
       in ''
         ${lib.escapeShellArg accountName})
           KORUNIX_USER_ID=${lib.escapeShellArg userId}
           KORUNIX_LANGUAGE=${lib.escapeShellArg language}
+          KORUNIX_INPUT_METHODS=${lib.escapeShellArg (lib.concatStringsSep "," inputMethods)}
+          KORUNIX_FCITX_METHODS=${lib.escapeShellArg (lib.concatStringsSep "," fcitxMethods)}
+          KORUNIX_FCITX_ENABLED=${
+          if advancedInputMethodsEnabled
+          then "1"
+          else "0"
+        }
+          KORUNIX_FCITX_KEYBOARD=${lib.escapeShellArg fcitxKeyboard}
           KORUNIX_AVATAR_SOURCE=${
           if avatar == null
           then "''"
@@ -278,6 +419,101 @@
     # recibe la configuración desde NixOS, por lo que ese enlace deja de servir.
     if [ -L "$config_home/fish/config.fish" ]; then
       rm -f "$config_home/fish/config.fish"
+    fi
+
+    # Fcitx5 es backend del host, pero el grupo pertenece a cada persona.
+    # Si cualquier persona del host necesita Fcitx5, todas las cuentas Korunix
+    # reciben al menos su teclado normal para evitar caer en keyboard-us.
+    #
+    # Solo sustituimos un archivo que siga siendo exactamente el último generado
+    # por Korunix. Una edición manual se conserva.
+    fcitx_dir="$config_home/fcitx5"
+    fcitx_target="$fcitx_dir/profile"
+    fcitx_hash="$korunix_state/fcitx5-profile.sha256"
+    fcitx_tmp="$korunix_state/fcitx5-profile.new"
+
+    if [ "$KORUNIX_FCITX_ENABLED" = "1" ]; then
+      mkdir -p "$fcitx_dir"
+
+      default_im="$KORUNIX_FCITX_KEYBOARD"
+
+      if [ -n "$KORUNIX_FCITX_METHODS" ]; then
+        default_im="''${KORUNIX_FCITX_METHODS%%,*}"
+      fi
+
+      {
+        echo "[Groups/0]"
+        echo "Name=Korunix"
+        echo "Default Layout=${fcitxDefaultLayout}"
+        echo "DefaultIM=$default_im"
+
+        echo
+        echo "[Groups/0/Items/0]"
+        echo "Name=$KORUNIX_FCITX_KEYBOARD"
+        echo "Layout="
+
+        old_ifs="$IFS"
+        IFS=","
+        index=1
+
+        for method in $KORUNIX_FCITX_METHODS; do
+          [ -n "$method" ] || continue
+
+          echo
+          echo "[Groups/0/Items/$index]"
+          echo "Name=$method"
+          echo "Layout="
+
+          index=$((index + 1))
+        done
+
+        IFS="$old_ifs"
+
+        echo
+        echo "[GroupOrder]"
+        echo "0=Korunix"
+      } > "$fcitx_tmp"
+
+      new_hash="$(sha256sum "$fcitx_tmp" | cut -d' ' -f1)"
+
+      if [ ! -e "$fcitx_target" ] && [ ! -L "$fcitx_target" ]; then
+        mv "$fcitx_tmp" "$fcitx_target"
+        printf '%s\n' "$new_hash" > "$fcitx_hash"
+      elif [ ! -L "$fcitx_target" ] \
+          && [ -f "$fcitx_hash" ] \
+          && [ -f "$fcitx_target" ]
+      then
+        old_hash="$(cat "$fcitx_hash")"
+        current_hash="$(sha256sum "$fcitx_target" | cut -d' ' -f1)"
+
+        if [ "$current_hash" = "$old_hash" ]; then
+          mv "$fcitx_tmp" "$fcitx_target"
+          printf '%s\n' "$new_hash" > "$fcitx_hash"
+        fi
+      fi
+
+      if [ -e "$fcitx_tmp" ]; then
+        rm -f "$fcitx_tmp"
+        printf '%s\n' \
+          "Korunix preservó ~/.config/fcitx5/profile porque contiene cambios manuales." \
+          >&2
+      fi
+    else
+      # Al dejar de necesitar Fcitx5 retiramos únicamente una copia que siga
+      # siendo idéntica a la última generada por Korunix.
+      if [ ! -L "$fcitx_target" ] \
+          && [ -f "$fcitx_hash" ] \
+          && [ -f "$fcitx_target" ]
+      then
+        old_hash="$(cat "$fcitx_hash")"
+        current_hash="$(sha256sum "$fcitx_target" | cut -d' ' -f1)"
+
+        if [ "$current_hash" = "$old_hash" ]; then
+          rm -f "$fcitx_target" "$fcitx_hash"
+        fi
+      fi
+
+      rm -f "$fcitx_tmp"
     fi
 
     if [ ! -e /etc/korunix/noctalia/config.toml ]; then
@@ -401,28 +637,99 @@ in {
           + lib.concatStringsSep ", " invalidDeferredCapabilities;
       }
       {
+        assertion = unknownInputMethods == [];
+        message =
+          "Korunix no conoce estos métodos de entrada portables: "
+          + lib.concatStringsSep ", " unknownInputMethods;
+      }
+      {
+        assertion = unknownDeferredInputMethods == [];
+        message =
+          "Korunix no conoce estos métodos de entrada aplazados: "
+          + lib.concatStringsSep ", " unknownDeferredInputMethods;
+      }
+      {
+        assertion = invalidDeferredInputMethods == [];
+        message =
+          "Un host solo puede aplazar métodos pedidos por el perfil: "
+          + lib.concatStringsSep ", " invalidDeferredInputMethods;
+      }
+      {
         assertion =
           !androidRequested
           || lib.elem "android-tools" config.korunix.applications;
-        message =
-          "La capacidad Android activa necesita android-tools en este host.";
+        message = "La capacidad Android activa necesita android-tools en este host.";
       }
     ];
+
+    # GNOME propone IBus mediante mkDefault. Mientras nadie necesite un método
+    # avanzado dejamos ese comportamiento exactamente intacto. Cuando exista una
+    # selección efectiva, Korunix elige Fcitx5 explícitamente para todo el host.
+    i18n.inputMethod = lib.mkIf advancedInputMethodsEnabled {
+      enable = true;
+      type = "fcitx5";
+
+      fcitx5 = {
+        addons = fcitxAddons;
+
+        # GTK/Qt usan sus módulos Fcitx5. El compositor sigue siendo dueño del
+        # teclado Wayland/XKB del host.
+        waylandFrontend = false;
+      };
+    };
+
+    # Contrato interno legible para los backends de terminal y la GUI futura.
+    # No contiene nombres de paquetes dentro del perfil portable de la persona.
+    environment.etc."korunix/input-methods.json".text = builtins.toJSON {
+      schemaVersion = 1;
+
+      backend =
+        if advancedInputMethodsEnabled
+        then "fcitx5"
+        else "desktop-default";
+
+      launcher =
+        if advancedInputMethodsEnabled
+        then "xdg-autostart"
+        else null;
+
+      keyboard = {
+        engine = fcitxKeyboard;
+        layout = fcitxDefaultLayout;
+      };
+
+      catalog = inputMethodCatalog;
+
+      people =
+        map (
+          userId: {
+            id = userId;
+            requested = requestedInputMethodsFor userId;
+            deferred = deferredInputMethodsFor userId;
+            effective = usableInputMethodsFor userId;
+          }
+        )
+        cfg.users;
+    };
 
     # mutableUsers conserva las contraseñas creadas por Calamares. Korunix declara
     # identidad y capacidades, pero no coloca hashes de contraseñas en Git.
     users.mutableUsers = true;
     users.users = usersConfig;
 
-
     systemd.user.services.korunix-user-prepare = {
       description = "Prepara los archivos personales administrados por Korunix";
 
+      # UWSM enlaza graphical-session-pre, graphical-session y el autostart XDG.
+      # Preparar aquí evita una carrera entre el profile personal y el lanzador
+      # oficial org.fcitx.Fcitx5.desktop.
       wantedBy = [
-        "graphical-session.target"
+        "graphical-session-pre.target"
       ];
 
       before = [
+        "graphical-session.target"
+        "xdg-desktop-autostart.target"
         "noctalia.service"
       ];
 

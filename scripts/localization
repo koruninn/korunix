@@ -57,6 +57,30 @@ console_declarada() {
     --raw
 }
 
+modelo_metodos_entrada() {
+  nix eval \
+    ".#nixosConfigurations.${HOST}.config.environment.etc.\"korunix/input-methods.json\".text" \
+    --raw
+}
+
+backend_input_habilitado() {
+  nix eval \
+    ".#nixosConfigurations.${HOST}.config.i18n.inputMethod.enable" \
+    --json
+}
+
+backend_input_tipo() {
+  nix eval \
+    ".#nixosConfigurations.${HOST}.config.i18n.inputMethod.type" \
+    --raw
+}
+
+backend_input_paquete() {
+  nix eval \
+    ".#nixosConfigurations.${HOST}.config.i18n.inputMethod.package" \
+    --raw
+}
+
 noctalia_source() {
   nix eval \
     --raw \
@@ -104,7 +128,11 @@ idiomas_personas_json() {
           | {
               id,
               fullName,
-              language
+              language,
+              inputMethods,
+              enabledInputMethods,
+              deferredInputMethods,
+              effectiveAccountName
             }
         ]
       '
@@ -156,6 +184,15 @@ estado_json() {
   local actual_console
   local noctalia_languages
   local people
+  local input_method_model
+  local input_method_enabled
+  local input_method_type
+  local input_method_package
+  local runtime_gtk_im
+  local runtime_qt_im
+  local runtime_xmodifiers
+  local fcitx_running
+  local ibus_running
 
   declared="$(modelo_declarado)"
   system_locale="$(locale_sistema_declarado)"
@@ -175,6 +212,25 @@ estado_json() {
   noctalia_languages="$(idiomas_noctalia_json)"
   people="$(idiomas_personas_json)"
 
+  input_method_model="$(modelo_metodos_entrada)"
+  input_method_enabled="$(backend_input_habilitado)"
+  input_method_type="$(backend_input_tipo)"
+  input_method_package="$(backend_input_paquete)"
+
+  runtime_gtk_im="${GTK_IM_MODULE:-}"
+  runtime_qt_im="${QT_IM_MODULE:-}"
+  runtime_xmodifiers="${XMODIFIERS:-}"
+
+  fcitx_running=false
+  ibus_running=false
+
+  # Solo interesa el daemon de esta cuenta, no el de otra sesión del equipo.
+  pgrep -u "$(id -u)" -x fcitx5 >/dev/null 2>&1 \
+    && fcitx_running=true
+
+  pgrep -u "$(id -u)" -x ibus-daemon >/dev/null 2>&1 \
+    && ibus_running=true
+
   jq -n \
     --argjson declared "$declared" \
     --arg systemLocale "$system_locale" \
@@ -191,6 +247,15 @@ estado_json() {
     --arg runtimeConsole "$actual_console" \
     --argjson noctaliaLanguages "$noctalia_languages" \
     --argjson people "$people" \
+    --argjson inputMethodModel "$input_method_model" \
+    --argjson inputMethodEnabled "$input_method_enabled" \
+    --arg inputMethodType "$input_method_type" \
+    --arg inputMethodPackage "$input_method_package" \
+    --arg runtimeGtkIm "$runtime_gtk_im" \
+    --arg runtimeQtIm "$runtime_qt_im" \
+    --arg runtimeXmodifiers "$runtime_xmodifiers" \
+    --argjson fcitxRunning "$fcitx_running" \
+    --argjson ibusRunning "$ibus_running" \
     '
       def normlocale:
         ascii_downcase
@@ -206,19 +271,21 @@ estado_json() {
         };
 
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         host: (env.KORUNIX_HOST // "korunix"),
 
         ownership: {
           portableUserFields: [
-            "language"
+            "language",
+            "inputMethods"
           ],
           hostLocalFields: [
             "systemLanguage",
             "region",
             "formats",
             "timeZone",
-            "keyboard"
+            "keyboard",
+            "deferredInputMethods"
           ]
         },
 
@@ -267,8 +334,59 @@ estado_json() {
           supportedLanguages: $noctaliaLanguages
         },
 
+        inputMethod: {
+          candidate: $inputMethodModel,
+
+          nixos: {
+            enabled: $inputMethodEnabled,
+            type: $inputMethodType,
+            package: $inputMethodPackage
+          },
+
+          runtime: {
+            gtkImModule:
+              if $runtimeGtkIm == ""
+              then null
+              else $runtimeGtkIm
+              end,
+
+            qtImModule:
+              if $runtimeQtIm == ""
+              then null
+              else $runtimeQtIm
+              end,
+
+            xmodifiers:
+              if $runtimeXmodifiers == ""
+              then null
+              else $runtimeXmodifiers
+              end,
+
+            fcitx5Running: $fcitxRunning,
+            ibusRunning: $ibusRunning
+          }
+        },
+
         contradictions:
           [
+            if (
+              (
+                [
+                  $people[]
+                  | .enabledInputMethods[]?
+                ]
+                | length
+              ) > 0
+              and $inputMethodType != "fcitx5"
+            ) then
+              contradiction(
+                "inputMethod.backend";
+                "fcitx5";
+                $inputMethodType;
+                "Hay métodos de entrada avanzados efectivos pero el backend candidato no es Fcitx5."
+              )
+            else empty end,
+
             if (
               ($runtimeLang | length) > 0
               and (($runtimeLang | normlocale) != ($systemLocale | normlocale))
@@ -357,6 +475,7 @@ mostrar_humano() {
   echo "Locale del sistema: $(jq -r '.derived.systemLocale' <<<"$data")"
   echo "Locale de formatos: $(jq -r '.derived.formatLocale' <<<"$data")"
   echo "Zona horaria: $(jq -r '.declared.timeZone' <<<"$data")"
+  echo "Backend de entrada: $(jq -r '.inputMethod.nixos.type' <<<"$data")"
 
   echo
   echo "=== Teclado ==="
@@ -380,6 +499,27 @@ mostrar_humano() {
             " · Noctalia no incluye esa traducción"
           end
         )
+      + "\n  Métodos pedidos: "
+      + (
+          if (.inputMethods | length) == 0
+          then "ninguno"
+          else (.inputMethods | join(", "))
+          end
+        )
+      + "\n  Métodos efectivos aquí: "
+      + (
+          if (.enabledInputMethods | length) == 0
+          then "ninguno"
+          else (.enabledInputMethods | join(", "))
+          end
+        )
+      + "\n  Métodos aplazados aquí: "
+      + (
+          if (.deferredInputMethods | length) == 0
+          then "ninguno"
+          else (.deferredInputMethods | join(", "))
+          end
+        )
   ' <<<"$data"
 
   echo
@@ -388,6 +528,11 @@ mostrar_humano() {
   echo "Zona horaria: $(jq -r '.runtime.timeZone // "desconocida"' <<<"$data")"
   echo "XKB: $(jq -r '.runtime.keyboard.layout // "desconocido"' <<<"$data")"
   echo "Sesión: $(jq -r '.runtime.desktop // "no detectada"' <<<"$data")"
+  echo "GTK_IM_MODULE: $(jq -r '.inputMethod.runtime.gtkImModule // "no definido"' <<<"$data")"
+  echo "QT_IM_MODULE: $(jq -r '.inputMethod.runtime.qtImModule // "no definido"' <<<"$data")"
+  echo "XMODIFIERS: $(jq -r '.inputMethod.runtime.xmodifiers // "no definido"' <<<"$data")"
+  echo "Fcitx5 en esta sesión: $(jq -r '.inputMethod.runtime.fcitx5Running' <<<"$data")"
+  echo "IBus en esta sesión: $(jq -r '.inputMethod.runtime.ibusRunning' <<<"$data")"
 
   echo
   if [[ "$(jq '.contradictions | length' <<<"$data")" -eq 0 ]]; then

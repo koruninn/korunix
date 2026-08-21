@@ -68,6 +68,15 @@ in {
             description = "Capacidades portables que este host todavía no puede satisfacer.";
           };
 
+          deferredInputMethods = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [];
+            description = ''
+              Métodos de entrada portables que esta máquina todavía no puede
+              satisfacer. La intención permanece en el perfil de la persona.
+            '';
+          };
+
           preservedGroups = lib.mkOption {
             type = lib.types.listOf lib.types.str;
             default = [];
