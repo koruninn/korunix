@@ -20,6 +20,12 @@
     # canal estable/inestable y no debe actualizarse automáticamente.
     stateVersion = "26.05";
 
+    # Este dato fue detectado del firmware real del equipo. Korunix lo
+    # conserva para elegir automáticamente el cargador correcto.
+    boot = {
+      firmware = "uefi";
+    };
+
     localization = {
       language = "es";
       region = "PE";

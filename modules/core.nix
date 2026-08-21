@@ -103,32 +103,6 @@ in {
       enable32Bit = true;
     };
 
-    # La selección definitiva entre systemd-boot y GRUB se hará en un bloque
-    # dedicado a firmware y dual boot. Por ahora se conserva el cargador vigente
-    # para que retirar Home Manager no cambie también la cadena de arranque.
-    boot = {
-      kernelPackages = pkgs.linuxPackages_latest;
-
-      kernelParams = [
-        "quiet"
-        "splash"
-        "boot.shell_on_fail"
-      ];
-
-      plymouth.enable = true;
-
-      loader = {
-        limine = {
-          enable = true;
-          extraConfig = ''
-            timeout: 5
-          '';
-        };
-
-        efi.canTouchEfiVariables = true;
-      };
-    };
-
     environment.sessionVariables = {
       XCURSOR_THEME = "Bibata-Modern-Classic";
       XCURSOR_SIZE = "24";

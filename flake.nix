@@ -98,6 +98,7 @@
           hardwareFile
 
           ./modules/core.nix
+          ./modules/boot.nix
           ./modules/localization.nix
           ./modules/desktop.nix
           ./modules/apps.nix

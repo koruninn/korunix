@@ -10,7 +10,11 @@ default:
 status:
     ./scripts/korunix status
 
-# Enseña todas las generaciones recuperables.
+# Muestra los puntos de recuperación disponibles.
+recovery:
+    ./scripts/korunix recovery
+
+# Alias técnico conservado para compatibilidad.
 generations:
     ./scripts/korunix generations
 
@@ -18,11 +22,11 @@ generations:
 check:
     ./scripts/korunix validate
 
-# Previsualiza paquetes y servicios sin activar una generación.
+# Previsualiza paquetes y servicios sin activar un sistema.
 preview:
     ./scripts/korunix preview
 
-# Construye la generación completa sin activarla.
+# Construye el sistema completo sin activarlo.
 build:
     ./scripts/korunix build
 
@@ -38,15 +42,15 @@ update:
 update-one input:
     ./scripts/korunix update {{input}}
 
-# Vuelve de forma controlada a una generación concreta.
-rollback generation:
-    ./scripts/korunix rollback {{generation}}
+# Usa un punto de recuperación una vez en el próximo arranque.
+rollback id:
+    ./scripts/korunix rollback {{id}}
 
 # Enseña qué retiraría la limpieza normal.
 clean-preview:
     ./scripts/korunix clean-preview
 
-# Conserva las tres recientes y protege las generaciones necesarias.
+# Conserva los tres puntos recientes y protege los necesarios.
 clean:
     ./scripts/korunix clean
 
@@ -62,7 +66,7 @@ clean-all:
 structure:
     ./scripts/korunix structure
 
-# Formatea archivos Nix cuando una persona decida hacerlo explícitamente.
+# Formatea archivos Nix únicamente cuando una persona lo decide explícitamente.
 fmt:
     ./scripts/korunix format
 

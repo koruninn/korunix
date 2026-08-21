@@ -286,7 +286,7 @@ mostrar_generaciones() {
     generaciones=("${generaciones[@]:$inicio}")
   fi
 
-  printf "%-6s %-19s %-28s\n" "NÚM." "FECHA" "ESTADO"
+  printf "%-6s %-19s %-28s\n" "ID" "FECHA" "ESTADO"
   printf "%-6s %-19s %-28s\n" "----" "-------------------" "----------------------------"
 
   for generacion in "${generaciones[@]}"; do
@@ -296,18 +296,18 @@ mostrar_generaciones() {
     estado=""
 
     if [[ "$generacion" == "$generacion_actual" ]]; then
-      estado="EN USO"
+      estado="ACTUAL"
     fi
 
     if [[ "$generacion" == "$predeterminada" ]]; then
       if [[ -n "$estado" ]]; then
-        estado="${estado}, PREDETERMINADA"
+        estado="${estado}, PREDETERMINADO"
       else
-        estado="PREDETERMINADA"
+        estado="PREDETERMINADO"
       fi
     fi
 
-    [[ -n "$estado" ]] || estado="recuperable"
+    [[ -n "$estado" ]] || estado="disponible"
 
     printf "%-6s %-19s %-28s\n" \
       "$generacion" \
@@ -318,6 +318,65 @@ mostrar_generaciones() {
     # disponible mediante el enlace system-N-link cuando haga falta diagnosticar.
     : "$ruta"
   done
+}
+
+
+mostrar_arranque() {
+  local modo="BIOS / Legacy"
+  local estado_boot=""
+  local cargador=""
+  local secure="desconocido"
+
+  if [[ -d /sys/firmware/efi ]]; then
+    modo="UEFI"
+  fi
+
+  if command -v bootctl >/dev/null 2>&1; then
+    estado_boot="$(bootctl status --no-pager 2>/dev/null || true)"
+
+    cargador="$(
+      awk '
+        /^[[:space:]]*Product:/ {
+          sub(/^[[:space:]]*Product:[[:space:]]*/, "")
+          print
+          exit
+        }
+      ' <<<"$estado_boot"
+    )"
+
+    secure="$(
+      awk '
+        /^[[:space:]]*Secure Boot:/ {
+          sub(/^[[:space:]]*Secure Boot:[[:space:]]*/, "")
+          print
+          exit
+        }
+      ' <<<"$estado_boot"
+    )"
+  fi
+
+  echo
+  echo "=== Arranque y firmware ==="
+  echo "Firmware: $modo"
+  echo "Cargador actual: ${cargador:-desconocido}"
+
+  case "$secure" in
+    enabled*)
+      echo "Arranque seguro: activado"
+      ;;
+    disabled*)
+      echo "Arranque seguro: desactivado"
+      ;;
+    *)
+      echo "Arranque seguro: $secure"
+      ;;
+  esac
+
+  if command -v fwupdmgr >/dev/null 2>&1; then
+    echo "Actualizaciones de firmware: integradas"
+  else
+    echo "Actualizaciones de firmware: todavía no integradas en el sistema en uso"
+  fi
 }
 
 estado() {
@@ -338,10 +397,12 @@ estado() {
   echo "=== Equipo ==="
   echo "Host Korunix: $HOST"
 
+  mostrar_arranque
+
   echo
   echo "=== Sistema ==="
-  echo "Generación en uso: ${generacion_actual:-desconocida}"
-  echo "Generación predeterminada: ${generacion_default:-desconocida}"
+  echo "Punto actual (ID): ${generacion_actual:-desconocido}"
+  echo "Punto predeterminado (ID): ${generacion_default:-desconocido}"
   echo "Sistema en uso: ${actual:-desconocido}"
   echo "Sistema predeterminado: ${predeterminada:-desconocido}"
 
@@ -352,7 +413,7 @@ estado() {
   fi
 
   echo
-  echo "=== Generaciones recientes ==="
+  echo "=== Puntos de recuperación recientes ==="
   mostrar_generaciones 5
 
   echo
@@ -575,53 +636,90 @@ actualizar() {
   exit 1
 }
 
+entrada_boot_para_generacion() {
+  local generacion="$1"
+
+  sudo bootctl list --no-pager 2>/dev/null \
+    | awk -v generacion="$generacion" '
+        /^[[:space:]]*id:/ {
+          linea = $0
+          sub(/^[[:space:]]*id:[[:space:]]*/, "", linea)
+          id = linea
+        }
+
+        /^[[:space:]]*version:/ {
+          linea = $0
+          sub(/^[[:space:]]*version:[[:space:]]*/, "", linea)
+
+          if (linea ~ ("^Generation " generacion "([[:space:]]|$)")) {
+            print id
+            exit
+          }
+        }
+      '
+}
+
 rollback_generacion() {
   local generacion="${1:-}"
   local enlace
   local objetivo
   local actual
   local predeterminada
+  local entrada
 
   [[ "$generacion" =~ ^[0-9]+$ ]] \
-    || error "Indica un número de generación, por ejemplo: rollback 35."
+    || error "Indica el ID de un punto de recuperación, por ejemplo: rollback 35."
 
   enlace="${SYSTEM_PROFILE}-${generacion}-link"
 
   [[ -e "$enlace" ]] \
-    || error "La generación ${generacion} no existe."
+    || error "El punto de recuperación ${generacion} no existe."
+
+  [[ -d /sys/firmware/efi ]] \
+    || error "La recuperación programada todavía necesita una implementación específica para BIOS/Legacy."
+
+  command -v bootctl >/dev/null 2>&1 \
+    || error "bootctl no está disponible en este sistema."
 
   objetivo="$(readlink -f "$enlace")"
   actual="$(ruta_actual)"
   predeterminada="$(generacion_predeterminada)"
 
-  echo "=== Preparar una generación anterior ==="
-  echo "Generación en uso: $(generacion_de_ruta "$actual")"
-  echo "Generación predeterminada: ${predeterminada:-desconocida}"
-  echo "Generación elegida: $generacion"
+  echo "=== Preparar un punto de recuperación ==="
+  echo "Punto actual (ID): $(generacion_de_ruta "$actual")"
+  echo "Punto predeterminado (ID): ${predeterminada:-desconocido}"
+  echo "Punto elegido (ID): $generacion"
   echo "Sistema elegido: $objetivo"
 
   mostrar_diferencias "$actual" "$objetivo"
   mostrar_reinicio "$actual" "$objetivo"
 
   echo
-  echo "Korunix NO activará esta generación durante la sesión actual."
-  echo "Solo quedará seleccionada para el próximo arranque."
-  echo "El escritorio y los servicios actuales seguirán funcionando sin cambios."
+  echo "Korunix NO activará este sistema durante la sesión actual."
+  echo "Tampoco reemplazará permanentemente el punto predeterminado."
+  echo "Solo pedirá a systemd-boot usarlo una vez en el próximo arranque."
+  echo "Después, el arranque normal vuelve a su estado predeterminado."
 
-  confirmar "¿Preparar la generación ${generacion} para el próximo arranque?" \
+  confirmar "¿Usar el punto ${generacion} una vez en el próximo arranque?" \
     || return 0
 
   sudo -v
 
-  sudo nix-env \
-    --profile "$SYSTEM_PROFILE" \
-    --switch-generation "$generacion"
+  sudo bootctl is-installed >/dev/null 2>&1 \
+    || error "systemd-boot no está instalado en la ESP."
+
+  entrada="$(entrada_boot_para_generacion "$generacion")"
+
+  [[ -n "$entrada" ]] \
+    || error "El punto ${generacion} no tiene una entrada disponible en systemd-boot."
+
+  sudo bootctl set-oneshot "$entrada"
 
   echo
-  echo "✓ GENERACIÓN ${generacion} PREPARADA"
+  echo "✓ PUNTO DE RECUPERACIÓN ${generacion} PROGRAMADO"
   echo "No se activó en caliente."
-  echo "Generación en uso: $(generacion_de_ruta "$(ruta_actual)")"
-  echo "Generación para próximo arranque: $(generacion_predeterminada)"
+  echo "No se cambió el perfil permanente."
+  echo "Entrada para el siguiente arranque: $entrada"
 }
 
 BORRAR_GENERACIONES=()
@@ -776,7 +874,7 @@ case "${1:-}" in
     formatear
     ;;
 
-  generations)
+  recovery|generations)
     mostrar_generaciones
     ;;
 
@@ -825,8 +923,11 @@ Estado y comprobación:
   scripts/korunix status
       Ver el estado local del repositorio y del sistema sin usar Internet.
 
+  scripts/korunix recovery
+      Mostrar los puntos de recuperación disponibles y su estado.
+
   scripts/korunix generations
-      Mostrar generaciones, incluida la que está en uso y la predeterminada.
+      Alias técnico de recovery para compatibilidad con el flujo anterior.
 
   scripts/korunix validate
       Comprobar estructura, Git, flake y todos los hosts sin aplicar.
@@ -854,14 +955,14 @@ Actualizaciones:
 
 Recuperación:
   scripts/korunix rollback 34
-      Preparar la generación 34 para el próximo arranque, sin activarla en caliente.
+      Preparar el punto 34 para usarlo una vez en el próximo arranque.
 
 Limpieza:
   scripts/korunix clean-preview
       Enseñar qué retiraría la limpieza normal sin borrar nada.
 
   scripts/korunix clean
-      Conservar al menos las tres generaciones más recientes y proteger siempre
+      Conservar al menos los tres puntos de recuperación más recientes y proteger siempre
       la generación en uso y la predeterminada.
 
   scripts/korunix clean-all-preview
