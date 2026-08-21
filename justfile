@@ -10,6 +10,22 @@ default:
 users:
     ./scripts/korunix users
 
+# Exporta una identidad portable sin credenciales ni estado de hardware.
+profile-export id:
+    ./scripts/korunix users export {{id}}
+
+# Inspecciona un bundle portable sin modificar el equipo.
+profile-inspect file:
+    ./scripts/korunix users inspect {{file}}
+
+# Calcula cómo se integraría un bundle en este host.
+profile-plan file:
+    ./scripts/korunix users plan {{file}}
+
+# Prepara una importación después de mostrar el plan.
+profile-import file:
+    ./scripts/korunix users import {{file}}
+
 # Detecta el hardware local y comprueba los hechos adoptados por Korunix.
 hardware:
     ./scripts/korunix hardware

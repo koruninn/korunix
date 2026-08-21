@@ -7,9 +7,16 @@
 
   # Un host puede tener varias personas y una misma persona puede aparecer en
   # varios hosts. Cada identificador apunta a users/<identificador>.nix.
-  users = [
-    "koru"
-  ];
+  # El host es dueño de la pertenencia y de las decisiones locales. La identidad,
+  # preferencias y capacidades portables siguen viviendo en users/koru.nix.
+  users = {
+    koru = {
+      homeDirectory = "/home/koru";
+      administrator = true;
+      deferredCapabilities = [];
+      preservedGroups = [];
+    };
+  };
 
   korunix = {
     enable = true;

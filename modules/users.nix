@@ -18,7 +18,44 @@
 
   profiles = lib.genAttrs cfg.users loadUser;
 
-  accountNameFor = userId: profiles.${userId}.accountName or userId;
+  settingsFor = userId: cfg.userSettings.${userId} or {};
+
+  accountNameFor = userId: let
+    profile = profiles.${userId};
+    settings = settingsFor userId;
+    localName = settings.accountName or null;
+  in
+    if localName != null
+    then localName
+    else profile.accountName or userId;
+
+  homeDirectoryFor = userId: let
+    settings = settingsFor userId;
+    localHome = settings.homeDirectory or null;
+  in
+    if localHome != null
+    then localHome
+    else "/home/${accountNameFor userId}";
+
+  administratorFor = userId:
+    (settingsFor userId).administrator or false;
+
+  requestedCapabilitiesFor = userId:
+    profiles.${userId}.capabilities or [];
+
+  deferredCapabilitiesFor = userId:
+    (settingsFor userId).deferredCapabilities or [];
+
+  enabledCapabilitiesFor = userId:
+    lib.filter
+    (
+      capability:
+        !(lib.elem capability (deferredCapabilitiesFor userId))
+    )
+    (requestedCapabilitiesFor userId);
+
+  preservedGroupsFor = userId:
+    (settingsFor userId).preservedGroups or [];
 
   # La interfaz trabaja con capacidades humanas. Esta lista impide aceptar un
   # nombre inventado que luego no tenga una traducción real en el sistema.
@@ -29,21 +66,23 @@
     "virtualization"
   ];
 
+  settingsIds = builtins.attrNames cfg.userSettings;
+
+  missingSettingsIds =
+    lib.filter
+    (userId: !(builtins.hasAttr userId cfg.userSettings))
+    cfg.users;
+
+  extraSettingsIds =
+    lib.filter
+    (userId: !(lib.elem userId cfg.users))
+    settingsIds;
+
   accountNames = map accountNameFor cfg.users;
 
   administratorIds =
     lib.filter
-    (userId: profiles.${userId}.administrator or false)
-    cfg.users;
-
-  # En systemd 258 Android ya no necesita un grupo adbusers. La capacidad sigue
-  # siendo humana, pero su implementación es android-tools + uaccess automático.
-  androidRequested =
-    lib.any
-    (
-      userId:
-        lib.elem "android" (profiles.${userId}.capabilities or [])
-    )
+    administratorFor
     cfg.users;
 
   unknownCapabilities =
@@ -55,31 +94,73 @@
         (
           lib.filter
           (capability: !(lib.elem capability knownCapabilities))
-          (profiles.${userId}.capabilities or [])
+          (requestedCapabilitiesFor userId)
         )
     )
     cfg.users;
 
-  groupsFor = profile:
+  unknownDeferredCapabilities =
+    lib.concatMap
+    (
+      userId:
+        map
+        (capability: "${userId}:${capability}")
+        (
+          lib.filter
+          (capability: !(lib.elem capability knownCapabilities))
+          (deferredCapabilitiesFor userId)
+        )
+    )
+    cfg.users;
+
+  invalidDeferredCapabilities =
+    lib.concatMap
+    (
+      userId:
+        map
+        (capability: "${userId}:${capability}")
+        (
+          lib.filter
+          (
+            capability:
+              !(lib.elem capability (requestedCapabilitiesFor userId))
+          )
+          (deferredCapabilitiesFor userId)
+        )
+    )
+    cfg.users;
+
+  # En systemd 258 Android ya no necesita adbusers. Si está activa en este host,
+  # android-tools es la implementación que debe existir.
+  androidRequested =
+    lib.any
+    (
+      userId:
+        lib.elem "android" (enabledCapabilitiesFor userId)
+    )
+    cfg.users;
+
+  groupsFor = userId: let
+    capabilities = enabledCapabilitiesFor userId;
+  in
     lib.unique (
       ["networkmanager"]
-      ++ lib.optionals (profile.administrator or false) ["wheel"]
-      ++ lib.optionals (lib.elem "virtualization" (profile.capabilities or [])) [
+      ++ lib.optionals (administratorFor userId) ["wheel"]
+      ++ lib.optionals (lib.elem "virtualization" capabilities) [
         "libvirtd"
         "kvm"
       ]
-      ++ lib.optionals (lib.elem "sunshine" (profile.capabilities or [])) [
+      ++ lib.optionals (lib.elem "sunshine" capabilities) [
         "input"
         "uinput"
       ]
-      ++ lib.optionals (lib.elem "printing" (profile.capabilities or [])) [
+      ++ lib.optionals (lib.elem "printing" capabilities) [
         "lp"
         "scanner"
       ]
-      # Al adoptar una cuenta existente pueden aparecer grupos cuya intención
-      # Korunix todavía no conoce. Se preservan como estado técnico de migración
-      # en lugar de borrarlos o convertirlos en capacidades inventadas.
-      ++ (profile.preservedGroups or [])
+      # Los grupos conservados son estado de adopción de este host y nunca viajan
+      # dentro de un perfil portable.
+      ++ (preservedGroupsFor userId)
     );
 
   usersConfig = lib.listToAttrs (map (
@@ -91,9 +172,9 @@
         value = {
           isNormalUser = true;
           description = profile.fullName;
-          home = profile.homeDirectory;
+          home = homeDirectoryFor userId;
           shell = pkgs.fish;
-          extraGroups = groupsFor profile;
+          extraGroups = groupsFor userId;
         };
       }
     )
@@ -280,6 +361,18 @@ in {
         message = "Korunix necesita al menos una persona asignada al host.";
       }
       {
+        assertion = missingSettingsIds == [];
+        message =
+          "Cada persona del host necesita estado local en userSettings. Faltan: "
+          + lib.concatStringsSep ", " missingSettingsIds;
+      }
+      {
+        assertion = extraSettingsIds == [];
+        message =
+          "Hay estado local de usuarios que no pertenecen al host: "
+          + lib.concatStringsSep ", " extraSettingsIds;
+      }
+      {
         assertion = administratorIds != [];
         message = "Korunix no permite dejar un host sin ningún administrador declarado.";
       }
@@ -290,17 +383,29 @@ in {
         message = "Dos perfiles Korunix no pueden administrar la misma cuenta UNIX en un host.";
       }
       {
+        assertion = unknownCapabilities == [];
+        message =
+          "Korunix no conoce estas capacidades portables: "
+          + lib.concatStringsSep ", " unknownCapabilities;
+      }
+      {
+        assertion = unknownDeferredCapabilities == [];
+        message =
+          "Korunix no conoce estas capacidades aplazadas: "
+          + lib.concatStringsSep ", " unknownDeferredCapabilities;
+      }
+      {
+        assertion = invalidDeferredCapabilities == [];
+        message =
+          "Un host solo puede aplazar capacidades pedidas por el perfil: "
+          + lib.concatStringsSep ", " invalidDeferredCapabilities;
+      }
+      {
         assertion =
           !androidRequested
           || lib.elem "android-tools" config.korunix.applications;
         message =
-          "La capacidad Android necesita que android-tools esté instalado en el host.";
-      }
-      {
-        assertion = unknownCapabilities == [];
-        message =
-          "Korunix no conoce estas capacidades de usuario: "
-          + lib.concatStringsSep ", " unknownCapabilities;
+          "La capacidad Android activa necesita android-tools en este host.";
       }
     ];
 

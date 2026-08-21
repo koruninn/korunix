@@ -38,6 +38,47 @@ in {
       default = [];
       description = "Personas que tienen una cuenta en este equipo.";
     };
+
+    # La identidad portable vive en users/<id>.nix. Estos valores pertenecen a
+    # la relación entre esa persona y este host concreto.
+    userSettings = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule {
+        options = {
+          accountName = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "Nombre UNIX local cuando el host necesita una excepción al perfil portable.";
+          };
+
+          homeDirectory = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "Home local de la persona en este equipo.";
+          };
+
+          administrator = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Si la persona administra este equipo concreto.";
+          };
+
+          deferredCapabilities = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [];
+            description = "Capacidades portables que este host todavía no puede satisfacer.";
+          };
+
+          preservedGroups = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [];
+            description = "Grupos técnicos locales conservados durante una adopción.";
+          };
+        };
+      });
+
+      default = {};
+      description = "Estado local por usuario que no forma parte de su identidad portable.";
+    };
   };
 
   config = lib.mkIf cfg.enable {

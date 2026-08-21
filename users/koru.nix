@@ -1,18 +1,13 @@
 {
-  # Identificador humano de la cuenta. El archivo no guarda contraseñas: la clave
-  # existente de Calamares permanece en el sistema y las nuevas credenciales se
-  # gestionarán localmente mediante la capa privilegiada de Korunix.
+  # Identidad portable. accountName es la cuenta UNIX preferida, pero un host
+  # puede definir una excepción local si ese nombre ya está ocupado.
   accountName = "koru";
   fullName = "André";
-  homeDirectory = "/home/koru";
   language = "es";
 
-  # Korunix traduce este rol a los permisos del sistema. La interfaz normal nunca
-  # necesita preguntar si una persona conoce el grupo UNIX «wheel».
-  administrator = true;
-
-  # Las capacidades expresan lo que la persona necesita hacer. Los grupos UNIX
-  # se derivan de ellas y no son una lista que el usuario tenga que mantener.
+  # Las capacidades describen lo que la persona quiere poder hacer. Un equipo
+  # que temporalmente no pueda satisfacer alguna la conserva como aplazada en
+  # su estado local en vez de borrar la intención del perfil.
   capabilities = [
     "android"
     "printing"
@@ -20,8 +15,8 @@
     "virtualization"
   ];
 
-  # El avatar pertenece a la identidad del usuario, no a Noctalia. Si todavía no
-  # existe el archivo, Korunix simplemente continúa sin una imagen personalizada.
+  # El avatar forma parte de la identidad portable y puede viajar dentro de un
+  # bundle .korunix-profile. No contiene ninguna credencial.
   avatar =
     if builtins.pathExists ./koru.jpg
     then ./koru.jpg

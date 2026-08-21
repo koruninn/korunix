@@ -77,6 +77,20 @@
         then hardwareCandidate
         else throw "Falta hardware/${hostId}.nix para el host ${hostId}.";
       host = hostDataFor hostId;
+
+      # El formato actual hace que users sea un attrset: las claves son IDs
+      # portables y los valores contienen únicamente estado local del host.
+      # La rama de lista permite leer un host antiguo durante una migración.
+      hostUsersRaw = host.users or [];
+      hostUserIds =
+        if builtins.isList hostUsersRaw
+        then hostUsersRaw
+        else builtins.attrNames hostUsersRaw;
+      hostUserSettings =
+        if builtins.isList hostUsersRaw
+        then {}
+        else hostUsersRaw;
+
       system = host.system;
     in
       lib.nixosSystem {
@@ -117,7 +131,8 @@
               host.korunix
               // {
                 inherit hostId;
-                users = host.users;
+                users = hostUserIds;
+                userSettings = hostUserSettings;
               };
 
             environment.systemPackages = [

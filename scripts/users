@@ -1,0 +1,2111 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Backend humano de identidad y cuentas de Korunix.
+# scripts/korunix sigue siendo el punto de entrada general; este archivo contiene
+# un único dominio coherente para que terminal y GUI futura compartan operaciones.
+
+ROOT="$(
+  cd "$(dirname "${BASH_SOURCE[0]}")/.."
+  pwd
+)"
+
+cd "$ROOT"
+
+error() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+aviso() {
+  printf 'AVISO: %s\n' "$*" >&2
+}
+
+resolver_host() {
+  local solicitado="${KORUNIX_HOST:-}"
+  local actual
+  local hosts=()
+  local archivo
+
+  if [[ -n "$solicitado" ]]; then
+    [[ -f "hosts/${solicitado}.nix" ]] \
+      || error "No existe hosts/${solicitado}.nix."
+
+    printf '%s\n' "$solicitado"
+    return
+  fi
+
+  actual="$(hostname 2>/dev/null || true)"
+
+  if [[ -n "$actual" && -f "hosts/${actual}.nix" ]]; then
+    printf '%s\n' "$actual"
+    return
+  fi
+
+  for archivo in hosts/*.nix; do
+    [[ -e "$archivo" ]] || continue
+    hosts+=("$(basename "$archivo" .nix)")
+  done
+
+  if [[ "${#hosts[@]}" -eq 1 ]]; then
+    printf '%s\n' "${hosts[0]}"
+    return
+  fi
+
+  error "No pude decidir qué host usar. Define KORUNIX_HOST."
+}
+
+HOST="$(resolver_host)"
+
+confirmar() {
+  local mensaje="$1"
+  local respuesta
+
+  [[ -t 0 ]] || error "Esta operación necesita confirmación interactiva."
+
+  printf '%s [s/N] ' "$mensaje"
+  read -r respuesta
+
+  case "$respuesta" in
+    s|S|si|Si|SI|sí|Sí|SÍ)
+      return 0
+      ;;
+    *)
+      echo "Operación cancelada."
+      return 1
+      ;;
+  esac
+}
+
+uid_minimo() {
+  local valor=1000
+  local linea
+
+  if [[ -r /etc/login.defs ]]; then
+    while IFS= read -r linea; do
+      if [[ "$linea" =~ ^[[:space:]]*UID_MIN[[:space:]]+([0-9]+) ]]; then
+        valor="${BASH_REMATCH[1]}"
+        break
+      fi
+    done < /etc/login.defs
+  fi
+
+  printf '%s\n' "$valor"
+}
+
+es_cuenta_tecnica() {
+  local home="$1"
+  local shell="$2"
+
+  [[ "$home" == "/var/empty" ]] && return 0
+  [[ "$home" == /run/gdm/* ]] && return 0
+  [[ "$shell" == *nologin ]] && return 0
+  [[ "$shell" == *false ]] && return 0
+
+  return 1
+}
+
+cuenta_humana_existente() {
+  local cuenta="$1"
+  local entrada
+  local uid
+  local home
+  local shell
+  local minimo
+
+  entrada="$(getent passwd "$cuenta" 2>/dev/null || true)"
+  [[ -n "$entrada" ]] || return 1
+
+  IFS=: read -r _ _ uid _ _ home shell <<<"$entrada"
+
+  [[ "$uid" =~ ^[0-9]+$ ]] || return 1
+
+  minimo="$(uid_minimo)"
+  (( uid >= minimo && uid < 65534 )) || return 1
+
+  es_cuenta_tecnica "$home" "$shell" && return 1
+
+  return 0
+}
+
+validar_nombre_cuenta() {
+  local cuenta="$1"
+
+  [[ "$cuenta" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] \
+    || error "La cuenta debe usar minúsculas, números, _ o -, empezar por letra/_ y tener como máximo 32 caracteres."
+}
+
+validar_id_perfil() {
+  local id="$1"
+
+  [[ "$id" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] \
+    || error "El ID portable tiene un formato no admitido: $id"
+}
+
+nix_string() {
+  local valor="$1"
+
+  jq -Rn \
+    --arg valor "$valor" \
+    '$valor'
+}
+
+host_users_json() {
+  nix eval \
+    ".#nixosConfigurations.${HOST}.config.korunix.users" \
+    --json
+}
+
+host_settings_json() {
+  nix eval \
+    ".#nixosConfigurations.${HOST}.config.korunix.userSettings" \
+    --json
+}
+
+perfil_asignado_al_host() {
+  local id_usuario="$1"
+
+  host_users_json \
+    | jq -e \
+        --arg id "$id_usuario" \
+        'index($id) != null' \
+        >/dev/null
+}
+
+perfil_portable_json() {
+  local id_usuario="$1"
+  local perfil="users/${id_usuario}.nix"
+
+  [[ -f "$perfil" ]] \
+    || error "No existe $perfil."
+
+  nix eval \
+    --impure \
+    --json \
+    --expr "
+      let
+        u = import ./$perfil;
+      in {
+        id = \"$id_usuario\";
+        accountName = u.accountName or \"$id_usuario\";
+        fullName = u.fullName or \"\";
+        language = u.language or null;
+        capabilities = u.capabilities or [];
+        avatarPath =
+          if (u.avatar or null) == null
+          then null
+          else toString u.avatar;
+      }
+    "
+}
+
+perfil_por_cuenta() {
+  local buscada="$1"
+  local usuarios
+  local settings
+  local perfil
+  local id_usuario
+  local portable
+  local cuenta
+  local local_name
+  local perfiles=()
+
+  usuarios="$(host_users_json)"
+  settings="$(host_settings_json)"
+
+  shopt -s nullglob
+  perfiles=(users/*.nix)
+
+  for perfil in "${perfiles[@]}"; do
+    id_usuario="$(basename "$perfil" .nix)"
+    portable="$(perfil_portable_json "$id_usuario")"
+    cuenta="$(jq -r '.accountName' <<<"$portable")"
+
+    if jq -e \
+        --arg id "$id_usuario" \
+        'index($id) != null' \
+        <<<"$usuarios" \
+        >/dev/null
+    then
+      local_name="$(
+        jq -r \
+          --arg id "$id_usuario" \
+          '.[$id].accountName // empty' \
+          <<<"$settings"
+      )"
+
+      [[ -n "$local_name" ]] && cuenta="$local_name"
+    fi
+
+    if [[ "$cuenta" == "$buscada" ]]; then
+      printf '%s\n' "$id_usuario"
+      return
+    fi
+  done
+}
+
+capacidad_disponible_localmente() {
+  local capacidad="$1"
+
+  case "$capacidad" in
+    android)
+      nix eval \
+        ".#nixosConfigurations.${HOST}.config.korunix.applications" \
+        --json \
+        2>/dev/null \
+        | jq -e 'index("android-tools") != null' \
+        >/dev/null
+      ;;
+
+    printing)
+      [[ "$(
+        nix eval \
+          ".#nixosConfigurations.${HOST}.config.korunix.services.printing" \
+          --json \
+          2>/dev/null
+      )" == "true" ]]
+      ;;
+
+    sunshine)
+      [[ "$(
+        nix eval \
+          ".#nixosConfigurations.${HOST}.config.korunix.services.sunshine" \
+          --json \
+          2>/dev/null
+      )" == "true" ]]
+      ;;
+
+    virtualization)
+      [[ "$(
+        nix eval \
+          ".#nixosConfigurations.${HOST}.config.korunix.services.virtualization" \
+          --json \
+          2>/dev/null
+      )" == "true" ]] \
+        && grep -Eq '(^|[[:space:]])(vmx|svm)([[:space:]]|$)' /proc/cpuinfo
+      ;;
+
+    *)
+      return 1
+      ;;
+  esac
+}
+
+motivo_capacidad_no_disponible() {
+  local capacidad="$1"
+
+  case "$capacidad" in
+    android)
+      echo "android-tools no está activo en este host"
+      ;;
+    printing)
+      echo "el servicio de impresión no está activo en este host"
+      ;;
+    sunshine)
+      echo "Sunshine no está activo en este host"
+      ;;
+    virtualization)
+      echo "la virtualización no está activa o el CPU no expone vmx/svm"
+      ;;
+    *)
+      echo "capacidad no reconocida"
+      ;;
+  esac
+}
+
+resolver_capacidades_json() {
+  local requested_json="$1"
+  local details='[]'
+  local active='[]'
+  local deferred='[]'
+  local capability
+  local reason
+
+  while IFS= read -r capability; do
+    [[ -n "$capability" ]] || continue
+
+    if capacidad_disponible_localmente "$capability"; then
+      active="$(
+        jq -c \
+          --arg capability "$capability" \
+          '. + [$capability]' \
+          <<<"$active"
+      )"
+
+      details="$(
+        jq -c \
+          --arg capability "$capability" \
+          '. + [{
+            name: $capability,
+            status: "active",
+            reason: null
+          }]' \
+          <<<"$details"
+      )"
+    else
+      reason="$(motivo_capacidad_no_disponible "$capability")"
+
+      deferred="$(
+        jq -c \
+          --arg capability "$capability" \
+          '. + [$capability]' \
+          <<<"$deferred"
+      )"
+
+      details="$(
+        jq -c \
+          --arg capability "$capability" \
+          --arg reason "$reason" \
+          '. + [{
+            name: $capability,
+            status: "deferred",
+            reason: $reason
+          }]' \
+          <<<"$details"
+      )"
+    fi
+  done < <(jq -r '.[]' <<<"$requested_json")
+
+  jq -n \
+    --argjson requested "$requested_json" \
+    --argjson active "$active" \
+    --argjson deferred "$deferred" \
+    --argjson details "$details" \
+    '{
+      requested: $requested,
+      active: $active,
+      deferred: $deferred,
+      details: $details
+    }'
+}
+
+usuarios_detectados_json() {
+  local jq_bin
+  local tmpdir
+  local perfiles_tmp
+  local cuentas_tmp
+  local usuarios
+  local settings
+  local mutable_users
+  local perfil
+  local id_usuario
+  local base
+  local assigned
+  local local_settings
+  local portable_account
+  local effective_account
+  local local_account
+  local home
+  local administrator
+  local deferred
+  local preserved
+  local active
+  local account_exists
+  local declared_groups
+  local perfiles_json
+  local cuentas_json
+  local minimo
+  local cuenta
+  local uid
+  local nombre
+  local real_home
+  local shell
+  local grupos_texto
+  local grupos_json
+  local real_admin
+  local profile_json
+  local profile_id
+  local estado
+  local detectados_admin
+  local declarados_admin
+
+  jq_bin="$(command -v jq 2>/dev/null || true)"
+  [[ -n "$jq_bin" ]] || error "jq no está disponible."
+
+  tmpdir="$(mktemp -d)"
+  perfiles_tmp="$tmpdir/perfiles.jsonl"
+  cuentas_tmp="$tmpdir/cuentas.jsonl"
+  : > "$perfiles_tmp"
+  : > "$cuentas_tmp"
+
+  usuarios="$(host_users_json)"
+  settings="$(host_settings_json)"
+
+  mutable_users="$(
+    nix eval \
+      ".#nixosConfigurations.${HOST}.config.users.mutableUsers" \
+      --json
+  )"
+
+  shopt -s nullglob
+  local archivos=(users/*.nix)
+
+  for perfil in "${archivos[@]}"; do
+    id_usuario="$(basename "$perfil" .nix)"
+    base="$(perfil_portable_json "$id_usuario")"
+
+    assigned=false
+    if jq -e \
+        --arg id "$id_usuario" \
+        'index($id) != null' \
+        <<<"$usuarios" \
+        >/dev/null
+    then
+      assigned=true
+    fi
+
+    local_settings="$(
+      jq -c \
+        --arg id "$id_usuario" \
+        '.[$id] // {}' \
+        <<<"$settings"
+    )"
+
+    portable_account="$(jq -r '.accountName' <<<"$base")"
+    local_account="$(jq -r '.accountName // empty' <<<"$local_settings")"
+    effective_account="$portable_account"
+
+    [[ -n "$local_account" ]] && effective_account="$local_account"
+
+    home="$(
+      jq -r \
+        --arg fallback "/home/${effective_account}" \
+        '.homeDirectory // $fallback' \
+        <<<"$local_settings"
+    )"
+
+    administrator="$(
+      jq -r '.administrator // false' <<<"$local_settings"
+    )"
+
+    deferred="$(
+      jq -c '.deferredCapabilities // []' <<<"$local_settings"
+    )"
+
+    preserved="$(
+      jq -c '.preservedGroups // []' <<<"$local_settings"
+    )"
+
+    active="$(
+      jq -c \
+        --argjson deferred "$deferred" \
+        '.capabilities | map(select(. as $c | $deferred | index($c) == null))' \
+        <<<"$base"
+    )"
+
+    account_exists=false
+    if getent passwd "$effective_account" >/dev/null 2>&1; then
+      account_exists=true
+    fi
+
+    declared_groups='[]'
+    if [[ "$assigned" == true ]]; then
+      declared_groups="$(
+        nix eval \
+          ".#nixosConfigurations.${HOST}.config.users.users.\"${effective_account}\".extraGroups" \
+          --json \
+          2>/dev/null \
+          || printf '[]'
+      )"
+    fi
+
+    jq -c \
+      --argjson assignedToHost "$assigned" \
+      --arg effectiveAccountName "$effective_account" \
+      --arg homeDirectory "$home" \
+      --argjson administrator "$administrator" \
+      --argjson deferredCapabilities "$deferred" \
+      --argjson activeCapabilities "$active" \
+      --argjson preservedGroups "$preserved" \
+      --argjson accountExists "$account_exists" \
+      --argjson declaredGroups "$declared_groups" \
+      '
+        del(.avatarPath)
+        + {
+          assignedToHost: $assignedToHost,
+          effectiveAccountName: $effectiveAccountName,
+          homeDirectory: $homeDirectory,
+          administrator: $administrator,
+          enabledCapabilities: $activeCapabilities,
+          deferredCapabilities: $deferredCapabilities,
+          preservedGroups: $preservedGroups,
+          accountExists: $accountExists,
+          declaredGroups: $declaredGroups
+        }
+      ' \
+      <<<"$base" \
+      >> "$perfiles_tmp"
+  done
+
+  perfiles_json="$(jq -s '.' "$perfiles_tmp")"
+  minimo="$(uid_minimo)"
+
+  while IFS=: read -r cuenta _ uid _ nombre real_home shell; do
+    [[ "$uid" =~ ^[0-9]+$ ]] || continue
+    (( uid >= minimo && uid < 65534 )) || continue
+
+    es_cuenta_tecnica "$real_home" "$shell" && continue
+
+    nombre="${nombre%%,*}"
+    [[ -n "$nombre" ]] || nombre="$cuenta"
+
+    grupos_texto="$(id -nG "$cuenta" 2>/dev/null || true)"
+
+    grupos_json="$(
+      jq -Rn \
+        --arg groups "$grupos_texto" \
+        '$groups | split(" ") | map(select(length > 0)) | unique'
+    )"
+
+    real_admin=false
+    if jq -e 'index("wheel") != null' <<<"$grupos_json" >/dev/null; then
+      real_admin=true
+    fi
+
+    profile_json="$(
+      jq -c \
+        --arg account "$cuenta" \
+        'map(select(.effectiveAccountName == $account)) | first // null' \
+        <<<"$perfiles_json"
+    )"
+
+    profile_id=""
+    estado="adoptable"
+
+    if [[ "$profile_json" != "null" ]]; then
+      profile_id="$(jq -r '.id' <<<"$profile_json")"
+
+      if jq -e '.assignedToHost' <<<"$profile_json" >/dev/null; then
+        estado="adopted"
+      else
+        estado="profile-available"
+      fi
+    fi
+
+    jq -c -n \
+      --arg accountName "$cuenta" \
+      --arg displayName "$nombre" \
+      --argjson uid "$uid" \
+      --arg home "$real_home" \
+      --arg shell "$shell" \
+      --argjson administrator "$real_admin" \
+      --argjson groups "$grupos_json" \
+      --arg profileId "$profile_id" \
+      --arg status "$estado" \
+      '{
+        accountName: $accountName,
+        displayName: $displayName,
+        uid: $uid,
+        home: $home,
+        shell: $shell,
+        administrator: $administrator,
+        groups: $groups,
+        profileId:
+          if $profileId == ""
+          then null
+          else $profileId
+          end,
+        status: $status
+      }' \
+      >> "$cuentas_tmp"
+  done < <(getent passwd)
+
+  cuentas_json="$(jq -s '.' "$cuentas_tmp")"
+
+  detectados_admin="$(
+    jq '[.[] | select(.administrator)] | length' <<<"$cuentas_json"
+  )"
+
+  declarados_admin="$(
+    jq '[.[] | select(.assignedToHost and .administrator)] | length' \
+      <<<"$perfiles_json"
+  )"
+
+  jq -n \
+    --argjson schemaVersion 2 \
+    --arg hostId "$HOST" \
+    --arg detectedAt "$(date --iso-8601=seconds)" \
+    --argjson accounts "$cuentas_json" \
+    --argjson profiles "$perfiles_json" \
+    --argjson hostUserIds "$usuarios" \
+    --argjson mutableUsers "$mutable_users" \
+    --argjson detectedAdministrators "$detectados_admin" \
+    --argjson declaredAdministrators "$declarados_admin" \
+    '{
+      schemaVersion: $schemaVersion,
+      hostId: $hostId,
+      detectedAt: $detectedAt,
+      accounts: $accounts,
+      profiles: $profiles,
+      summary: {
+        humanAccounts: ($accounts | length),
+        adoptedAccounts:
+          ($accounts | map(select(.status == "adopted")) | length),
+        adoptableAccounts:
+          ($accounts | map(select(.status == "adoptable")) | length),
+        detectedAdministrators: $detectedAdministrators,
+        declaredAdministrators: $declaredAdministrators
+      },
+      hostUserIds: $hostUserIds,
+      policy: {
+        mutableUsers: $mutableUsers,
+        preserveExistingPasswords: true,
+        repositoryStoresPasswords: false,
+        newPasswordMethod: "system-passwd",
+        androidAccessModel: "systemd-uaccess",
+        portableProfileSchemaVersion: 1,
+        portableFields: [
+          "id",
+          "accountName",
+          "fullName",
+          "language",
+          "capabilities",
+          "avatar"
+        ],
+        hostLocalFields: [
+          "homeDirectory",
+          "administrator",
+          "deferredCapabilities",
+          "preservedGroups",
+          "password"
+        ]
+      }
+    }'
+
+  rm -rf "$tmpdir"
+}
+
+mostrar_usuarios() {
+  local datos
+  local cuenta
+  local nombre
+  local estado
+  local administrador
+  local etiqueta
+  local rol
+
+  datos="$(usuarios_detectados_json)"
+
+  echo "=== Personas detectadas ==="
+
+  while IFS=$'\t' read -r cuenta nombre estado administrador; do
+    case "$estado" in
+      adopted)
+        etiqueta="Administrada por Korunix"
+        ;;
+      profile-available)
+        etiqueta="Perfil portable disponible"
+        ;;
+      adoptable)
+        etiqueta="Se puede adoptar"
+        ;;
+      *)
+        etiqueta="$estado"
+        ;;
+    esac
+
+    if [[ "$administrador" == true ]]; then
+      rol="Administrador"
+    else
+      rol="Usuario estándar"
+    fi
+
+    echo "• $nombre — $cuenta"
+    echo "  $rol · $etiqueta"
+  done < <(
+    jq -r '
+      .accounts[]
+      | [
+          .accountName,
+          .displayName,
+          .status,
+          (.administrator | tostring)
+        ]
+      | @tsv
+    ' <<<"$datos"
+  )
+
+  echo
+  echo "=== Identidad portable y estado de este equipo ==="
+
+  jq -r '
+    .profiles[]
+    | select(.assignedToHost)
+    | (
+        "• "
+        + .fullName
+        + " — "
+        + .effectiveAccountName
+        + "\n  Perfil portable: "
+        + (
+            if (.capabilities | length) == 0
+            then "sin capacidades"
+            else (.capabilities | join(", "))
+            end
+          )
+        + "\n  Habilitadas aquí: "
+        + (
+            if (.enabledCapabilities | length) == 0
+            then "ninguna"
+            else (.enabledCapabilities | join(", "))
+            end
+          )
+        + "\n  Aplazadas aquí: "
+        + (
+            if (.deferredCapabilities | length) == 0
+            then "ninguna"
+            else (.deferredCapabilities | join(", "))
+            end
+          )
+        + "\n  Home local: "
+        + .homeDirectory
+      )
+  ' <<<"$datos"
+
+  echo
+  echo "=== Seguridad administrativa ==="
+  echo "Administradores reales: $(jq -r '.summary.detectedAdministrators' <<<"$datos")"
+  echo "Administradores declarados: $(jq -r '.summary.declaredAdministrators' <<<"$datos")"
+
+  if jq -e \
+      '.summary.detectedAdministrators >= 1
+       and .summary.declaredAdministrators >= 1' \
+      <<<"$datos" \
+      >/dev/null
+  then
+    echo "✓ existe una ruta administrativa funcional y declarada"
+  else
+    echo "AVISO: la seguridad administrativa necesita atención"
+  fi
+
+  echo
+  echo "=== Credenciales ==="
+  echo "Las contraseñas son locales al equipo."
+  echo "No forman parte del perfil portable ni del repositorio."
+}
+
+escribir_perfil_portable() {
+  local archivo="$1"
+  local cuenta="$2"
+  local nombre="$3"
+  local idioma_json="$4"
+  local avatar_basename="$5"
+  local capabilities_json="$6"
+
+  {
+    echo "{"
+    echo "  # Identidad portable. Ninguna contraseña, home, rol o grupo técnico local"
+    echo "  # pertenece a este archivo."
+    printf '  accountName = %s;\n' "$(nix_string "$cuenta")"
+    printf '  fullName = %s;\n' "$(nix_string "$nombre")"
+
+    if [[ "$idioma_json" == "null" ]]; then
+      echo "  language = null;"
+    else
+      printf '  language = %s;\n' "$idioma_json"
+    fi
+
+    echo
+    echo "  # Capacidades deseadas por la persona. Cada host decide cuáles puede activar."
+    echo "  capabilities = ["
+
+    jq -r '.[] | @json' <<<"$capabilities_json" \
+      | sed 's/^/    /'
+
+    echo "  ];"
+    echo
+
+    if [[ -n "$avatar_basename" ]]; then
+      echo "  avatar ="
+      printf '    if builtins.pathExists ./%s\n' "$avatar_basename"
+      printf '    then ./%s\n' "$avatar_basename"
+      echo "    else null;"
+    else
+      echo "  avatar = null;"
+    fi
+
+    echo "}"
+  } > "$archivo"
+}
+
+extension_avatar() {
+  local archivo="${1,,}"
+
+  case "$archivo" in
+    *.jpg)
+      echo "jpg"
+      ;;
+    *.jpeg)
+      echo "jpeg"
+      ;;
+    *.png)
+      echo "png"
+      ;;
+    *.webp)
+      echo "webp"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+copiar_avatar_usuario() {
+  local origen="$1"
+  local id_usuario="$2"
+  local extension
+  local destino
+
+  extension="$(extension_avatar "$origen")" \
+    || error "El avatar debe ser JPG, JPEG, PNG o WebP."
+
+  destino="users/${id_usuario}.${extension}"
+
+  [[ ! -e "$destino" ]] \
+    || error "$destino ya existe."
+
+  cp -L "$origen" "$destino"
+
+  printf '%s\n' "$destino"
+}
+
+agregar_usuario_al_host() {
+  local id_usuario="$1"
+  local account_override="$2"
+  local home="$3"
+  local administrador="$4"
+  local deferred_json="$5"
+  local preserved_json="$6"
+  local archivo="hosts/${HOST}.nix"
+  local entry
+  local tmp
+
+  [[ -f "$archivo" ]] || error "No existe $archivo."
+
+  entry="$(mktemp)"
+  tmp="$(mktemp)"
+
+  {
+    printf '    "%s" = {\n' "$id_usuario"
+
+    if [[ -n "$account_override" ]]; then
+      printf '      accountName = %s;\n' "$(nix_string "$account_override")"
+    fi
+
+    printf '      homeDirectory = %s;\n' "$(nix_string "$home")"
+    printf '      administrator = %s;\n' "$administrador"
+
+    echo "      deferredCapabilities = ["
+    jq -r '.[] | @json' <<<"$deferred_json" \
+      | sed 's/^/        /'
+    echo "      ];"
+
+    echo "      preservedGroups = ["
+    jq -r '.[] | @json' <<<"$preserved_json" \
+      | sed 's/^/        /'
+    echo "      ];"
+
+    echo "    };"
+  } > "$entry"
+
+  if ! awk -v fragment="$entry" '
+      /^[[:space:]]*users[[:space:]]*=[[:space:]]*\{/ && !inside {
+        inside = 1
+        depth = 1
+        print
+        next
+      }
+
+      inside {
+        line = $0
+        tmp = line
+        opens = gsub(/\{/, "{", tmp)
+        tmp = line
+        closes = gsub(/\}/, "}", tmp)
+
+        if (depth + opens - closes == 0 && !inserted) {
+          while ((getline extra < fragment) > 0) {
+            print extra
+          }
+
+          close(fragment)
+          inserted = 1
+          inside = 0
+          print
+          next
+        }
+
+        print
+        depth += opens - closes
+        next
+      }
+
+      {
+        print
+      }
+
+      END {
+        if (!inserted) {
+          exit 42
+        }
+      }
+    ' "$archivo" > "$tmp"
+  then
+    rm -f "$entry" "$tmp"
+    error "No pude añadir $id_usuario al bloque users del host."
+  fi
+
+  chmod --reference="$archivo" "$tmp"
+  mv "$tmp" "$archivo"
+  rm -f "$entry"
+}
+
+validar_y_construir_identidad() {
+  "$ROOT/scripts/korunix" validate
+
+  nix build \
+    ".#nixosConfigurations.${HOST}.config.system.build.toplevel" \
+    --no-link
+}
+
+grupos_preservados_json() {
+  local cuenta="$1"
+  local grupos='[]'
+  local grupo
+
+  for grupo in $(id -nG "$cuenta"); do
+    case "$grupo" in
+      users|wheel|networkmanager)
+        ;;
+      *)
+        grupos="$(
+          jq -c \
+            --arg grupo "$grupo" \
+            '. + [$grupo]' \
+            <<<"$grupos"
+        )"
+        ;;
+    esac
+  done
+
+  jq -c 'unique' <<<"$grupos"
+}
+
+adoptar_usuario() {
+  local cuenta="${1:-}"
+  local perfil_id
+  local perfil
+  local perfil_creado=false
+  local avatar_creado=""
+  local entrada
+  local nombre
+  local home
+  local administrador=false
+  local idioma_json
+  local requested='[]'
+  local capability_plan
+  local deferred
+  local preserved
+  local portable_account=""
+  local account_override=""
+  local host_file
+  local backup_host
+  local avatar_source=""
+
+  [[ -n "$cuenta" ]] \
+    || error "Uso: scripts/korunix users adopt <cuenta>."
+
+  validar_nombre_cuenta "$cuenta"
+
+  [[ -z "$(git status --porcelain)" ]] \
+    || error "La adopción necesita un repositorio limpio."
+
+  cuenta_humana_existente "$cuenta" \
+    || error "$cuenta no es una cuenta humana interactiva detectable."
+
+  perfil_id="$(perfil_por_cuenta "$cuenta")"
+
+  if [[ -n "$perfil_id" ]] && perfil_asignado_al_host "$perfil_id"; then
+    error "$cuenta ya está administrada por este host."
+  fi
+
+  entrada="$(getent passwd "$cuenta")"
+  IFS=: read -r _ _ _ _ nombre home _ <<<"$entrada"
+  nombre="${nombre%%,*}"
+  [[ -n "$nombre" ]] || nombre="$cuenta"
+
+  if id -nG "$cuenta" | tr ' ' '\n' | grep -qx wheel; then
+    administrador=true
+  fi
+
+  idioma_json="$(
+    nix eval \
+      ".#nixosConfigurations.${HOST}.config.korunix.localization.language" \
+      --json
+  )"
+
+  if [[ -z "$perfil_id" ]]; then
+    perfil_id="$cuenta"
+    perfil="users/${perfil_id}.nix"
+
+    [[ ! -e "$perfil" ]] \
+      || error "$perfil ya existe."
+
+    if [[ -e "$home/.face" || -L "$home/.face" ]]; then
+      avatar_source="$(readlink -f "$home/.face" 2>/dev/null || true)"
+
+      if [[ -n "$avatar_source" ]] \
+          && extension_avatar "$avatar_source" >/dev/null 2>&1
+      then
+        avatar_creado="$(copiar_avatar_usuario "$avatar_source" "$perfil_id")"
+      fi
+    fi
+
+    escribir_perfil_portable \
+      "$perfil" \
+      "$cuenta" \
+      "$nombre" \
+      "$idioma_json" \
+      "$(basename "${avatar_creado:-}")" \
+      "$requested"
+
+    git add "$perfil"
+    [[ -n "$avatar_creado" ]] && git add "$avatar_creado"
+
+    perfil_creado=true
+    portable_account="$cuenta"
+  else
+    perfil="users/${perfil_id}.nix"
+    requested="$(perfil_portable_json "$perfil_id" | jq -c '.capabilities')"
+    portable_account="$(perfil_portable_json "$perfil_id" | jq -r '.accountName')"
+
+    if [[ "$portable_account" != "$cuenta" ]]; then
+      account_override="$cuenta"
+    fi
+  fi
+
+  capability_plan="$(resolver_capacidades_json "$requested")"
+  deferred="$(jq -c '.deferred' <<<"$capability_plan")"
+  preserved="$(grupos_preservados_json "$cuenta")"
+
+  echo "Cuenta existente: $cuenta"
+  echo "Perfil portable: $perfil_id"
+  echo "Home local: $home"
+
+  if [[ "$administrador" == true ]]; then
+    echo "Rol local: Administrador"
+  else
+    echo "Rol local: Usuario estándar"
+  fi
+
+  echo "Contraseña: se preservará sin leerla ni modificarla"
+
+  if [[ "$(jq '.deferred | length' <<<"$capability_plan")" -gt 0 ]]; then
+    echo "Capacidades que quedarán aplazadas:"
+    jq -r '.details[] | select(.status == "deferred") | "  • " + .name + " — " + .reason' \
+      <<<"$capability_plan"
+  fi
+
+  confirmar "¿Preparar la adopción de $cuenta?" || return 0
+
+  host_file="hosts/${HOST}.nix"
+  backup_host="$(mktemp)"
+  cp -a "$host_file" "$backup_host"
+
+  agregar_usuario_al_host \
+    "$perfil_id" \
+    "$account_override" \
+    "$home" \
+    "$administrador" \
+    "$deferred" \
+    "$preserved"
+
+  if ! validar_y_construir_identidad; then
+    cp -a "$backup_host" "$host_file"
+
+    if [[ "$perfil_creado" == true ]]; then
+      git reset -q -- "$perfil" 2>/dev/null || true
+      rm -f "$perfil"
+
+      if [[ -n "$avatar_creado" ]]; then
+        git reset -q -- "$avatar_creado" 2>/dev/null || true
+        rm -f "$avatar_creado"
+      fi
+    fi
+
+    rm -f "$backup_host"
+    error "La adopción fue revertida antes de aplicar."
+  fi
+
+  rm -f "$backup_host"
+
+  echo
+  echo "✓ adopción preparada"
+  echo "✓ identidad portable separada del estado local"
+  echo "✓ contraseña existente intacta"
+  echo "Todavía no se aplicó el sistema."
+  git status --short
+}
+
+crear_usuario() {
+  local cuenta
+  local nombre
+  local rol
+  local administrador=false
+  local idioma_json
+  local home
+  local perfil
+  local avatar_source
+  local avatar_creado=""
+  local host_file
+  local backup_host
+
+  [[ -t 0 ]] \
+    || error "La creación necesita una terminal interactiva."
+
+  [[ -z "$(git status --porcelain)" ]] \
+    || error "La creación necesita un repositorio limpio."
+
+  printf 'Nombre de cuenta UNIX: '
+  read -r cuenta
+  validar_nombre_cuenta "$cuenta"
+
+  if getent passwd "$cuenta" >/dev/null 2>&1; then
+    error "$cuenta ya existe. Usa: scripts/korunix users adopt $cuenta"
+  fi
+
+  perfil="users/${cuenta}.nix"
+
+  [[ ! -e "$perfil" ]] \
+    || error "$perfil ya existe."
+
+  printf 'Nombre visible: '
+  read -r nombre
+  [[ -n "$nombre" ]] || nombre="$cuenta"
+
+  echo "Rol en este equipo:"
+  echo "  a = Administrador"
+  echo "  e = Usuario estándar"
+  printf 'Elegir [e]: '
+  read -r rol
+
+  case "$rol" in
+    a|A)
+      administrador=true
+      ;;
+    ""|e|E)
+      administrador=false
+      ;;
+    *)
+      error "Rol no reconocido."
+      ;;
+  esac
+
+  printf 'Ruta de avatar opcional [ninguno]: '
+  read -r avatar_source
+
+  idioma_json="$(
+    nix eval \
+      ".#nixosConfigurations.${HOST}.config.korunix.localization.language" \
+      --json
+  )"
+
+  home="/home/${cuenta}"
+
+  echo
+  echo "Cuenta portable preferida: $cuenta"
+  echo "Nombre: $nombre"
+  echo "Home local: $home"
+
+  if [[ "$administrador" == true ]]; then
+    echo "Rol local: Administrador"
+  else
+    echo "Rol local: Usuario estándar"
+  fi
+
+  echo "Contraseña: se configurará después de aplicar mediante passwd"
+
+  confirmar "¿Preparar esta persona?" || return 0
+
+  host_file="hosts/${HOST}.nix"
+  backup_host="$(mktemp)"
+  cp -a "$host_file" "$backup_host"
+
+  if [[ -n "$avatar_source" ]]; then
+    [[ -f "$avatar_source" ]] \
+      || error "No existe el avatar indicado."
+
+    avatar_creado="$(copiar_avatar_usuario "$avatar_source" "$cuenta")"
+  fi
+
+  escribir_perfil_portable \
+    "$perfil" \
+    "$cuenta" \
+    "$nombre" \
+    "$idioma_json" \
+    "$(basename "${avatar_creado:-}")" \
+    '[]'
+
+  git add "$perfil"
+  [[ -n "$avatar_creado" ]] && git add "$avatar_creado"
+
+  agregar_usuario_al_host \
+    "$cuenta" \
+    "" \
+    "$home" \
+    "$administrador" \
+    '[]' \
+    '[]'
+
+  if ! validar_y_construir_identidad; then
+    cp -a "$backup_host" "$host_file"
+    git reset -q -- "$perfil" 2>/dev/null || true
+    rm -f "$perfil"
+
+    if [[ -n "$avatar_creado" ]]; then
+      git reset -q -- "$avatar_creado" 2>/dev/null || true
+      rm -f "$avatar_creado"
+    fi
+
+    rm -f "$backup_host"
+    error "La creación fue revertida antes de aplicar."
+  fi
+
+  rm -f "$backup_host"
+
+  echo
+  echo "✓ identidad portable preparada"
+  echo "✓ estado local del host preparado"
+  echo "✓ ninguna contraseña fue almacenada"
+  echo
+  echo "Después de aplicar:"
+  echo "  scripts/korunix users password $cuenta"
+
+  git status --short
+}
+
+cambiar_password_usuario() {
+  local cuenta="${1:-}"
+  local perfil_id
+
+  [[ -n "$cuenta" ]] \
+    || error "Uso: scripts/korunix users password <cuenta>."
+
+  validar_nombre_cuenta "$cuenta"
+
+  cuenta_humana_existente "$cuenta" \
+    || error "$cuenta no existe como cuenta humana interactiva."
+
+  perfil_id="$(perfil_por_cuenta "$cuenta")"
+
+  [[ -n "$perfil_id" ]] \
+    || error "$cuenta no tiene un perfil Korunix."
+
+  perfil_asignado_al_host "$perfil_id" \
+    || error "El perfil $perfil_id no pertenece a este host."
+
+  echo "Korunix entregará el control directamente a passwd."
+  echo "La contraseña no pasa por variables, archivos ni argumentos."
+
+  confirmar "¿Cambiar la contraseña de $cuenta?" || return 0
+
+  sudo passwd "$cuenta"
+
+  echo
+  echo "✓ contraseña administrada directamente por el sistema"
+  echo "✓ ningún secreto fue almacenado por Korunix"
+}
+
+directorio_exportacion() {
+  local destino="${KORUNIX_EXPORT_DIR:-}"
+
+  if [[ -n "$destino" ]]; then
+    mkdir -p "$destino"
+    printf '%s\n' "$destino"
+    return
+  fi
+
+  if command -v xdg-user-dir >/dev/null 2>&1; then
+    destino="$(xdg-user-dir DOWNLOAD 2>/dev/null || true)"
+  fi
+
+  [[ -n "$destino" ]] || destino="$HOME/Downloads"
+
+  mkdir -p "$destino"
+  printf '%s\n' "$destino"
+}
+
+validar_manifest_path() {
+  local manifest="$1"
+  local dir="$2"
+  local id
+  local cuenta
+  local avatar_file
+  local expected_hash
+  local real_hash
+
+  jq -e '
+    (keys | sort)
+      == ["exportedAt", "kind", "profile", "schemaVersion", "security"]
+
+    and .schemaVersion == 1
+    and .kind == "korunix-user-profile"
+    and (.exportedAt | type == "string")
+
+    and (
+      .profile
+      | (keys | sort)
+        == ["accountName", "avatar", "capabilities", "fullName", "id", "language"]
+    )
+
+    and (.profile.id | type == "string")
+    and (.profile.accountName | type == "string")
+    and (.profile.fullName | type == "string")
+    and (
+      .profile.language == null
+      or (.profile.language | type == "string")
+    )
+    and (.profile.capabilities | type == "array")
+    and (
+      .profile.capabilities
+      | length == (unique | length)
+    )
+    and (
+      [
+        .profile.capabilities[]
+        | select(
+            . != "android"
+            and . != "printing"
+            and . != "sunshine"
+            and . != "virtualization"
+          )
+      ]
+      | length == 0
+    )
+    and (
+      .profile.avatar == null
+      or (
+        (.profile.avatar | type == "object")
+        and (
+          .profile.avatar
+          | (keys | sort) == ["file", "sha256"]
+        )
+        and (.profile.avatar.file | type == "string")
+        and (.profile.avatar.sha256 | type == "string")
+      )
+    )
+
+    and (
+      .security
+      | (keys | sort)
+        == ["containsHardwareIdentity", "containsPassword", "containsPasswordHash"]
+    )
+    and .security.containsPassword == false
+    and .security.containsPasswordHash == false
+    and .security.containsHardwareIdentity == false
+  ' "$manifest" >/dev/null \
+    || error "El manifiesto portable no cumple el esquema Korunix 1."
+
+  id="$(jq -r '.profile.id' "$manifest")"
+  cuenta="$(jq -r '.profile.accountName' "$manifest")"
+
+  validar_id_perfil "$id"
+  validar_nombre_cuenta "$cuenta"
+
+  avatar_file="$(jq -r '.profile.avatar.file // empty' "$manifest")"
+
+  if [[ -n "$avatar_file" ]]; then
+    case "$avatar_file" in
+      avatar.jpg|avatar.jpeg|avatar.png|avatar.webp)
+        ;;
+      *)
+        error "El bundle utiliza un nombre de avatar no permitido."
+        ;;
+    esac
+
+    [[ -f "$dir/$avatar_file" ]] \
+      || error "El bundle declara un avatar que no existe."
+
+    expected_hash="$(jq -r '.profile.avatar.sha256' "$manifest")"
+    real_hash="$(sha256sum "$dir/$avatar_file" | cut -d' ' -f1)"
+
+    [[ "$expected_hash" == "$real_hash" ]] \
+      || error "El avatar del bundle no coincide con su hash."
+  fi
+}
+
+extraer_bundle_seguro() {
+  local bundle="$1"
+  local destino="$2"
+  local miembro
+  local tipo
+  local manifest_count=0
+  local avatar_count=0
+  local miembros=()
+
+  [[ -f "$bundle" ]] \
+    || error "No existe el perfil portable: $bundle"
+
+  if ! mapfile -t miembros < <(tar -tzf "$bundle"); then
+    error "El archivo no es un bundle .korunix-profile válido."
+  fi
+
+  for miembro in "${miembros[@]}"; do
+    # Solo aceptamos archivos regulares. Enlaces, dispositivos o entradas
+    # especiales nunca deben alcanzar la fase de extracción.
+    tipo="$(
+      tar -tvzf "$bundle" "$miembro" \
+        | sed -n '1s/^\(.\).*/\1/p'
+    )"
+
+    [[ "$tipo" == "-" ]] \
+      || error "El bundle contiene una entrada no regular: $miembro"
+
+    case "$miembro" in
+      manifest.json)
+        manifest_count=$((manifest_count + 1))
+        ;;
+      avatar.jpg|avatar.jpeg|avatar.png|avatar.webp)
+        avatar_count=$((avatar_count + 1))
+        ;;
+      *)
+        error "El bundle contiene una ruta no permitida: $miembro"
+        ;;
+    esac
+  done
+
+  [[ "$manifest_count" -eq 1 ]] \
+    || error "El bundle debe contener exactamente un manifest.json."
+
+  (( avatar_count <= 1 )) \
+    || error "El bundle contiene más de un avatar."
+
+  mkdir -p "$destino"
+
+  tar \
+    --extract \
+    --gzip \
+    --file "$bundle" \
+    --directory "$destino" \
+    --no-same-owner \
+    --no-same-permissions
+
+  validar_manifest_path "$destino/manifest.json" "$destino"
+}
+
+exportar_perfil() {
+  local id_usuario="${1:-}"
+  local portable
+  local export_dir
+  local destino
+  local tmpdir
+  local tmpbundle
+  local avatar_source
+  local avatar_name=""
+  local avatar_hash=""
+  local extension
+  local capabilities
+  local idioma
+  local manifest
+  local archivos=(manifest.json)
+
+  [[ -n "$id_usuario" ]] \
+    || error "Uso: scripts/korunix users export <id>."
+
+  validar_id_perfil "$id_usuario"
+
+  portable="$(perfil_portable_json "$id_usuario")"
+
+  export_dir="$(directorio_exportacion)"
+  destino="$export_dir/${id_usuario}.korunix-profile"
+
+  if [[ -e "$destino" ]]; then
+    destino="$export_dir/${id_usuario}-$(date +%Y%m%d-%H%M%S).korunix-profile"
+  fi
+
+  tmpdir="$(mktemp -d)"
+  tmpbundle="$(mktemp "$export_dir/.korunix-profile.XXXXXX")"
+
+  avatar_source="$(jq -r '.avatarPath // empty' <<<"$portable")"
+
+  if [[ -n "$avatar_source" && -f "$avatar_source" ]]; then
+    extension="$(extension_avatar "$avatar_source")" \
+      || error "El avatar del perfil usa un formato no portable."
+
+    avatar_name="avatar.${extension}"
+    cp -L "$avatar_source" "$tmpdir/$avatar_name"
+    avatar_hash="$(sha256sum "$tmpdir/$avatar_name" | cut -d' ' -f1)"
+    archivos+=("$avatar_name")
+  fi
+
+  capabilities="$(jq -c '.capabilities' <<<"$portable")"
+  idioma="$(jq -c '.language' <<<"$portable")"
+
+  manifest="$(
+    jq -n \
+      --argjson schemaVersion 1 \
+      --arg kind "korunix-user-profile" \
+      --arg exportedAt "$(date --iso-8601=seconds)" \
+      --arg id "$id_usuario" \
+      --arg accountName "$(jq -r '.accountName' <<<"$portable")" \
+      --arg fullName "$(jq -r '.fullName' <<<"$portable")" \
+      --argjson language "$idioma" \
+      --argjson capabilities "$capabilities" \
+      --arg avatarFile "$avatar_name" \
+      --arg avatarHash "$avatar_hash" \
+      '{
+        schemaVersion: $schemaVersion,
+        kind: $kind,
+        exportedAt: $exportedAt,
+        profile: {
+          id: $id,
+          accountName: $accountName,
+          fullName: $fullName,
+          language: $language,
+          capabilities: $capabilities,
+          avatar:
+            if $avatarFile == ""
+            then null
+            else {
+              file: $avatarFile,
+              sha256: $avatarHash
+            }
+            end
+        },
+        security: {
+          containsPassword: false,
+          containsPasswordHash: false,
+          containsHardwareIdentity: false
+        }
+      }'
+  )"
+
+  printf '%s\n' "$manifest" > "$tmpdir/manifest.json"
+  validar_manifest_path "$tmpdir/manifest.json" "$tmpdir"
+
+  (
+    cd "$tmpdir"
+    tar -czf "$tmpbundle" "${archivos[@]}"
+  )
+
+  chmod 600 "$tmpbundle"
+  mv "$tmpbundle" "$destino"
+  rm -rf "$tmpdir"
+
+  echo "✓ perfil portable exportado"
+  echo "Archivo: $destino"
+  echo "Incluye identidad, avatar y capacidades."
+  echo "No incluye contraseña, hash, home, rol autoritativo ni identidad de hardware."
+}
+
+inspeccionar_perfil() {
+  local bundle="${1:-}"
+  local tmpdir
+  local manifest
+
+  [[ -n "$bundle" ]] \
+    || error "Uso: scripts/korunix users inspect <archivo>."
+
+  tmpdir="$(mktemp -d)"
+  extraer_bundle_seguro "$bundle" "$tmpdir"
+  manifest="$tmpdir/manifest.json"
+
+  echo "=== Perfil portable Korunix ==="
+  echo "ID: $(jq -r '.profile.id' "$manifest")"
+  echo "Cuenta preferida: $(jq -r '.profile.accountName' "$manifest")"
+  echo "Nombre: $(jq -r '.profile.fullName' "$manifest")"
+  echo "Idioma: $(jq -r '.profile.language // "sin preferencia"' "$manifest")"
+
+  echo "Capacidades:"
+  jq -r '
+    if (.profile.capabilities | length) == 0
+    then "  ninguna"
+    else .profile.capabilities[] | "  • " + .
+    end
+  ' "$manifest"
+
+  if jq -e '.profile.avatar != null' "$manifest" >/dev/null; then
+    echo "Avatar: incluido y verificado"
+  else
+    echo "Avatar: no incluido"
+  fi
+
+  echo
+  echo "Credenciales: no incluidas"
+  echo "Hardware: no incluido"
+
+  rm -rf "$tmpdir"
+}
+
+plan_import_perfil_json() {
+  local bundle="$1"
+  local tmpdir
+  local manifest
+  local id_usuario
+  local cuenta
+  local profile_exists=false
+  local profile_matches=false
+  local assigned=false
+  local account_entry_exists=false
+  local account_exists=false
+  local account_profile=""
+  local local_profile
+  local local_avatar
+  local local_avatar_hash=""
+  local remote_avatar_hash=""
+  local avatar_matches=false
+  local conflicts='[]'
+  local action
+  local can_import=true
+  local target_role=""
+  local home
+  local entrada
+  local requested
+  local capability_plan
+  local password_action
+
+  tmpdir="$(mktemp -d)"
+  extraer_bundle_seguro "$bundle" "$tmpdir"
+  manifest="$tmpdir/manifest.json"
+
+  id_usuario="$(jq -r '.profile.id' "$manifest")"
+  cuenta="$(jq -r '.profile.accountName' "$manifest")"
+  if [[ -f "users/${id_usuario}.nix" ]]; then
+    profile_exists=true
+    local_profile="$(perfil_portable_json "$id_usuario")"
+
+    if jq -n -e \
+        --argjson local "$local_profile" \
+        --slurpfile remote "$manifest" '
+          ($local.accountName == $remote[0].profile.accountName)
+          and ($local.fullName == $remote[0].profile.fullName)
+          and ($local.language == $remote[0].profile.language)
+          and (
+            ($local.capabilities | sort)
+            == ($remote[0].profile.capabilities | sort)
+          )
+        ' >/dev/null
+    then
+      local_avatar="$(jq -r '.avatarPath // empty' <<<"$local_profile")"
+      remote_avatar_hash="$(jq -r '.profile.avatar.sha256 // empty' "$manifest")"
+
+      if [[ -z "$local_avatar" && -z "$remote_avatar_hash" ]]; then
+        avatar_matches=true
+      elif [[ -n "$local_avatar" && -f "$local_avatar" && -n "$remote_avatar_hash" ]]; then
+        local_avatar_hash="$(sha256sum "$local_avatar" | cut -d' ' -f1)"
+        [[ "$local_avatar_hash" == "$remote_avatar_hash" ]] && avatar_matches=true
+      fi
+
+      [[ "$avatar_matches" == true ]] && profile_matches=true
+    fi
+
+    if [[ "$profile_matches" != true ]]; then
+      conflicts="$(
+        jq -c \
+          '. + ["profile-id-conflict"]' \
+          <<<"$conflicts"
+      )"
+    fi
+
+    if perfil_asignado_al_host "$id_usuario"; then
+      assigned=true
+    fi
+  fi
+
+  if getent passwd "$cuenta" >/dev/null 2>&1; then
+    account_entry_exists=true
+  fi
+
+  if cuenta_humana_existente "$cuenta"; then
+    account_exists=true
+    account_profile="$(perfil_por_cuenta "$cuenta")"
+
+    if [[ -n "$account_profile" && "$account_profile" != "$id_usuario" ]]; then
+      conflicts="$(
+        jq -c \
+          --arg other "$account_profile" \
+          '. + ["account-owned-by-profile:" + $other]' \
+          <<<"$conflicts"
+      )"
+    fi
+  elif [[ "$account_entry_exists" == true ]]; then
+    conflicts="$(
+      jq -c \
+        '. + ["account-name-belongs-to-technical-account"]' \
+        <<<"$conflicts"
+    )"
+  fi
+
+  if [[ "$account_exists" == true ]]; then
+    entrada="$(getent passwd "$cuenta")"
+    IFS=: read -r _ _ _ _ _ home _ <<<"$entrada"
+
+    if id -nG "$cuenta" | tr ' ' '\n' | grep -qx wheel; then
+      target_role="administrator"
+    else
+      target_role="standard"
+    fi
+
+    password_action="preserve-existing"
+  else
+    home="/home/${cuenta}"
+    target_role=""
+    password_action="set-after-apply"
+  fi
+
+  requested="$(jq -c '.profile.capabilities' "$manifest")"
+  capability_plan="$(resolver_capacidades_json "$requested")"
+
+  if [[ "$(jq 'length' <<<"$conflicts")" -gt 0 ]]; then
+    action="conflict"
+    can_import=false
+  elif [[ "$assigned" == true && "$account_exists" == true ]]; then
+    action="already-adopted"
+    can_import=false
+  elif [[ "$profile_exists" == true ]]; then
+    action="attach-existing-profile"
+  else
+    action="create-portable-profile"
+  fi
+
+  jq -n \
+    --argjson schemaVersion 1 \
+    --arg kind "korunix-profile-import-plan" \
+    --arg targetHostId "$HOST" \
+    --slurpfile manifest "$manifest" \
+    --arg action "$action" \
+    --argjson canImport "$can_import" \
+    --argjson conflicts "$conflicts" \
+    --argjson profileExists "$profile_exists" \
+    --argjson profileMatches "$profile_matches" \
+    --argjson assignedToHost "$assigned" \
+    --argjson accountExists "$account_exists" \
+    --arg accountName "$cuenta" \
+    --arg homeDirectory "$home" \
+    --arg targetRole "$target_role" \
+    --arg roleSource "$(
+      if [[ "$account_exists" == true ]]; then
+        echo "existing-account"
+      else
+        echo "user-choice-required"
+      fi
+    )" \
+    --arg passwordAction "$password_action" \
+    --argjson capabilityPlan "$capability_plan" \
+    '{
+      schemaVersion: $schemaVersion,
+      kind: $kind,
+      targetHostId: $targetHostId,
+      sourceProfile: $manifest[0].profile,
+      action: $action,
+      canImport: $canImport,
+      conflicts: $conflicts,
+      target: {
+        profileExists: $profileExists,
+        profileMatches: $profileMatches,
+        assignedToHost: $assignedToHost,
+        accountExists: $accountExists,
+        accountName: $accountName,
+        homeDirectory: $homeDirectory,
+        role:
+          if $targetRole == ""
+          then null
+          else $targetRole
+          end,
+        roleSource: $roleSource
+      },
+      capabilities: $capabilityPlan,
+      credentials: {
+        action: $passwordAction,
+        importedSecret: false
+      }
+    }'
+
+  rm -rf "$tmpdir"
+}
+
+mostrar_plan_json() {
+  local plan="$1"
+
+  echo "=== Plan de importación ==="
+  echo "Host: $(jq -r '.targetHostId' <<<"$plan")"
+  echo "Perfil: $(jq -r '.sourceProfile.id' <<<"$plan")"
+  echo "Persona: $(jq -r '.sourceProfile.fullName' <<<"$plan")"
+  echo "Cuenta: $(jq -r '.target.accountName' <<<"$plan")"
+  echo "Acción: $(jq -r '.action' <<<"$plan")"
+  echo "Home local: $(jq -r '.target.homeDirectory' <<<"$plan")"
+
+  case "$(jq -r '.target.role // empty' <<<"$plan")" in
+    administrator)
+      echo "Rol local: Administrador"
+      ;;
+    standard)
+      echo "Rol local: Usuario estándar"
+      ;;
+    *)
+      echo "Rol local: por elegir en este equipo"
+      ;;
+  esac
+
+  echo
+  echo "Capacidades activas:"
+  jq -r '
+    if (.capabilities.active | length) == 0
+    then "  ninguna"
+    else .capabilities.active[] | "  • " + .
+    end
+  ' <<<"$plan"
+
+  echo
+  echo "Capacidades aplazadas:"
+  jq -r '
+    if (.capabilities.deferred | length) == 0
+    then "  ninguna"
+    else
+      .capabilities.details[]
+      | select(.status == "deferred")
+      | "  • " + .name + " — " + .reason
+    end
+  ' <<<"$plan"
+
+  echo
+  case "$(jq -r '.credentials.action' <<<"$plan")" in
+    preserve-existing)
+      echo "Contraseña: se preservará la que ya existe en este equipo"
+      ;;
+    set-after-apply)
+      echo "Contraseña: se pedirá una nueva después de aplicar la cuenta"
+      ;;
+  esac
+
+  if [[ "$(jq '.conflicts | length' <<<"$plan")" -gt 0 ]]; then
+    echo
+    echo "Conflictos:"
+    jq -r '.conflicts[] | "  • " + .' <<<"$plan"
+  fi
+}
+
+planificar_importacion() {
+  local bundle="${1:-}"
+
+  [[ -n "$bundle" ]] \
+    || error "Uso: scripts/korunix users plan <archivo>."
+
+  plan_import_perfil_json "$bundle"
+}
+
+importar_perfil() {
+  local bundle="${1:-}"
+  local plan
+  local id_usuario
+  local cuenta
+  local profile_exists
+  local account_exists
+  local home
+  local target_role
+  local administrador=false
+  local role_answer
+  local deferred
+  local preserved='[]'
+  local tmpdir
+  local manifest
+  local requested
+  local idioma_json
+  local avatar_file
+  local avatar_creado=""
+  local perfil
+  local perfil_creado=false
+  local host_file
+  local backup_host
+  local portable_account
+
+  [[ -n "$bundle" ]] \
+    || error "Uso: scripts/korunix users import <archivo>."
+
+  [[ -t 0 ]] \
+    || error "La importación necesita una terminal interactiva."
+
+  [[ -z "$(git status --porcelain)" ]] \
+    || error "La importación necesita un repositorio limpio."
+
+  plan="$(plan_import_perfil_json "$bundle")"
+  mostrar_plan_json "$plan"
+
+  if [[ "$(jq -r '.canImport' <<<"$plan")" != "true" ]]; then
+    if [[ "$(jq -r '.action' <<<"$plan")" == "already-adopted" ]]; then
+      error "Ese perfil ya está adoptado en este equipo."
+    fi
+
+    error "El perfil no puede importarse mientras existan los conflictos mostrados."
+  fi
+
+  confirmar "¿Preparar esta importación?" || return 0
+
+  id_usuario="$(jq -r '.sourceProfile.id' <<<"$plan")"
+  cuenta="$(jq -r '.target.accountName' <<<"$plan")"
+  profile_exists="$(jq -r '.target.profileExists' <<<"$plan")"
+  account_exists="$(jq -r '.target.accountExists' <<<"$plan")"
+  home="$(jq -r '.target.homeDirectory' <<<"$plan")"
+  target_role="$(jq -r '.target.role // empty' <<<"$plan")"
+  deferred="$(jq -c '.capabilities.deferred' <<<"$plan")"
+
+  if [[ "$account_exists" == true ]]; then
+    [[ "$target_role" == "administrator" ]] && administrador=true
+    preserved="$(grupos_preservados_json "$cuenta")"
+  else
+    echo
+    echo "El rol pertenece a este equipo y no viaja dentro del perfil."
+    echo "Elige qué permisos tendrá esta persona aquí."
+    printf 'Rol [a=Administrador, e=Estándar, predeterminado e]: '
+    read -r role_answer
+
+    case "$role_answer" in
+      a|A)
+        administrador=true
+        ;;
+      ""|e|E)
+        administrador=false
+        ;;
+      *)
+        error "Rol no reconocido."
+        ;;
+    esac
+  fi
+
+  tmpdir="$(mktemp -d)"
+  extraer_bundle_seguro "$bundle" "$tmpdir"
+  manifest="$tmpdir/manifest.json"
+
+  perfil="users/${id_usuario}.nix"
+
+  if [[ "$profile_exists" != true ]]; then
+    avatar_file="$(jq -r '.profile.avatar.file // empty' "$manifest")"
+
+    if [[ -n "$avatar_file" ]]; then
+      extension="${avatar_file##*.}"
+      avatar_creado="users/${id_usuario}.${extension}"
+
+      [[ ! -e "$avatar_creado" ]] \
+        || error "$avatar_creado ya existe."
+
+      cp "$tmpdir/$avatar_file" "$avatar_creado"
+    fi
+
+    requested="$(jq -c '.profile.capabilities' "$manifest")"
+    idioma_json="$(jq -c '.profile.language' "$manifest")"
+
+    escribir_perfil_portable \
+      "$perfil" \
+      "$cuenta" \
+      "$(jq -r '.profile.fullName' "$manifest")" \
+      "$idioma_json" \
+      "$(basename "${avatar_creado:-}")" \
+      "$requested"
+
+    git add "$perfil"
+    [[ -n "$avatar_creado" ]] && git add "$avatar_creado"
+    perfil_creado=true
+  fi
+
+  portable_account="$(perfil_portable_json "$id_usuario" | jq -r '.accountName')"
+
+  host_file="hosts/${HOST}.nix"
+  backup_host="$(mktemp)"
+  cp -a "$host_file" "$backup_host"
+
+  agregar_usuario_al_host \
+    "$id_usuario" \
+    "$(
+      if [[ "$portable_account" != "$cuenta" ]]; then
+        echo "$cuenta"
+      fi
+    )" \
+    "$home" \
+    "$administrador" \
+    "$deferred" \
+    "$preserved"
+
+  if ! validar_y_construir_identidad; then
+    cp -a "$backup_host" "$host_file"
+
+    if [[ "$perfil_creado" == true ]]; then
+      git reset -q -- "$perfil" 2>/dev/null || true
+      rm -f "$perfil"
+
+      if [[ -n "$avatar_creado" ]]; then
+        git reset -q -- "$avatar_creado" 2>/dev/null || true
+        rm -f "$avatar_creado"
+      fi
+    fi
+
+    rm -rf "$tmpdir"
+    rm -f "$backup_host"
+
+    error "La importación fue revertida antes de aplicar."
+  fi
+
+  rm -rf "$tmpdir"
+  rm -f "$backup_host"
+
+  echo
+  echo "✓ importación preparada y construida"
+  echo "✓ no se aplicó el sistema"
+
+  if [[ "$account_exists" == true ]]; then
+    echo "✓ la contraseña existente se preservará"
+  else
+    echo "Después de aplicar:"
+    echo "  scripts/korunix users password $cuenta"
+  fi
+
+  git status --short
+}
+
+operacion_usuarios() {
+  local accion="${1:-}"
+  local argumento="${2:-}"
+
+  case "$accion" in
+    "")
+      mostrar_usuarios
+      ;;
+
+    --json)
+      usuarios_detectados_json
+      ;;
+
+    adopt)
+      adoptar_usuario "$argumento"
+      ;;
+
+    create)
+      crear_usuario
+      ;;
+
+    password)
+      cambiar_password_usuario "$argumento"
+      ;;
+
+    export)
+      exportar_perfil "$argumento"
+      ;;
+
+    inspect)
+      inspeccionar_perfil "$argumento"
+      ;;
+
+    plan)
+      planificar_importacion "$argumento"
+      ;;
+
+    import)
+      importar_perfil "$argumento"
+      ;;
+
+    *)
+      error "Uso: scripts/korunix users [--json|adopt <cuenta>|create|password <cuenta>|export <id>|inspect <archivo>|plan <archivo>|import <archivo>]."
+      ;;
+  esac
+}
+
+operacion_usuarios "$@"
