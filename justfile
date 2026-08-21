@@ -6,6 +6,10 @@
 default:
     ./scripts/korunix
 
+# Detecta el hardware local y comprueba los hechos adoptados por Korunix.
+hardware:
+    ./scripts/korunix hardware
+
 # Muestra el estado local sin consultar Internet.
 status:
     ./scripts/korunix status

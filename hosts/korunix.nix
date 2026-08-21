@@ -1,6 +1,8 @@
 {
-  # Este archivo describe las decisiones del equipo. No contiene contraseñas ni
-  # detalles que Korunix pueda detectar y derivar de otra fuente.
+  # Este archivo contiene decisiones humanas y el contexto estructural mínimo que
+  # flake necesita antes de evaluar NixOS. Los hechos físicos viven en hardware/.
+  # La plataforma se detecta al adoptar el equipo, pero flake la necesita antes
+  # de evaluar los módulos; por eso permanece como contexto estructural.
   system = "x86_64-linux";
 
   # Un host puede tener varias personas y una misma persona puede aparecer en
@@ -20,11 +22,6 @@
     # canal estable/inestable y no debe actualizarse automáticamente.
     stateVersion = "26.05";
 
-    # Este dato fue detectado del firmware real del equipo. Korunix lo
-    # conserva para elegir automáticamente el cargador correcto.
-    boot = {
-      firmware = "uefi";
-    };
 
     localization = {
       language = "es";

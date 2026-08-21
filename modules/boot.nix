@@ -5,18 +5,9 @@
   ...
 }: let
   cfg = config.korunix.boot;
+  firmware = config.korunix.hardware.firmware;
 in {
   options.korunix.boot = {
-    # Korunix detecta el tipo de firmware al adoptar o instalar un equipo.
-    # La persona no necesita saber qué significan UEFI o BIOS para usarlo.
-    firmware = lib.mkOption {
-      type = lib.types.enum [
-        "uefi"
-        "bios"
-      ];
-
-      description = "Tipo de firmware detectado para este equipo.";
-    };
 
     # /boot es la disposición estándar de Korunix. Se puede conservar otra
     # ubicación cuando un equipo existente ya utiliza una ESP diferente.
@@ -40,7 +31,7 @@ in {
       assertions = [
         {
           assertion =
-            cfg.firmware != "bios"
+            firmware != "bios"
             || cfg.biosDevice != null;
 
           message = ''
@@ -50,13 +41,6 @@ in {
         }
       ];
 
-      # Los blobs redistribuibles permiten cargar firmware y microcódigo que el
-      # hardware necesita sin convertirlos en elecciones manuales del usuario.
-      hardware.enableRedistributableFirmware = true;
-
-      # fwupd proporciona la infraestructura para detectar actualizaciones de
-      # firmware. Korunix nunca las instala silenciosamente.
-      services.fwupd.enable = true;
 
       # Estas decisiones ya existían en core.nix. Se conservan aquí para que
       # mover la responsabilidad al módulo de arranque no cambie la experiencia.
@@ -77,7 +61,7 @@ in {
       };
     }
 
-    (lib.mkIf (cfg.firmware == "uefi") {
+    (lib.mkIf (firmware == "uefi") {
       boot.loader = {
         efi = {
           canTouchEfiVariables = true;
@@ -106,7 +90,7 @@ in {
       };
     })
 
-    (lib.mkIf (cfg.firmware == "bios") {
+    (lib.mkIf (firmware == "bios") {
       boot.loader.grub = {
         enable = true;
 

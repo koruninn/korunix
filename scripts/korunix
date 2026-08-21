@@ -321,6 +321,513 @@ mostrar_generaciones() {
 }
 
 
+# Lee un valor DMI sin saltos ni espacios residuales. En equipos sin DMI,
+# como determinadas máquinas ARM, devuelve vacío y la detección degrada
+# limpiamente en lugar de inventar información.
+valor_dmi() {
+  local campo="$1"
+  local archivo="/sys/class/dmi/id/${campo}"
+
+  [[ -r "$archivo" ]] || return 0
+
+  tr -d '\000' <"$archivo" \
+    | sed -E 's/[[:space:]]+$//'
+}
+
+tipo_equipo_detectado() {
+  local chasis
+
+  chasis="$(valor_dmi chassis_type)"
+
+  # Los números siguen SMBIOS. Una batería cualquiera no participa en esta
+  # decisión porque ratones y teclados también pueden exponer Battery.
+  case "$chasis" in
+    3|4|5|6|7|15|16|24)
+      echo "desktop"
+      ;;
+    8|9|10|14|30|31|32)
+      echo "laptop"
+      ;;
+    13)
+      echo "all-in-one"
+      ;;
+    17|23)
+      echo "server"
+      ;;
+    *)
+      echo "unknown"
+      ;;
+  esac
+}
+
+hardware_detectado_json() {
+  local jq_bin
+  local arch_kernel
+  local arch_real
+  local arch_declarada
+  local firmware_real
+  local firmware_declarado
+  local coincide_arch=false
+  local coincide_firmware=false
+  local virtualizacion
+  local virtualizado=false
+  local fabricante
+  local modelo
+  local placa_fabricante
+  local placa_modelo
+  local chasis
+  local tipo_equipo
+  local cpu_modelo
+  local cpu_fabricante
+  local cpu_logicos
+  local microcode
+  local memoria_kib
+  local memoria_bytes
+  local bateria_sistema=false
+  local fuente
+  local tipo_fuente
+  local scope_fuente
+  local graficos_texto=""
+  local graficos_json
+  local drivers_texto=""
+  local drivers_json
+  local red_texto=""
+  local red_json
+  local almacenamiento_json
+
+  jq_bin="$(command -v jq 2>/dev/null || true)"
+
+  [[ -n "$jq_bin" ]] \
+    || error "jq no está disponible. Aplica primero la generación que integra la capa de hardware."
+
+  arch_kernel="$(uname -m)"
+
+  case "$arch_kernel" in
+    x86_64)
+      arch_real="x86_64-linux"
+      ;;
+    aarch64|arm64)
+      arch_real="aarch64-linux"
+      ;;
+    *)
+      arch_real="${arch_kernel}-linux"
+      ;;
+  esac
+
+  if [[ -d /sys/firmware/efi ]]; then
+    firmware_real="uefi"
+  else
+    firmware_real="bios"
+  fi
+
+  arch_declarada="$(
+    nix eval \
+      ".#nixosConfigurations.${HOST}.config.nixpkgs.hostPlatform.system" \
+      --raw \
+      2>/dev/null \
+      || true
+  )"
+
+  firmware_declarado="$(
+    nix eval \
+      ".#nixosConfigurations.${HOST}.config.korunix.hardware.firmware" \
+      --raw \
+      2>/dev/null \
+      || true
+  )"
+
+  [[ "$arch_real" == "$arch_declarada" ]] && coincide_arch=true
+  [[ "$firmware_real" == "$firmware_declarado" ]] && coincide_firmware=true
+
+  virtualizacion="$(
+    systemd-detect-virt 2>/dev/null \
+      || true
+  )"
+
+  if [[ -z "$virtualizacion" || "$virtualizacion" == "none" ]]; then
+    virtualizacion="physical"
+  else
+    virtualizado=true
+  fi
+
+  fabricante="$(valor_dmi sys_vendor)"
+  modelo="$(valor_dmi product_name)"
+  placa_fabricante="$(valor_dmi board_vendor)"
+  placa_modelo="$(valor_dmi board_name)"
+  chasis="$(valor_dmi chassis_type)"
+  tipo_equipo="$(tipo_equipo_detectado)"
+
+  [[ -n "$fabricante" ]] || fabricante="desconocido"
+  [[ -n "$modelo" ]] || modelo="desconocido"
+  [[ -n "$placa_fabricante" ]] || placa_fabricante="desconocido"
+  [[ -n "$placa_modelo" ]] || placa_modelo="desconocido"
+
+  cpu_modelo="$(
+    awk -F ':' '
+      /^model name/ || /^Processor/ || /^Hardware/ {
+        valor = $2
+        sub(/^[[:space:]]+/, "", valor)
+        print valor
+        exit
+      }
+    ' /proc/cpuinfo 2>/dev/null \
+      || true
+  )"
+
+  cpu_fabricante="$(
+    awk -F ':' '
+      /^vendor_id/ {
+        valor = $2
+        sub(/^[[:space:]]+/, "", valor)
+        print valor
+        exit
+      }
+    ' /proc/cpuinfo 2>/dev/null \
+      || true
+  )"
+
+  cpu_logicos="$(
+    awk '
+      /^processor[[:space:]]*:/ {
+        total++
+      }
+
+      END {
+        print total + 0
+      }
+    ' /proc/cpuinfo
+  )"
+
+  microcode="$(
+    awk -F ':' '
+      /^microcode/ {
+        valor = $2
+        sub(/^[[:space:]]+/, "", valor)
+        print valor
+        exit
+      }
+    ' /proc/cpuinfo 2>/dev/null \
+      || true
+  )"
+
+  [[ -n "$cpu_modelo" ]] || cpu_modelo="desconocido"
+  [[ -n "$cpu_fabricante" ]] || cpu_fabricante="desconocido"
+  [[ -n "$microcode" ]] || microcode="desconocido"
+
+  memoria_kib="$(
+    awk '
+      /^MemTotal:/ {
+        print $2
+        exit
+      }
+    ' /proc/meminfo
+  )"
+
+  memoria_bytes=$((memoria_kib * 1024))
+
+  # Solo una batería de sistema puede reforzar la detección de un portátil.
+  # Las baterías con scope=Device pertenecen a periféricos.
+  for fuente in /sys/class/power_supply/*; do
+    [[ -e "$fuente" ]] || continue
+
+    tipo_fuente="$(cat "$fuente/type" 2>/dev/null || true)"
+    scope_fuente="$(cat "$fuente/scope" 2>/dev/null || true)"
+
+    if [[ "$tipo_fuente" == "Battery" && "$scope_fuente" == "System" ]]; then
+      bateria_sistema=true
+      break
+    fi
+  done
+
+  if command -v lspci >/dev/null 2>&1; then
+    graficos_texto="$(
+      lspci -nn 2>/dev/null \
+        | grep -E '\[03(00|02|80)\]' \
+        || true
+    )"
+
+    red_texto="$(
+      lspci -nn 2>/dev/null \
+        | grep -E '\[02(00|80)\]' \
+        || true
+    )"
+  fi
+
+  if command -v lsmod >/dev/null 2>&1; then
+    drivers_texto="$(
+      lsmod \
+        | awk '
+            /^(amdgpu|nvidia|nouveau|i915|xe)[[:space:]]/ {
+              print $1
+            }
+          ' \
+        || true
+    )"
+  fi
+
+  graficos_json="$(
+    printf '%s\n' "$graficos_texto" \
+      | sed -E 's/^[^[:space:]]+[[:space:]]+//' \
+      | "$jq_bin" -R -s '
+          split("\n")
+          | map(select(length > 0))
+        '
+  )"
+
+  drivers_json="$(
+    printf '%s\n' "$drivers_texto" \
+      | "$jq_bin" -R -s '
+          split("\n")
+          | map(select(length > 0))
+          | unique
+        '
+  )"
+
+  red_json="$(
+    printf '%s\n' "$red_texto" \
+      | sed -E 's/^[^[:space:]]+[[:space:]]+//' \
+      | "$jq_bin" -R -s '
+          split("\n")
+          | map(select(length > 0))
+        '
+  )"
+
+  if command -v lsblk >/dev/null 2>&1; then
+    almacenamiento_json="$(
+      lsblk \
+        -J \
+        -b \
+        -e 7 \
+        -o NAME,PATH,TYPE,SIZE,FSTYPE,MOUNTPOINTS,MODEL,TRAN,ROTA,RM
+    )"
+  else
+    almacenamiento_json='{"blockdevices":[]}'
+  fi
+
+  "$jq_bin" -n \
+    --argjson schemaVersion 1 \
+    --arg hostId "$HOST" \
+    --arg detectedAt "$(date --iso-8601=seconds)" \
+    --arg machineType "$tipo_equipo" \
+    --arg chassisType "$chasis" \
+    --arg vendor "$fabricante" \
+    --arg model "$modelo" \
+    --arg boardVendor "$placa_fabricante" \
+    --arg boardModel "$placa_modelo" \
+    --argjson systemBattery "$bateria_sistema" \
+    --arg architectureDetected "$arch_real" \
+    --arg architectureDeclared "$arch_declarada" \
+    --argjson architectureMatches "$coincide_arch" \
+    --arg firmwareDetected "$firmware_real" \
+    --arg firmwareDeclared "$firmware_declarado" \
+    --argjson firmwareMatches "$coincide_firmware" \
+    --arg virtualization "$virtualizacion" \
+    --argjson virtualized "$virtualizado" \
+    --arg cpuModel "$cpu_modelo" \
+    --arg cpuVendor "$cpu_fabricante" \
+    --argjson cpuLogical "$cpu_logicos" \
+    --arg microcode "$microcode" \
+    --argjson memoryBytes "$memoria_bytes" \
+    --argjson graphics "$graficos_json" \
+    --argjson graphicsDrivers "$drivers_json" \
+    --argjson network "$red_json" \
+    --argjson storage "$almacenamiento_json" \
+    '{
+      schemaVersion: $schemaVersion,
+      hostId: $hostId,
+      detectedAt: $detectedAt,
+
+      machine: {
+        type: $machineType,
+        chassisType: $chassisType,
+        vendor: $vendor,
+        model: $model,
+        boardVendor: $boardVendor,
+        boardModel: $boardModel,
+        systemBattery: $systemBattery
+      },
+
+      platform: {
+        detected: $architectureDetected,
+        declared: $architectureDeclared,
+        matches: $architectureMatches
+      },
+
+      firmware: {
+        detected: $firmwareDetected,
+        declared: $firmwareDeclared,
+        matches: $firmwareMatches
+      },
+
+      virtualization: {
+        kind: $virtualization,
+        virtualized: $virtualized
+      },
+
+      cpu: {
+        model: $cpuModel,
+        vendor: $cpuVendor,
+        logicalProcessors: $cpuLogical,
+        microcode: $microcode
+      },
+
+      memory: {
+        bytes: $memoryBytes
+      },
+
+      graphics: $graphics,
+      graphicsDrivers: $graphicsDrivers,
+      network: $network,
+      storage: $storage
+    }'
+}
+
+mostrar_hardware() {
+  local modo="${1:-}"
+  local jq_bin
+  local datos
+  local tipo
+  local tipo_humano
+  local memoria
+
+  case "$modo" in
+    "")
+      ;;
+    --json)
+      hardware_detectado_json
+      return
+      ;;
+    *)
+      error "Uso: scripts/korunix hardware [--json]."
+      ;;
+  esac
+
+  jq_bin="$(command -v jq 2>/dev/null || true)"
+
+  [[ -n "$jq_bin" ]] \
+    || error "jq no está disponible. Aplica primero la generación que integra la capa de hardware."
+
+  datos="$(hardware_detectado_json)"
+  tipo="$("$jq_bin" -r '.machine.type' <<<"$datos")"
+
+  case "$tipo" in
+    desktop)
+      tipo_humano="Sobremesa"
+      ;;
+    laptop)
+      tipo_humano="Portátil"
+      ;;
+    all-in-one)
+      tipo_humano="Todo en uno"
+      ;;
+    server)
+      tipo_humano="Servidor"
+      ;;
+    *)
+      tipo_humano="Tipo no determinado"
+      ;;
+  esac
+
+  memoria="$(
+    "$jq_bin" -r '.memory.bytes' <<<"$datos" \
+      | awk '{ printf "%.1f GiB", $1 / 1073741824 }'
+  )"
+
+  echo "=== Hardware detectado ==="
+  echo "Host Korunix: $HOST"
+  echo "Tipo de equipo: $tipo_humano"
+  echo "Fabricante: $("$jq_bin" -r '.machine.vendor' <<<"$datos")"
+  echo "Modelo: $("$jq_bin" -r '.machine.model' <<<"$datos")"
+
+  echo
+  echo "=== Plataforma ==="
+  echo "Arquitectura: $("$jq_bin" -r '.platform.detected' <<<"$datos")"
+
+  case "$("$jq_bin" -r '.firmware.detected' <<<"$datos")" in
+    uefi)
+      echo "Firmware: UEFI"
+      ;;
+    bios)
+      echo "Firmware: BIOS / Legacy"
+      ;;
+  esac
+
+  if "$jq_bin" -e '.virtualization.virtualized' <<<"$datos" >/dev/null; then
+    echo "Entorno: virtualizado ($("$jq_bin" -r '.virtualization.kind' <<<"$datos"))"
+  else
+    echo "Entorno: máquina física"
+  fi
+
+  echo
+  echo "=== Procesador y memoria ==="
+  echo "CPU: $("$jq_bin" -r '.cpu.model' <<<"$datos")"
+  echo "Procesadores lógicos: $("$jq_bin" -r '.cpu.logicalProcessors' <<<"$datos")"
+  echo "Microcódigo: $("$jq_bin" -r '.cpu.microcode' <<<"$datos")"
+  echo "Memoria: $memoria"
+
+  echo
+  echo "=== Gráficos ==="
+
+  if [[ "$("$jq_bin" -r '.graphics | length' <<<"$datos")" -eq 0 ]]; then
+    echo "No se pudo identificar un adaptador gráfico."
+  else
+    "$jq_bin" -r '.graphics[] | "• " + .' <<<"$datos"
+  fi
+
+  if [[ "$("$jq_bin" -r '.graphicsDrivers | length' <<<"$datos")" -gt 0 ]]; then
+    echo "Controladores cargados: $("$jq_bin" -r '.graphicsDrivers | join(", ")' <<<"$datos")"
+  fi
+
+  echo
+  echo "=== Almacenamiento ==="
+
+  "$jq_bin" -r '
+    .storage.blockdevices[]?
+    | select(.type == "disk")
+    | (
+        "• "
+        + .name
+        + ": "
+        + (((.size / 1073741824 * 10 | round) / 10) | tostring)
+        + " GiB · "
+        + ((.model // "sin modelo") | gsub("\\s+$"; ""))
+        + " · "
+        + (.tran // "bus desconocido")
+      )
+  ' <<<"$datos"
+
+  echo
+  echo "=== Red ==="
+
+  if [[ "$("$jq_bin" -r '.network | length' <<<"$datos")" -eq 0 ]]; then
+    echo "No se identificaron adaptadores PCI de red."
+  else
+    "$jq_bin" -r '.network[] | "• " + .' <<<"$datos"
+  fi
+
+  echo
+  echo "=== Coherencia con Korunix ==="
+
+  if "$jq_bin" -e '.platform.matches' <<<"$datos" >/dev/null; then
+    echo "✓ la arquitectura detectada coincide con la declarada"
+  else
+    echo "AVISO: la arquitectura detectada y la declarada no coinciden"
+    echo "Detectada: $("$jq_bin" -r '.platform.detected' <<<"$datos")"
+    echo "Declarada: $("$jq_bin" -r '.platform.declared' <<<"$datos")"
+  fi
+
+  if "$jq_bin" -e '.firmware.matches' <<<"$datos" >/dev/null; then
+    echo "✓ el firmware detectado coincide con el adoptado"
+  else
+    echo "AVISO: el firmware detectado y el adoptado no coinciden"
+    echo "Detectado: $("$jq_bin" -r '.firmware.detected' <<<"$datos")"
+    echo "Adoptado: $("$jq_bin" -r '.firmware.declared' <<<"$datos")"
+  fi
+
+  echo
+  echo "Detección local. No se consultó Internet ni se modificó el sistema."
+}
+
 mostrar_arranque() {
   local modo="BIOS / Legacy"
   local estado_boot=""
@@ -858,6 +1365,10 @@ limpiar() {
 }
 
 case "${1:-}" in
+  hardware)
+    mostrar_hardware "${2:-}"
+    ;;
+
   status)
     estado
     ;;
@@ -920,6 +1431,13 @@ case "${1:-}" in
 Korunix
 
 Estado y comprobación:
+  scripts/korunix hardware
+      Detectar localmente el hardware y comprobar que los hechos adoptados por
+      Korunix siguen coincidiendo con la máquina real.
+
+  scripts/korunix hardware --json
+      Exponer el mismo modelo de hardware en JSON para interfaces y automatización.
+
   scripts/korunix status
       Ver el estado local del repositorio y del sistema sin usar Internet.
 

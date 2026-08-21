@@ -13,6 +13,10 @@
     (modulesPath + "/installer/scan/not-detected.nix")
   ];
 
+  # Tipo de firmware detectado físicamente al adoptar este equipo. El módulo de
+  # arranque lo consume para elegir systemd-boot o GRUB sin preguntarlo al usuario.
+  korunix.hardware.firmware = "uefi";
+
   boot.initrd.availableKernelModules = ["xhci_pci" "ahci" "nvme" "usbhid" "usb_storage" "sd_mod"];
   boot.initrd.kernelModules = [];
   boot.kernelModules = [];
