@@ -1,0 +1,275 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Este script es la entrada de mantenimiento del repositorio mientras se construye
+# la GUI. Todas las operaciones se expresan con nombres cortos y mensajes humanos.
+ROOT="$(
+  cd "$(dirname "${BASH_SOURCE[0]}")/.."
+  pwd
+)"
+
+cd "$ROOT"
+
+error() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+hosts_disponibles() {
+  local archivo
+
+  for archivo in hosts/*.nix; do
+    [[ -e "$archivo" ]] || continue
+    basename "$archivo" .nix
+  done
+}
+
+resolver_host() {
+  local solicitado="${KORUNIX_HOST:-}"
+  local actual
+  local hosts=()
+
+  if [[ -n "$solicitado" ]]; then
+    [[ -f "hosts/${solicitado}.nix" ]] \
+      || error "No existe hosts/${solicitado}.nix."
+    printf '%s\n' "$solicitado"
+    return
+  fi
+
+  actual="$(hostname 2>/dev/null || true)"
+  if [[ -n "$actual" && -f "hosts/${actual}.nix" ]]; then
+    printf '%s\n' "$actual"
+    return
+  fi
+
+  mapfile -t hosts < <(hosts_disponibles)
+
+  if [[ "${#hosts[@]}" -eq 1 ]]; then
+    printf '%s\n' "${hosts[0]}"
+    return
+  fi
+
+  error "No pude decidir qué host usar. Define KORUNIX_HOST. Disponibles: ${hosts[*]:-ninguno}."
+}
+
+HOST="$(resolver_host)"
+
+estructura() {
+  find . \
+    -mindepth 1 \
+    -maxdepth 3 \
+    ! -path './.git' \
+    ! -path './.git/*' \
+    -print \
+    | sort
+}
+
+validar_estructura() {
+  local rutas_antiguas=(
+    'hosts/korunix/configuration.nix'
+    'users/koru/home.nix'
+    'modules/nixos'
+    'modules/home'
+    'modules/korunix'
+    'config/niri.nix'
+    'config/fastfetch.nix'
+    'config/spicetify.nix'
+    'config/noctalia/noctalia.nix'
+    'config/noctalia/settings'
+  )
+  local ruta
+
+  for ruta in "${rutas_antiguas[@]}"; do
+    [[ ! -e "$ruta" ]] || error "Quedó una ruta retirada por la arquitectura nueva: $ruta"
+  done
+
+  if grep -RInE \
+    --include='*.nix' \
+    --include='*.sh' \
+    --include='justfile' \
+    'home-manager|homeConfigurations|home-legacy' \
+    flake.nix hosts hardware modules users config scripts justfile \
+    >/tmp/korunix-home-manager-restos.txt 2>/dev/null; then
+    cat /tmp/korunix-home-manager-restos.txt
+    error 'Quedaron referencias ejecutables a Home Manager.'
+  fi
+
+  local host_id
+  while IFS= read -r host_id; do
+    [[ -f "hardware/${host_id}.nix" ]] \
+      || error "Falta hardware/${host_id}.nix."
+  done < <(hosts_disponibles)
+}
+
+validar() {
+  local host_id
+
+  echo
+  echo '=== Estructura ==='
+  validar_estructura
+  echo '✓ estructura'
+
+  echo
+  echo '=== Git ==='
+  git diff --check
+  git diff --cached --check
+  echo '✓ diferencias'
+
+  echo
+  echo '=== Flake ==='
+  nix flake check --no-build --show-trace
+
+  echo
+  echo '=== Hosts ==='
+  while IFS= read -r host_id; do
+    printf '• %s: ' "$host_id"
+    nix eval \
+      ".#nixosConfigurations.${host_id}.config.system.build.toplevel.drvPath" \
+      --raw
+    echo
+  done < <(hosts_disponibles)
+
+  echo
+  echo "=== Modelo Korunix · ${HOST} ==="
+  nix eval ".#nixosConfigurations.${HOST}.config.korunix" --json
+  echo
+
+  echo
+  echo '✓ VALIDACIÓN COMPLETA'
+}
+
+formatear() {
+  mapfile -d '' archivos < <(
+    find . \
+      -path './.git' -prune -o \
+      -type f -name '*.nix' -print0
+  )
+
+  if [[ "${#archivos[@]}" -gt 0 ]]; then
+    nix fmt "${archivos[@]}"
+  fi
+}
+
+actualizar() {
+  local copia
+  copia="$(mktemp)"
+  cp flake.lock "$copia"
+
+  echo 'Actualizando las fuentes de Korunix...'
+
+  if nix flake update && validar; then
+    rm -f "$copia"
+    echo
+    echo '✓ Actualización preparada y validada. No se aplicó al sistema.'
+    return
+  fi
+
+  cp "$copia" flake.lock
+  rm -f "$copia"
+  git add flake.lock
+
+  echo >&2
+  echo 'La actualización no pasó la validación. Restauré flake.lock.' >&2
+  exit 1
+}
+
+limpiar() {
+  local modo="$1"
+
+  case "$modo" in
+    tres)
+      echo 'Conservando las tres generaciones de sistema más recientes...'
+      sudo nix-env \
+        --profile /nix/var/nix/profiles/system \
+        --delete-generations +3
+      ;;
+    todas)
+      echo 'Eliminando todas las generaciones antiguas del sistema...'
+      sudo nix-env \
+        --profile /nix/var/nix/profiles/system \
+        --delete-generations old
+      ;;
+    *)
+      error "Modo de limpieza desconocido: $modo"
+      ;;
+  esac
+
+  sudo nix-collect-garbage
+  sudo nix store optimise
+  echo '✓ Limpieza terminada. La generación activa se conserva.'
+}
+
+case "${1:-}" in
+  status)
+    git status --short --branch
+    echo
+    nix eval ".#nixosConfigurations.${HOST}.config.korunix" --json
+    echo
+    ;;
+
+  structure)
+    estructura
+    ;;
+
+  validate)
+    validar
+    ;;
+
+  format)
+    formatear
+    ;;
+
+  preview)
+    nixos-rebuild dry-build --flake ".#${HOST}"
+    ;;
+
+  build)
+    nix build \
+      ".#nixosConfigurations.${HOST}.config.system.build.toplevel" \
+      --no-link \
+      --show-trace
+    ;;
+
+  apply)
+    echo 'Korunix va a aplicar la configuración completa de este equipo.'
+    echo 'La autorización se pedirá una sola vez al comenzar la reconstrucción.'
+    sudo nixos-rebuild switch --flake ".#${HOST}"
+    ;;
+
+  update)
+    actualizar
+    ;;
+
+  clean)
+    limpiar tres
+    ;;
+
+  clean-all)
+    limpiar todas
+    ;;
+
+  '')
+    cat <<'USAGE'
+Korunix
+
+Uso habitual:
+  scripts/korunix status      Ver el estado actual
+  scripts/korunix validate    Comprobar todo sin aplicar
+  scripts/korunix format      Formatear los archivos Nix
+  scripts/korunix preview     Preparar una reconstrucción de prueba
+  scripts/korunix build       Construir sin activar
+  scripts/korunix apply       Aplicar la configuración
+  scripts/korunix update      Actualizar y validar flake.lock
+  scripts/korunix clean       Conservar tres generaciones
+  scripts/korunix clean-all   Borrar generaciones antiguas
+  scripts/korunix structure   Mostrar la estructura
+
+Si existen varios hosts y el nombre actual no coincide con uno de ellos:
+  KORUNIX_HOST=mi-equipo scripts/korunix status
+USAGE
+    ;;
+
+  *)
+    error "Acción desconocida: $1"
+    ;;
+esac
