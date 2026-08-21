@@ -30,7 +30,7 @@ input {
 
     warp-mouse-to-focus
 
-    focus-follows-mouse max-scroll-amount="0%"
+    focus-follows-mouse
 }
 
 // Variables que necesitan las aplicaciones de esta sesión.
@@ -212,6 +212,9 @@ binds {
     Mod+Ctrl+Shift+WheelScrollDown { move-column-right; }
     Mod+Ctrl+Shift+WheelScrollUp   { move-column-left; }
 
+    // Espacios de trabajo 1–10.
+    // La fila numérica y el numpad representan exactamente los mismos espacios.
+    // 0 representa el espacio 10.
     Mod+1 { focus-workspace 1; }
     Mod+2 { focus-workspace 2; }
     Mod+3 { focus-workspace 3; }
@@ -221,6 +224,33 @@ binds {
     Mod+7 { focus-workspace 7; }
     Mod+8 { focus-workspace 8; }
     Mod+9 { focus-workspace 9; }
+    Mod+0 { focus-workspace 10; }
+
+    // Numpad con Bloq Num activado.
+    Mod+KP_1 { focus-workspace 1; }
+    Mod+KP_2 { focus-workspace 2; }
+    Mod+KP_3 { focus-workspace 3; }
+    Mod+KP_4 { focus-workspace 4; }
+    Mod+KP_5 { focus-workspace 5; }
+    Mod+KP_6 { focus-workspace 6; }
+    Mod+KP_7 { focus-workspace 7; }
+    Mod+KP_8 { focus-workspace 8; }
+    Mod+KP_9 { focus-workspace 9; }
+    Mod+KP_0 { focus-workspace 10; }
+
+    // Los mismos botones físicos cuando Bloq Num está desactivado.
+    Mod+KP_End    { focus-workspace 1; }
+    Mod+KP_Down   { focus-workspace 2; }
+    Mod+KP_Next   { focus-workspace 3; }
+    Mod+KP_Left   { focus-workspace 4; }
+    Mod+KP_Begin  { focus-workspace 5; }
+    Mod+KP_Right  { focus-workspace 6; }
+    Mod+KP_Home   { focus-workspace 7; }
+    Mod+KP_Up     { focus-workspace 8; }
+    Mod+KP_Prior  { focus-workspace 9; }
+    Mod+KP_Insert { focus-workspace 10; }
+
+    // Shift mueve la ventana al mismo espacio.
     Mod+Shift+1 { move-window-to-workspace 1; }
     Mod+Shift+2 { move-window-to-workspace 2; }
     Mod+Shift+3 { move-window-to-workspace 3; }
@@ -230,6 +260,31 @@ binds {
     Mod+Shift+7 { move-window-to-workspace 7; }
     Mod+Shift+8 { move-window-to-workspace 8; }
     Mod+Shift+9 { move-window-to-workspace 9; }
+    Mod+Shift+0 { move-window-to-workspace 10; }
+
+    Mod+Shift+KP_1 { move-window-to-workspace 1; }
+    Mod+Shift+KP_2 { move-window-to-workspace 2; }
+    Mod+Shift+KP_3 { move-window-to-workspace 3; }
+    Mod+Shift+KP_4 { move-window-to-workspace 4; }
+    Mod+Shift+KP_5 { move-window-to-workspace 5; }
+    Mod+Shift+KP_6 { move-window-to-workspace 6; }
+    Mod+Shift+KP_7 { move-window-to-workspace 7; }
+    Mod+Shift+KP_8 { move-window-to-workspace 8; }
+    Mod+Shift+KP_9 { move-window-to-workspace 9; }
+    Mod+Shift+KP_0 { move-window-to-workspace 10; }
+
+    // Shift puede invertir el estado efectivo de Bloq Num en XKB; estos aliases
+    // mantienen la misma acción independientemente del estado del teclado.
+    Mod+Shift+KP_End    { move-window-to-workspace 1; }
+    Mod+Shift+KP_Down   { move-window-to-workspace 2; }
+    Mod+Shift+KP_Next   { move-window-to-workspace 3; }
+    Mod+Shift+KP_Left   { move-window-to-workspace 4; }
+    Mod+Shift+KP_Begin  { move-window-to-workspace 5; }
+    Mod+Shift+KP_Right  { move-window-to-workspace 6; }
+    Mod+Shift+KP_Home   { move-window-to-workspace 7; }
+    Mod+Shift+KP_Up     { move-window-to-workspace 8; }
+    Mod+Shift+KP_Prior  { move-window-to-workspace 9; }
+    Mod+Shift+KP_Insert { move-window-to-workspace 10; }
 
     Mod+Tab { focus-workspace-previous; }
 

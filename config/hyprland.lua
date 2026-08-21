@@ -260,7 +260,8 @@ hl.bind(
     hl.dsp.window.move({ direction = "down" })
 )
 
--- Workspaces 1–9.
+-- Workspaces 1–10.
+-- La fila numérica y el numpad comparten exactamente la misma semántica.
 for i = 1, 9 do
     hl.bind(
         "SUPER + " .. i,
@@ -270,6 +271,54 @@ for i = 1, 9 do
     hl.bind(
         "SUPER + SHIFT + " .. i,
         hl.dsp.window.move({ workspace = i })
+    )
+end
+
+-- La tecla 0 representa el espacio 10.
+hl.bind(
+    "SUPER + 0",
+    hl.dsp.focus({ workspace = 10 })
+)
+
+hl.bind(
+    "SUPER + SHIFT + 0",
+    hl.dsp.window.move({ workspace = 10 })
+)
+
+-- Un mismo botón físico del numpad puede producir dos keysyms diferentes
+-- según Bloq Num y Shift. Ambas variantes apuntan al mismo espacio.
+local keypad_workspaces = {
+    { workspace = 1, number = "KP_1", navigation = "KP_End" },
+    { workspace = 2, number = "KP_2", navigation = "KP_Down" },
+    { workspace = 3, number = "KP_3", navigation = "KP_Next" },
+    { workspace = 4, number = "KP_4", navigation = "KP_Left" },
+    { workspace = 5, number = "KP_5", navigation = "KP_Begin" },
+    { workspace = 6, number = "KP_6", navigation = "KP_Right" },
+    { workspace = 7, number = "KP_7", navigation = "KP_Home" },
+    { workspace = 8, number = "KP_8", navigation = "KP_Up" },
+    { workspace = 9, number = "KP_9", navigation = "KP_Prior" },
+    { workspace = 10, number = "KP_0", navigation = "KP_Insert" },
+}
+
+for _, key in ipairs(keypad_workspaces) do
+    hl.bind(
+        "SUPER + " .. key.number,
+        hl.dsp.focus({ workspace = key.workspace })
+    )
+
+    hl.bind(
+        "SUPER + " .. key.navigation,
+        hl.dsp.focus({ workspace = key.workspace })
+    )
+
+    hl.bind(
+        "SUPER + SHIFT + " .. key.number,
+        hl.dsp.window.move({ workspace = key.workspace })
+    )
+
+    hl.bind(
+        "SUPER + SHIFT + " .. key.navigation,
+        hl.dsp.window.move({ workspace = key.workspace })
     )
 end
 
