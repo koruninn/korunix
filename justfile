@@ -1,29 +1,24 @@
-# just es un atajo para las tareas frecuentes del repositorio. No es un requisito
-# para instalar o usar Korunix; simplemente evita memorizar comandos largos durante
-# desarrollo y mantenimiento.
+# just ofrece nombres cortos para las operaciones frecuentes de Korunix.
+# No contiene lógica propia: scripts/korunix sigue siendo la fuente real del
+# comportamiento para que terminal e interfaz gráfica compartan el mismo modelo.
 
-# Muestra las acciones disponibles cuando se ejecuta `just` sin argumentos.
+# Muestra las acciones disponibles.
 default:
     ./scripts/korunix
 
-# Aplica la configuración completa de sistema y usuarios como una sola generación.
-os:
-    ./scripts/korunix apply
-
-# Abre el punto de entrada actual de Korunix. Cuando exista la GUI, este mismo atajo
-# podrá iniciar la aplicación sin cambiar la memoria muscular del repositorio.
-korunix:
+# Muestra el estado local sin consultar Internet.
+status:
     ./scripts/korunix status
+
+# Enseña todas las generaciones recuperables.
+generations:
+    ./scripts/korunix generations
 
 # Comprueba estructura, sintaxis y evaluación de todos los hosts.
 check:
     ./scripts/korunix validate
 
-# Formatea todos los archivos Nix mediante Alejandra.
-fmt:
-    ./scripts/korunix format
-
-# Prepara una reconstrucción sin aplicarla al equipo.
+# Previsualiza paquetes y servicios sin activar una generación.
 preview:
     ./scripts/korunix preview
 
@@ -31,19 +26,46 @@ preview:
 build:
     ./scripts/korunix build
 
-# Actualiza flake.lock de forma transaccional: si la validación falla, restaura el
-# lock anterior y deja el sistema sin aplicar cambios.
+# Valida, previsualiza, confirma, aplica y verifica el sistema.
+os:
+    ./scripts/korunix apply
+
+# Actualiza todas las entradas de flake.lock sin aplicar el sistema.
 update:
     ./scripts/korunix update
 
-# Conserva las tres generaciones de sistema más recientes y recoge lo inaccesible.
+# Actualiza una entrada concreta, por ejemplo Noctalia.
+update-one input:
+    ./scripts/korunix update {{input}}
+
+# Vuelve de forma controlada a una generación concreta.
+rollback generation:
+    ./scripts/korunix rollback {{generation}}
+
+# Enseña qué retiraría la limpieza normal.
+clean-preview:
+    ./scripts/korunix clean-preview
+
+# Conserva las tres recientes y protege las generaciones necesarias.
 clean:
     ./scripts/korunix clean
 
-# Elimina todas las generaciones antiguas del sistema, nunca la generación activa.
+# Enseña qué retiraría la limpieza agresiva.
+clean-all-preview:
+    ./scripts/korunix clean-all-preview
+
+# Ejecuta la limpieza agresiva con confirmación fuerte.
 clean-all:
     ./scripts/korunix clean-all
 
-# Enseña la rama, los cambios y el modelo Korunix del host actual.
-status:
+# Muestra el árbol útil del repositorio.
+structure:
+    ./scripts/korunix structure
+
+# Formatea archivos Nix cuando una persona decida hacerlo explícitamente.
+fmt:
+    ./scripts/korunix format
+
+# Abre el punto de entrada humano actual de Korunix.
+korunix:
     ./scripts/korunix status

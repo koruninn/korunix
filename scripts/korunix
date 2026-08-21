@@ -1,18 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Este script es la entrada de mantenimiento del repositorio mientras se construye
-# la GUI. Todas las operaciones se expresan con nombres cortos y mensajes humanos.
+# Korunix utiliza este script como entrada humana de mantenimiento mientras la
+# interfaz gráfica todavía no existe. La GUI futura deberá utilizar el mismo
+# modelo y las mismas operaciones, no crear un segundo sistema paralelo.
+
 ROOT="$(
   cd "$(dirname "${BASH_SOURCE[0]}")/.."
   pwd
 )"
 
+SYSTEM_PROFILE="/nix/var/nix/profiles/system"
+
 cd "$ROOT"
 
 error() {
-  printf 'ERROR: %s\n' "$*" >&2
+  printf "ERROR: %s\n" "$*" >&2
   exit 1
+}
+
+aviso() {
+  printf "AVISO: %s\n" "$*" >&2
 }
 
 hosts_disponibles() {
@@ -32,20 +40,22 @@ resolver_host() {
   if [[ -n "$solicitado" ]]; then
     [[ -f "hosts/${solicitado}.nix" ]] \
       || error "No existe hosts/${solicitado}.nix."
-    printf '%s\n' "$solicitado"
+
+    printf "%s\n" "$solicitado"
     return
   fi
 
   actual="$(hostname 2>/dev/null || true)"
+
   if [[ -n "$actual" && -f "hosts/${actual}.nix" ]]; then
-    printf '%s\n' "$actual"
+    printf "%s\n" "$actual"
     return
   fi
 
   mapfile -t hosts < <(hosts_disponibles)
 
   if [[ "${#hosts[@]}" -eq 1 ]]; then
-    printf '%s\n' "${hosts[0]}"
+    printf "%s\n" "${hosts[0]}"
     return
   fi
 
@@ -54,47 +64,70 @@ resolver_host() {
 
 HOST="$(resolver_host)"
 
+confirmar() {
+  local mensaje="$1"
+  local respuesta
+
+  [[ -t 0 ]] || error "Esta operación necesita confirmación interactiva."
+
+  printf "%s [s/N] " "$mensaje"
+  read -r respuesta
+
+  case "$respuesta" in
+    s|S|si|Si|SI|sí|Sí|SÍ)
+      return 0
+      ;;
+    *)
+      echo "Operación cancelada."
+      return 1
+      ;;
+  esac
+}
+
 estructura() {
   find . \
     -mindepth 1 \
     -maxdepth 3 \
-    ! -path './.git' \
-    ! -path './.git/*' \
+    ! -path "./.git" \
+    ! -path "./.git/*" \
     -print \
     | sort
 }
 
 validar_estructura() {
   local rutas_antiguas=(
-    'hosts/korunix/configuration.nix'
-    'users/koru/home.nix'
-    'modules/nixos'
-    'modules/home'
-    'modules/korunix'
-    'config/niri.nix'
-    'config/fastfetch.nix'
-    'config/spicetify.nix'
-    'config/noctalia/noctalia.nix'
-    'config/noctalia/settings'
+    "hosts/korunix/configuration.nix"
+    "users/koru/home.nix"
+    "modules/nixos"
+    "modules/home"
+    "modules/korunix"
+    "config/niri.nix"
+    "config/fastfetch.nix"
+    "config/spicetify.nix"
+    "config/noctalia/noctalia.nix"
+    "config/noctalia/settings"
   )
   local ruta
 
   for ruta in "${rutas_antiguas[@]}"; do
-    [[ ! -e "$ruta" ]] || error "Quedó una ruta retirada por la arquitectura nueva: $ruta"
+    [[ ! -e "$ruta" ]] \
+      || error "Quedó una ruta retirada por la arquitectura nueva: $ruta"
   done
 
   if grep -RInE \
-    --include='*.nix' \
-    --include='*.sh' \
-    --include='justfile' \
-    'home-manager|homeConfigurations|home-legacy' \
+    --include="*.nix" \
+    --include="*.sh" \
+    --include="justfile" \
+    "home-manager|homeConfigurations|home-legacy" \
     flake.nix hosts hardware modules users config scripts justfile \
     >/tmp/korunix-home-manager-restos.txt 2>/dev/null; then
+
     cat /tmp/korunix-home-manager-restos.txt
-    error 'Quedaron referencias ejecutables a Home Manager.'
+    error "Quedaron referencias ejecutables a Home Manager."
   fi
 
   local host_id
+
   while IFS= read -r host_id; do
     [[ -f "hardware/${host_id}.nix" ]] \
       || error "Falta hardware/${host_id}.nix."
@@ -105,27 +138,30 @@ validar() {
   local host_id
 
   echo
-  echo '=== Estructura ==='
+  echo "=== Estructura ==="
   validar_estructura
-  echo '✓ estructura'
+  echo "✓ estructura"
 
   echo
-  echo '=== Git ==='
+  echo "=== Git ==="
   git diff --check
   git diff --cached --check
-  echo '✓ diferencias'
+  echo "✓ diferencias"
 
   echo
-  echo '=== Flake ==='
+  echo "=== Flake ==="
   nix flake check --no-build --show-trace
 
   echo
-  echo '=== Hosts ==='
+  echo "=== Hosts ==="
+
   while IFS= read -r host_id; do
-    printf '• %s: ' "$host_id"
+    printf "• %s: " "$host_id"
+
     nix eval \
       ".#nixosConfigurations.${host_id}.config.system.build.toplevel.drvPath" \
       --raw
+
     echo
   done < <(hosts_disponibles)
 
@@ -135,14 +171,14 @@ validar() {
   echo
 
   echo
-  echo '✓ VALIDACIÓN COMPLETA'
+  echo "✓ VALIDACIÓN COMPLETA"
 }
 
 formatear() {
-  mapfile -d '' archivos < <(
+  mapfile -d "" archivos < <(
     find . \
-      -path './.git' -prune -o \
-      -type f -name '*.nix' -print0
+      -path "./.git" -prune -o \
+      -type f -name "*.nix" -print0
   )
 
   if [[ "${#archivos[@]}" -gt 0 ]]; then
@@ -150,61 +186,582 @@ formatear() {
   fi
 }
 
+ruta_actual() {
+  readlink -f /run/current-system 2>/dev/null || true
+}
+
+ruta_predeterminada() {
+  readlink -f "$SYSTEM_PROFILE" 2>/dev/null || true
+}
+
+generacion_predeterminada() {
+  local referencia
+
+  referencia="$(readlink "$SYSTEM_PROFILE" 2>/dev/null || true)"
+
+  if [[ "$referencia" =~ system-([0-9]+)-link$ ]]; then
+    printf "%s\n" "${BASH_REMATCH[1]}"
+  fi
+}
+
+numeros_generaciones() {
+  local enlace
+  local nombre
+
+  for enlace in "${SYSTEM_PROFILE}"-*-link; do
+    [[ -e "$enlace" ]] || continue
+
+    nombre="$(basename "$enlace")"
+
+    if [[ "$nombre" =~ ^system-([0-9]+)-link$ ]]; then
+      printf "%s\n" "${BASH_REMATCH[1]}"
+    fi
+  done | sort -n
+}
+
+ruta_generacion() {
+  local generacion="$1"
+
+  readlink -f "${SYSTEM_PROFILE}-${generacion}-link" 2>/dev/null || true
+}
+
+
+generacion_de_ruta() {
+  local buscada="$1"
+  local predeterminada
+  local generacion
+  local ruta
+  local ultima=""
+
+  # Varias generaciones pueden apuntar al mismo sistema exacto. Si la
+  # predeterminada coincide con el sistema que está ejecutándose, ese es el
+  # número más humano y menos ambiguo que debemos mostrar.
+  predeterminada="$(generacion_predeterminada)"
+
+  if [[ -n "$predeterminada" ]]; then
+    ruta="$(ruta_generacion "$predeterminada")"
+
+    if [[ -n "$ruta" && "$ruta" == "$buscada" ]]; then
+      printf "%s
+" "$predeterminada"
+      return
+    fi
+  fi
+
+  # Si la generación predeterminada no coincide, elegimos la coincidencia más
+  # reciente en lugar de atribuir el sistema a una generación antigua idéntica.
+  while IFS= read -r generacion; do
+    ruta="$(ruta_generacion "$generacion")"
+
+    if [[ -n "$ruta" && "$ruta" == "$buscada" ]]; then
+      ultima="$generacion"
+    fi
+  done < <(numeros_generaciones)
+
+  [[ -n "$ultima" ]] && printf "%s
+" "$ultima"
+}
+
+mostrar_generaciones() {
+  local limite="${1:-0}"
+  local actual
+  local predeterminada
+  local generacion_actual
+  local generacion
+  local enlace
+  local ruta
+  local fecha
+  local estado
+  local inicio=0
+  local generaciones=()
+
+  actual="$(ruta_actual)"
+  predeterminada="$(generacion_predeterminada)"
+  generacion_actual="$(generacion_de_ruta "$actual")"
+
+  mapfile -t generaciones < <(numeros_generaciones)
+
+  if [[ "$limite" -gt 0 && "${#generaciones[@]}" -gt "$limite" ]]; then
+    inicio=$((${#generaciones[@]} - limite))
+    generaciones=("${generaciones[@]:$inicio}")
+  fi
+
+  printf "%-6s %-19s %-28s\n" "NÚM." "FECHA" "ESTADO"
+  printf "%-6s %-19s %-28s\n" "----" "-------------------" "----------------------------"
+
+  for generacion in "${generaciones[@]}"; do
+    enlace="${SYSTEM_PROFILE}-${generacion}-link"
+    ruta="$(ruta_generacion "$generacion")"
+    fecha="$(stat -c "%y" "$enlace" 2>/dev/null | cut -d"." -f1)"
+    estado=""
+
+    if [[ "$generacion" == "$generacion_actual" ]]; then
+      estado="EN USO"
+    fi
+
+    if [[ "$generacion" == "$predeterminada" ]]; then
+      if [[ -n "$estado" ]]; then
+        estado="${estado}, PREDETERMINADA"
+      else
+        estado="PREDETERMINADA"
+      fi
+    fi
+
+    [[ -n "$estado" ]] || estado="recuperable"
+
+    printf "%-6s %-19s %-28s\n" \
+      "$generacion" \
+      "$fecha" \
+      "$estado"
+
+    # La ruta no se imprime normalmente para mantener la vista humana. Sigue
+    # disponible mediante el enlace system-N-link cuando haga falta diagnosticar.
+    : "$ruta"
+  done
+}
+
+estado() {
+  local actual
+  local predeterminada
+  local generacion_actual
+  local generacion_default
+
+  actual="$(ruta_actual)"
+  predeterminada="$(ruta_predeterminada)"
+  generacion_actual="$(generacion_de_ruta "$actual")"
+  generacion_default="$(generacion_predeterminada)"
+
+  echo "=== Repositorio ==="
+  git status --short --branch
+
+  echo
+  echo "=== Equipo ==="
+  echo "Host Korunix: $HOST"
+
+  echo
+  echo "=== Sistema ==="
+  echo "Generación en uso: ${generacion_actual:-desconocida}"
+  echo "Generación predeterminada: ${generacion_default:-desconocida}"
+  echo "Sistema en uso: ${actual:-desconocido}"
+  echo "Sistema predeterminado: ${predeterminada:-desconocido}"
+
+  if [[ -n "$actual" && -n "$predeterminada" && "$actual" != "$predeterminada" ]]; then
+    echo
+    echo "AVISO: el sistema en uso y el preparado para el próximo arranque son distintos."
+    echo "No se cambió la sesión actual."
+  fi
+
+  echo
+  echo "=== Generaciones recientes ==="
+  mostrar_generaciones 5
+
+  echo
+  echo "Estado consultado localmente. No se buscó nada en Internet."
+}
+
+construir_candidato() {
+  local candidato
+
+  echo "Construyendo la generación candidata de ${HOST}..." >&2
+
+  candidato="$(
+    nix build \
+      ".#nixosConfigurations.${HOST}.config.system.build.toplevel" \
+      --no-link \
+      --print-out-paths \
+      --show-trace \
+      | tail -n 1
+  )"
+
+  [[ -n "$candidato" ]] \
+    || error "Nix no devolvió la ruta de la generación candidata."
+
+  printf "%s\n" "$candidato"
+}
+
+mostrar_diferencias() {
+  local anterior="$1"
+  local candidato="$2"
+
+  echo
+  echo "=== Diferencias de paquetes y cierres ==="
+
+  if [[ -z "$anterior" || ! -e "$anterior" ]]; then
+    aviso "No pude encontrar el sistema actualmente en uso para compararlo."
+    return
+  fi
+
+  if ! nix store diff-closures "$anterior" "$candidato"; then
+    aviso "Nix no pudo producir el resumen de diferencias de closures."
+  fi
+}
+
+
+mostrar_activacion_seca() {
+  local candidato="$1"
+
+  echo
+  echo "=== Cambios de servicios y activación ==="
+
+  if [[ ! -x "$candidato/bin/switch-to-configuration" ]]; then
+    error "La generación candidata no contiene switch-to-configuration."
+  fi
+
+  echo "NixOS necesita permiso administrativo para calcular el cambio real de servicios."
+  echo "Esta autorización no activa la generación ni modifica el sistema."
+
+  # dry-activate necesita observar el estado real de systemd como root. Se
+  # obtiene la autorización una vez y se reutiliza si después se decide aplicar.
+  sudo -v
+
+  if ! sudo "$candidato/bin/switch-to-configuration" dry-activate; then
+    error "No se pudo calcular de forma segura el plan de activación."
+  fi
+}
+
+mostrar_reinicio() {
+  local anterior="$1"
+  local candidato="$2"
+  local kernel_anterior
+  local kernel_nuevo
+
+  echo
+  echo "=== Reinicio ==="
+
+  kernel_anterior="$(readlink -f "$anterior/kernel" 2>/dev/null || true)"
+  kernel_nuevo="$(readlink -f "$candidato/kernel" 2>/dev/null || true)"
+
+  if [[ -n "$kernel_anterior" && -n "$kernel_nuevo" ]]; then
+    if [[ "$kernel_anterior" != "$kernel_nuevo" ]]; then
+      echo "El kernel cambia. Conviene reiniciar después de aplicar."
+    else
+      echo "No detecto un cambio de kernel."
+    fi
+  else
+    echo "No pude determinar si cambia el kernel."
+  fi
+}
+
+previsualizar() {
+  local actual
+  local candidato
+
+  actual="$(ruta_actual)"
+  candidato="$(construir_candidato)"
+
+  echo
+  echo "=== Generación candidata ==="
+  echo "$candidato"
+
+  mostrar_diferencias "$actual" "$candidato"
+  mostrar_activacion_seca "$candidato"
+  mostrar_reinicio "$actual" "$candidato"
+
+  echo
+  echo "✓ PREVISUALIZACIÓN COMPLETA"
+  echo "No se aplicó ninguna generación."
+}
+
+construir() {
+  local candidato
+
+  candidato="$(construir_candidato)"
+
+  echo
+  echo "✓ CONSTRUCCIÓN COMPLETA"
+  echo "$candidato"
+}
+
+verificar_sistema() {
+  local esperado="${1:-}"
+  local actual
+  local predeterminado
+
+  actual="$(ruta_actual)"
+  predeterminado="$(ruta_predeterminada)"
+
+  echo
+  echo "=== Verificación posterior ==="
+  echo "Sistema en uso: $actual"
+  echo "Sistema predeterminado: $predeterminado"
+
+  if [[ -n "$esperado" && "$actual" != "$esperado" ]]; then
+    aviso "La generación en uso no coincide con la que esperaba Korunix."
+  fi
+
+  echo
+  echo "=== Servicios de sistema fallidos ==="
+  systemctl --failed --no-pager || true
+
+  echo
+  echo "=== Servicios de usuario fallidos ==="
+  systemctl --user --failed --no-pager || true
+}
+
+aplicar() {
+  local actual
+  local candidato
+
+  echo "Korunix comprobará, construirá y previsualizará antes de aplicar."
+  validar
+
+  actual="$(ruta_actual)"
+  candidato="$(construir_candidato)"
+
+  echo
+  echo "=== Generación candidata ==="
+  echo "$candidato"
+
+  mostrar_diferencias "$actual" "$candidato"
+  mostrar_activacion_seca "$candidato"
+  mostrar_reinicio "$actual" "$candidato"
+
+  echo
+  echo "Hasta aquí no se modificó el sistema."
+
+  confirmar "¿Aplicar esta generación ahora?" || return 0
+
+  echo
+  echo "La autorización administrativa obtenida durante la previsualización se reutilizará ahora."
+
+  sudo nixos-rebuild switch --flake ".#${HOST}"
+
+  verificar_sistema "$candidato"
+
+  echo
+  echo "✓ GENERACIÓN APLICADA"
+}
+
 actualizar() {
   local copia
+  local entradas=("$@")
+
+  if ! git diff --quiet -- flake.lock \
+    || ! git diff --cached --quiet -- flake.lock; then
+
+    error "flake.lock ya tiene cambios locales. Guárdalos o reviértelos antes de actualizar."
+  fi
+
   copia="$(mktemp)"
   cp flake.lock "$copia"
 
-  echo 'Actualizando las fuentes de Korunix...'
+  if [[ "${#entradas[@]}" -eq 0 ]]; then
+    echo "Buscando actualizaciones para todas las fuentes de Korunix..."
+  else
+    echo "Buscando actualizaciones únicamente para: ${entradas[*]}"
+  fi
 
-  if nix flake update && validar; then
+  if nix flake update "${entradas[@]}" && validar; then
     rm -f "$copia"
+
     echo
-    echo '✓ Actualización preparada y validada. No se aplicó al sistema.'
+    echo "=== Cambios de flake.lock ==="
+    git diff --stat -- flake.lock
+
+    echo
+    echo "✓ ACTUALIZACIÓN PREPARADA"
+    echo "flake.lock cambió y pasó la validación."
+    echo "El sistema todavía no fue construido ni aplicado."
+    echo "Usa scripts/korunix preview para revisar el resultado."
     return
   fi
 
   cp "$copia" flake.lock
   rm -f "$copia"
-  git add flake.lock
 
   echo >&2
-  echo 'La actualización no pasó la validación. Restauré flake.lock.' >&2
+  echo "La actualización no pasó la validación." >&2
+  echo "Korunix restauró el flake.lock anterior." >&2
   exit 1
 }
 
-limpiar() {
+rollback_generacion() {
+  local generacion="${1:-}"
+  local enlace
+  local objetivo
+  local actual
+  local predeterminada
+
+  [[ "$generacion" =~ ^[0-9]+$ ]] \
+    || error "Indica un número de generación, por ejemplo: rollback 35."
+
+  enlace="${SYSTEM_PROFILE}-${generacion}-link"
+
+  [[ -e "$enlace" ]] \
+    || error "La generación ${generacion} no existe."
+
+  objetivo="$(readlink -f "$enlace")"
+  actual="$(ruta_actual)"
+  predeterminada="$(generacion_predeterminada)"
+
+  echo "=== Preparar una generación anterior ==="
+  echo "Generación en uso: $(generacion_de_ruta "$actual")"
+  echo "Generación predeterminada: ${predeterminada:-desconocida}"
+  echo "Generación elegida: $generacion"
+  echo "Sistema elegido: $objetivo"
+
+  mostrar_diferencias "$actual" "$objetivo"
+  mostrar_reinicio "$actual" "$objetivo"
+
+  echo
+  echo "Korunix NO activará esta generación durante la sesión actual."
+  echo "Solo quedará seleccionada para el próximo arranque."
+  echo "El escritorio y los servicios actuales seguirán funcionando sin cambios."
+
+  confirmar "¿Preparar la generación ${generacion} para el próximo arranque?" \
+    || return 0
+
+  sudo -v
+
+  sudo nix-env \
+    --profile "$SYSTEM_PROFILE" \
+    --switch-generation "$generacion"
+
+  echo
+  echo "✓ GENERACIÓN ${generacion} PREPARADA"
+  echo "No se activó en caliente."
+  echo "Generación en uso: $(generacion_de_ruta "$(ruta_actual)")"
+  echo "Generación para próximo arranque: $(generacion_predeterminada)"
+}
+
+BORRAR_GENERACIONES=()
+CONSERVAR_GENERACIONES=()
+
+preparar_plan_limpieza() {
   local modo="$1"
+  local actual
+  local generacion_actual
+  local predeterminada
+  local generacion
+  local inicio
+  local generaciones=()
+  local -A protegidas=()
+
+  BORRAR_GENERACIONES=()
+  CONSERVAR_GENERACIONES=()
+
+  actual="$(ruta_actual)"
+  generacion_actual="$(generacion_de_ruta "$actual")"
+  predeterminada="$(generacion_predeterminada)"
+
+  [[ -n "$generacion_actual" ]] \
+    || error "La generación que está ejecutándose no aparece en el perfil del sistema. Korunix no limpiará nada."
+
+  [[ -n "$predeterminada" ]] \
+    || error "No pude determinar la generación predeterminada. Korunix no limpiará nada."
+
+  mapfile -t generaciones < <(numeros_generaciones)
+
+  protegidas["$generacion_actual"]=1
+  protegidas["$predeterminada"]=1
 
   case "$modo" in
     tres)
-      echo 'Conservando las tres generaciones de sistema más recientes...'
-      sudo nix-env \
-        --profile /nix/var/nix/profiles/system \
-        --delete-generations +3
+      inicio=$((${#generaciones[@]} - 3))
+      (( inicio < 0 )) && inicio=0
+
+      for generacion in "${generaciones[@]:$inicio}"; do
+        protegidas["$generacion"]=1
+      done
       ;;
+
     todas)
-      echo 'Eliminando todas las generaciones antiguas del sistema...'
-      sudo nix-env \
-        --profile /nix/var/nix/profiles/system \
-        --delete-generations old
       ;;
+
     *)
       error "Modo de limpieza desconocido: $modo"
       ;;
   esac
 
+  for generacion in "${generaciones[@]}"; do
+    if [[ -n "${protegidas[$generacion]:-}" ]]; then
+      CONSERVAR_GENERACIONES+=("$generacion")
+    else
+      BORRAR_GENERACIONES+=("$generacion")
+    fi
+  done
+}
+
+mostrar_plan_limpieza() {
+  local modo="$1"
+
+  preparar_plan_limpieza "$modo"
+
+  echo "=== Plan de limpieza ==="
+
+  if [[ "${#CONSERVAR_GENERACIONES[@]}" -gt 0 ]]; then
+    echo "Se conservarán: ${CONSERVAR_GENERACIONES[*]}"
+  fi
+
+  if [[ "${#BORRAR_GENERACIONES[@]}" -gt 0 ]]; then
+    echo "Se retirarían: ${BORRAR_GENERACIONES[*]}"
+  else
+    echo "No hay generaciones que retirar."
+  fi
+
+  echo
+  echo "La generación en uso y la predeterminada están siempre protegidas."
+}
+
+limpiar() {
+  local modo="$1"
+  local generacion
+
+  mostrar_plan_limpieza "$modo"
+
+  if [[ "${#BORRAR_GENERACIONES[@]}" -eq 0 ]]; then
+    echo
+    echo "✓ No hay nada que limpiar."
+    return
+  fi
+
+  echo
+
+  if [[ "$modo" == "todas" ]]; then
+    local palabra
+
+    [[ -t 0 ]] \
+      || error "clean-all necesita confirmación interactiva."
+
+    echo "Esta limpieza conserva únicamente las generaciones protegidas."
+    printf "Escribe BORRAR para continuar: "
+    read -r palabra
+
+    if [[ "$palabra" != "BORRAR" ]]; then
+      echo "Operación cancelada."
+      return
+    fi
+  else
+    confirmar "¿Retirar esas generaciones?" || return 0
+  fi
+
+  sudo -v
+
+  # Las generaciones se retiran por número para que Korunix controle exactamente
+  # cuáles desaparecen en lugar de delegar la política a un atajo opaco de Nix.
+  for generacion in "${BORRAR_GENERACIONES[@]}"; do
+    sudo nix-env \
+      --profile "$SYSTEM_PROFILE" \
+      --delete-generations "$generacion"
+  done
+
+  echo
+  echo "Recogiendo objetos que ya no tengan ninguna referencia..."
   sudo nix-collect-garbage
+
+  echo
+  echo "Optimizando el almacén de Nix..."
   sudo nix store optimise
-  echo '✓ Limpieza terminada. La generación activa se conserva.'
+
+  echo
+  echo "✓ LIMPIEZA TERMINADA"
+
+  mostrar_generaciones
 }
 
 case "${1:-}" in
   status)
-    git status --short --branch
-    echo
-    nix eval ".#nixosConfigurations.${HOST}.config.korunix" --json
-    echo
+    estado
     ;;
 
   structure)
@@ -219,25 +776,37 @@ case "${1:-}" in
     formatear
     ;;
 
+  generations)
+    mostrar_generaciones
+    ;;
+
   preview)
-    nixos-rebuild dry-build --flake ".#${HOST}"
+    previsualizar
     ;;
 
   build)
-    nix build \
-      ".#nixosConfigurations.${HOST}.config.system.build.toplevel" \
-      --no-link \
-      --show-trace
+    construir
     ;;
 
   apply)
-    echo 'Korunix va a aplicar la configuración completa de este equipo.'
-    echo 'La autorización se pedirá una sola vez al comenzar la reconstrucción.'
-    sudo nixos-rebuild switch --flake ".#${HOST}"
+    aplicar
     ;;
 
   update)
-    actualizar
+    shift
+    actualizar "$@"
+    ;;
+
+  rollback)
+    rollback_generacion "${2:-}"
+    ;;
+
+  clean-preview)
+    mostrar_plan_limpieza tres
+    ;;
+
+  clean-all-preview)
+    mostrar_plan_limpieza todas
     ;;
 
   clean)
@@ -248,21 +817,65 @@ case "${1:-}" in
     limpiar todas
     ;;
 
-  '')
+  "")
     cat <<'USAGE'
 Korunix
 
-Uso habitual:
-  scripts/korunix status      Ver el estado actual
-  scripts/korunix validate    Comprobar todo sin aplicar
-  scripts/korunix format      Formatear los archivos Nix
-  scripts/korunix preview     Preparar una reconstrucción de prueba
-  scripts/korunix build       Construir sin activar
-  scripts/korunix apply       Aplicar la configuración
-  scripts/korunix update      Actualizar y validar flake.lock
-  scripts/korunix clean       Conservar tres generaciones
-  scripts/korunix clean-all   Borrar generaciones antiguas
-  scripts/korunix structure   Mostrar la estructura
+Estado y comprobación:
+  scripts/korunix status
+      Ver el estado local del repositorio y del sistema sin usar Internet.
+
+  scripts/korunix generations
+      Mostrar generaciones, incluida la que está en uso y la predeterminada.
+
+  scripts/korunix validate
+      Comprobar estructura, Git, flake y todos los hosts sin aplicar.
+
+Preparar y aplicar:
+  scripts/korunix preview
+      Construir y enseñar qué cambiaría sin activar nada. La inspección real de
+      servicios pide autorización administrativa, pero no modifica el sistema.
+
+  scripts/korunix build
+      Construir la generación completa sin activarla.
+
+  scripts/korunix apply
+      Validar, construir, previsualizar, confirmar, aplicar y verificar.
+
+Actualizaciones:
+  scripts/korunix update
+      Actualizar todas las fuentes del flake y validar el resultado.
+
+  scripts/korunix update noctalia
+      Actualizar únicamente una entrada concreta.
+
+  scripts/korunix update nixpkgs noctalia
+      Actualizar varias entradas concretas.
+
+Recuperación:
+  scripts/korunix rollback 34
+      Preparar la generación 34 para el próximo arranque, sin activarla en caliente.
+
+Limpieza:
+  scripts/korunix clean-preview
+      Enseñar qué retiraría la limpieza normal sin borrar nada.
+
+  scripts/korunix clean
+      Conservar al menos las tres generaciones más recientes y proteger siempre
+      la generación en uso y la predeterminada.
+
+  scripts/korunix clean-all-preview
+      Enseñar qué retiraría la limpieza agresiva sin borrar nada.
+
+  scripts/korunix clean-all
+      Borrar todas las generaciones no protegidas tras una confirmación fuerte.
+
+Desarrollo:
+  scripts/korunix structure
+      Mostrar la estructura del repositorio.
+
+  scripts/korunix format
+      Formatear archivos Nix con el formatter declarado por el flake.
 
 Si existen varios hosts y el nombre actual no coincide con uno de ellos:
   KORUNIX_HOST=mi-equipo scripts/korunix status
