@@ -1040,7 +1040,7 @@ adoptar_usuario() {
 
   idioma_json="$(
     nix eval \
-      ".#nixosConfigurations.${HOST}.config.korunix.localization.language" \
+      ".#nixosConfigurations.${HOST}.config.korunix.localization.systemLanguage" \
       --json
   )"
 
@@ -1206,7 +1206,7 @@ crear_usuario() {
 
   idioma_json="$(
     nix eval \
-      ".#nixosConfigurations.${HOST}.config.korunix.localization.language" \
+      ".#nixosConfigurations.${HOST}.config.korunix.localization.systemLanguage" \
       --json
   )"
 

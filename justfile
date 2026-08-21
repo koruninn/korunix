@@ -30,6 +30,10 @@ profile-import file:
 hardware:
     ./scripts/korunix hardware
 
+# Muestra idioma, región, formatos, zona horaria y teclado del equipo.
+localization:
+    ./scripts/korunix localization
+
 # Muestra el estado local sin consultar Internet.
 status:
     ./scripts/korunix status

@@ -1373,6 +1373,10 @@ case "${1:-}" in
     mostrar_hardware "${2:-}"
     ;;
 
+  localization)
+    KORUNIX_HOST="$HOST" "$ROOT/scripts/localization" "${@:2}"
+    ;;
+
   status)
     estado
     ;;
@@ -1468,6 +1472,12 @@ Estado y comprobación:
 
   scripts/korunix hardware --json
       Exponer el mismo modelo de hardware en JSON para interfaces y automatización.
+
+  scripts/korunix localization
+      Mostrar idioma, región, formatos, zona horaria y teclado de este equipo.
+
+  scripts/korunix localization --json
+      Exponer el modelo de localización y sus contradicciones para la GUI futura.
 
   scripts/korunix status
       Ver el estado local del repositorio y del sistema sin usar Internet.

@@ -115,6 +115,26 @@
   gnomeEnabled = lib.elem "gnome" enabledDesktops;
   noctaliaEnabled = niriEnabled || hyprlandEnabled;
 
+  # GNOME habilita IBus como método de entrada del sistema. Su autostart
+  # genérico excluye GNOME y KDE, pero de otro modo también se ejecutaría en
+  # Niri y Hyprland. Esas sesiones ya usan directamente el modelo XKB de
+  # Korunix, así que no necesitan arrancar ese daemon adicional.
+  ibusEnabled =
+    config.i18n.inputMethod.enable
+    && config.i18n.inputMethod.type == "ibus";
+
+  ibusPackage =
+    pkgs.ibus-with-plugins.override {
+      plugins = config.i18n.inputMethod.ibus.engines;
+    };
+
+  ibusPanel = config.i18n.inputMethod.ibus.panel;
+
+  ibusPanelArgument =
+    lib.optionalString
+      (ibusPanel != null)
+      "--panel=${toString ibusPanel}";
+
   # Hyprland 0.55+ usa Lua. El archivo humano permanece en config/ y estos
   # marcadores reciben la misma fuente de verdad de teclado que Niri.
   hyprlandConfig =
@@ -181,6 +201,23 @@ in {
     };
 
     services.desktopManager.gnome.enable = gnomeEnabled;
+
+    # La copia en /etc/xdg tiene prioridad sobre el autostart aportado por el
+    # paquete de IBus. Conservamos su comportamiento original y añadimos solo
+    # las sesiones que Korunix administra directamente mediante XKB.
+    environment.etc."xdg/autostart/ibus-daemon.desktop" =
+      lib.mkIf (ibusEnabled && (niriEnabled || hyprlandEnabled)) {
+        text = ''
+          [Desktop Entry]
+          Name=IBus
+          Type=Application
+          Exec=${ibusPackage}/bin/ibus-daemon --daemonize --xim ${ibusPanelArgument}
+          # GNOME inicia IBus mediante systemd.
+          # KDE lo integra desde su propio escritorio.
+          # Niri y Hyprland usan el teclado XKB administrado por Korunix.
+          NotShowIn=GNOME;KDE;niri;Hyprland;hyprland;
+        '';
+      };
 
     # Niri y Hyprland utilizan la misma base GTK acordada. Xwayland Satellite
     # solo pertenece a Niri; Hyprland utiliza su integración XWayland propia.

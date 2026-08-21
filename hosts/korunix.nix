@@ -31,8 +31,16 @@
 
 
     localization = {
-      language = "es";
+      # El idioma del sistema, los formatos y la región son estado de este host.
+      # La preferencia de idioma de cada persona sigue viviendo en users/.
+      systemLanguage = "es";
       region = "PE";
+
+      formats = {
+        language = "es";
+        region = "PE";
+      };
+
       timeZone = "America/Lima";
 
       keyboard = {

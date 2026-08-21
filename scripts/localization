@@ -1,0 +1,415 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(
+  cd "$(dirname "${BASH_SOURCE[0]}")/.."
+  pwd
+)"
+
+HOST="${KORUNIX_HOST:-korunix}"
+
+cd "$ROOT"
+
+error() {
+  echo "ERROR: $*" >&2
+  exit 1
+}
+
+modelo_declarado() {
+  nix eval \
+    ".#nixosConfigurations.${HOST}.config.korunix.localization" \
+    --json
+}
+
+locale_sistema_declarado() {
+  nix eval \
+    ".#nixosConfigurations.${HOST}.config.i18n.defaultLocale" \
+    --raw
+}
+
+locale_formatos_declarado() {
+  nix eval \
+    ".#nixosConfigurations.${HOST}.config.i18n.extraLocaleSettings.LC_TIME" \
+    --raw
+}
+
+xkb_layout_declarado() {
+  nix eval \
+    ".#nixosConfigurations.${HOST}.config.services.xserver.xkb.layout" \
+    --raw
+}
+
+xkb_variant_declarado() {
+  nix eval \
+    ".#nixosConfigurations.${HOST}.config.services.xserver.xkb.variant" \
+    --raw
+}
+
+xkb_options_declarado() {
+  nix eval \
+    ".#nixosConfigurations.${HOST}.config.services.xserver.xkb.options" \
+    --raw
+}
+
+console_declarada() {
+  nix eval \
+    ".#nixosConfigurations.${HOST}.config.console.keyMap" \
+    --raw
+}
+
+noctalia_source() {
+  nix eval \
+    --raw \
+    --impure \
+    --expr '
+      let
+        flake = builtins.getFlake (toString ./.);
+      in
+        toString flake.inputs.noctalia.outPath
+    ' \
+    2>/dev/null \
+    || true
+}
+
+idiomas_noctalia_json() {
+  local source
+  local translations
+
+  source="$(noctalia_source)"
+  translations="$source/assets/translations"
+
+  if [[ -z "$source" || ! -d "$translations" ]]; then
+    printf '[]\n'
+    return
+  fi
+
+  find "$translations" \
+    -maxdepth 1 \
+    -type f \
+    -name '*.json' \
+    -printf '%f\n' \
+    | sed 's/\.json$//' \
+    | LC_ALL=C sort \
+    | jq -Rsc '
+        split("\n")
+        | map(select(length > 0))
+      '
+}
+
+idiomas_personas_json() {
+  "$ROOT/scripts/users" --json \
+    | jq -c '
+        [
+          .profiles[]
+          | {
+              id,
+              fullName,
+              language
+            }
+        ]
+      '
+}
+
+runtime_lang() {
+  locale 2>/dev/null \
+    | sed -n 's/^LANG=//p' \
+    | tr -d '"'
+}
+
+runtime_timezone() {
+  timedatectl show \
+    --property=Timezone \
+    --value \
+    2>/dev/null \
+    || true
+}
+
+localectl_field() {
+  local field="$1"
+
+  localectl status --no-pager 2>/dev/null \
+    | sed -n "s/^[[:space:]]*${field}:[[:space:]]*//p" \
+    | head -n1
+}
+
+runtime_console() {
+  if [[ -r /etc/vconsole.conf ]]; then
+    sed -n 's/^KEYMAP=//p' /etc/vconsole.conf \
+      | tr -d '"' \
+      | head -n1
+  fi
+}
+
+estado_json() {
+  local declared
+  local system_locale
+  local format_locale
+  local xkb_layout
+  local xkb_variant
+  local xkb_options
+  local console_map
+  local actual_lang
+  local actual_timezone
+  local actual_layout
+  local actual_variant
+  local actual_options
+  local actual_console
+  local noctalia_languages
+  local people
+
+  declared="$(modelo_declarado)"
+  system_locale="$(locale_sistema_declarado)"
+  format_locale="$(locale_formatos_declarado)"
+  xkb_layout="$(xkb_layout_declarado)"
+  xkb_variant="$(xkb_variant_declarado)"
+  xkb_options="$(xkb_options_declarado)"
+  console_map="$(console_declarada)"
+
+  actual_lang="$(runtime_lang)"
+  actual_timezone="$(runtime_timezone)"
+  actual_layout="$(localectl_field 'X11 Layout')"
+  actual_variant="$(localectl_field 'X11 Variant')"
+  actual_options="$(localectl_field 'X11 Options')"
+  actual_console="$(runtime_console)"
+
+  noctalia_languages="$(idiomas_noctalia_json)"
+  people="$(idiomas_personas_json)"
+
+  jq -n \
+    --argjson declared "$declared" \
+    --arg systemLocale "$system_locale" \
+    --arg formatLocale "$format_locale" \
+    --arg xkbLayout "$xkb_layout" \
+    --arg xkbVariant "$xkb_variant" \
+    --arg xkbOptions "$xkb_options" \
+    --arg consoleMap "$console_map" \
+    --arg runtimeLang "$actual_lang" \
+    --arg runtimeTimezone "$actual_timezone" \
+    --arg runtimeLayout "$actual_layout" \
+    --arg runtimeVariant "$actual_variant" \
+    --arg runtimeOptions "$actual_options" \
+    --arg runtimeConsole "$actual_console" \
+    --argjson noctaliaLanguages "$noctalia_languages" \
+    --argjson people "$people" \
+    '
+      def normlocale:
+        ascii_downcase
+        | gsub("-"; "")
+        | gsub("\\."; "");
+
+      def contradiction($field; $declared; $actual; $message):
+        {
+          field: $field,
+          declared: $declared,
+          actual: $actual,
+          message: $message
+        };
+
+      {
+        schemaVersion: 1,
+        host: (env.KORUNIX_HOST // "korunix"),
+
+        ownership: {
+          portableUserFields: [
+            "language"
+          ],
+          hostLocalFields: [
+            "systemLanguage",
+            "region",
+            "formats",
+            "timeZone",
+            "keyboard"
+          ]
+        },
+
+        declared: $declared,
+
+        derived: {
+          systemLocale: $systemLocale,
+          formatLocale: $formatLocale,
+          keyboard: {
+            layout: $xkbLayout,
+            variant: $xkbVariant,
+            options: $xkbOptions,
+            console: $consoleMap
+          }
+        },
+
+        runtime: {
+          lang: $runtimeLang,
+          timeZone: $runtimeTimezone,
+          keyboard: {
+            layout: $runtimeLayout,
+            variant: $runtimeVariant,
+            options: $runtimeOptions,
+            console: $runtimeConsole
+          },
+          desktop: (env.XDG_CURRENT_DESKTOP // null)
+        },
+
+        people:
+          [
+            $people[]
+            | .language as $language
+            | . + {
+                noctaliaTranslationAvailable:
+                  (
+                    if $language == null then
+                      null
+                    else
+                      ($noctaliaLanguages | index($language)) != null
+                    end
+                  )
+              }
+          ],
+
+        noctalia: {
+          supportedLanguages: $noctaliaLanguages
+        },
+
+        contradictions:
+          [
+            if (
+              ($runtimeLang | length) > 0
+              and (($runtimeLang | normlocale) != ($systemLocale | normlocale))
+            ) then
+              contradiction(
+                "systemLocale";
+                $systemLocale;
+                $runtimeLang;
+                "LANG activo no coincide con el locale declarado."
+              )
+            else empty end,
+
+            if (
+              ($runtimeTimezone | length) > 0
+              and $runtimeTimezone != $declared.timeZone
+            ) then
+              contradiction(
+                "timeZone";
+                $declared.timeZone;
+                $runtimeTimezone;
+                "La zona horaria activa no coincide con la declarada."
+              )
+            else empty end,
+
+            if (
+              ($runtimeLayout | length) > 0
+              and $runtimeLayout != $xkbLayout
+            ) then
+              contradiction(
+                "keyboard.layout";
+                $xkbLayout;
+                $runtimeLayout;
+                "Los layouts XKB activos no coinciden con Korunix."
+              )
+            else empty end,
+
+            if (
+              ($runtimeVariant | length) > 0
+              and $runtimeVariant != $xkbVariant
+            ) then
+              contradiction(
+                "keyboard.variant";
+                $xkbVariant;
+                $runtimeVariant;
+                "Las variantes XKB activas no coinciden con Korunix."
+              )
+            else empty end,
+
+            if (
+              ($runtimeOptions | length) > 0
+              and $runtimeOptions != $xkbOptions
+            ) then
+              contradiction(
+                "keyboard.options";
+                $xkbOptions;
+                $runtimeOptions;
+                "Las opciones XKB activas no coinciden con Korunix."
+              )
+            else empty end,
+
+            if (
+              ($runtimeConsole | length) > 0
+              and $runtimeConsole != $consoleMap
+            ) then
+              contradiction(
+                "keyboard.console";
+                $consoleMap;
+                $runtimeConsole;
+                "El mapa de consola activo no coincide con Korunix."
+              )
+            else empty end
+          ]
+      }
+    '
+}
+
+mostrar_humano() {
+  local data
+
+  data="$(estado_json)"
+
+  echo "=== Localización de este equipo ==="
+  echo
+  echo "Idioma base: $(jq -r '.declared.systemLanguage' <<<"$data")"
+  echo "Región: $(jq -r '.declared.region' <<<"$data")"
+  echo "Locale del sistema: $(jq -r '.derived.systemLocale' <<<"$data")"
+  echo "Locale de formatos: $(jq -r '.derived.formatLocale' <<<"$data")"
+  echo "Zona horaria: $(jq -r '.declared.timeZone' <<<"$data")"
+
+  echo
+  echo "=== Teclado ==="
+  echo "Layouts: $(jq -r '.derived.keyboard.layout' <<<"$data")"
+  echo "Variantes: $(jq -r '.derived.keyboard.variant' <<<"$data")"
+  echo "Cambio: $(jq -r '.derived.keyboard.options' <<<"$data")"
+  echo "Consola: $(jq -r '.derived.keyboard.console' <<<"$data")"
+
+  echo
+  echo "=== Preferencias portables ==="
+
+  jq -r '
+    .people[]
+    | "• \(.fullName) — idioma \(.language // "sin preferencia")"
+      + (
+          if .language == null then
+            ""
+          elif .noctaliaTranslationAvailable then
+            " · Noctalia disponible"
+          else
+            " · Noctalia no incluye esa traducción"
+          end
+        )
+  ' <<<"$data"
+
+  echo
+  echo "=== Estado activo ==="
+  echo "LANG: $(jq -r '.runtime.lang // "desconocido"' <<<"$data")"
+  echo "Zona horaria: $(jq -r '.runtime.timeZone // "desconocida"' <<<"$data")"
+  echo "XKB: $(jq -r '.runtime.keyboard.layout // "desconocido"' <<<"$data")"
+  echo "Sesión: $(jq -r '.runtime.desktop // "no detectada"' <<<"$data")"
+
+  echo
+  if [[ "$(jq '.contradictions | length' <<<"$data")" -eq 0 ]]; then
+    echo "✓ Korunix no detecta contradicciones de localización."
+  else
+    echo "Contradicciones:"
+    jq -r \
+      '.contradictions[] | "  • \(.message) [\(.declared) → \(.actual)]"' \
+      <<<"$data"
+  fi
+}
+
+case "${1:-}" in
+  --json)
+    estado_json
+    ;;
+
+  "")
+    mostrar_humano
+    ;;
+
+  *)
+    error "Uso: scripts/korunix localization [--json]"
+    ;;
+esac

@@ -188,7 +188,7 @@
         profile = profiles.${userId};
         accountName = accountNameFor userId;
         avatar = profile.avatar or null;
-        language = profile.language or config.korunix.localization.language;
+        language = profile.language or config.korunix.localization.systemLanguage;
       in ''
         ${lib.escapeShellArg accountName})
           KORUNIX_USER_ID=${lib.escapeShellArg userId}

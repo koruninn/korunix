@@ -5,8 +5,15 @@
 }: let
   cfg = config.korunix.localization;
 
-  # La primera distribución es la principal. Las adicionales permiten alternar
-  # idiomas o variantes sin obligar a cada escritorio a inventar su propio modelo.
+  # El idioma del sistema y la región son decisiones distintas. Por ejemplo,
+  # una persona puede querer interfaces en español y formatos de otro país.
+  localeFor = language: region: "${language}_${region}.UTF-8";
+
+  systemLocale = localeFor cfg.systemLanguage cfg.region;
+  formatLocale = localeFor cfg.formats.language cfg.formats.region;
+
+  # La primera distribución es la principal. Las adicionales mantienen el mismo
+  # orden en NixOS, Niri, Hyprland y las etiquetas humanas de Noctalia.
   keyboardLayouts =
     [cfg.keyboard.layout]
     ++ cfg.keyboard.additionalLayouts;
@@ -14,67 +21,114 @@
   keyboardVariants =
     [cfg.keyboard.variant]
     ++ cfg.keyboard.additionalVariants;
+
+  validLanguage = language:
+    builtins.match "^[a-z][a-z][a-z]?$" language != null;
+
+  validRegion = region:
+    builtins.match "^[A-Z][A-Z]$" region != null;
 in {
   options.korunix.localization = {
-    language = lib.mkOption {
+    systemLanguage = lib.mkOption {
       type = lib.types.str;
       default = "es";
-      description = "Idioma preferido de la interfaz y del sistema.";
+      description = ''
+        Idioma base del sistema. No representa la preferencia portable de una
+        persona concreta.
+      '';
     };
 
     region = lib.mkOption {
       type = lib.types.str;
       default = "PE";
-      description = "Región utilizada para formatos como fechas y números.";
+      description = ''
+        Región base de este equipo. Forma parte de su contexto local y no viaja
+        dentro de un perfil portable.
+      '';
+    };
+
+    formats = {
+      language = lib.mkOption {
+        type = lib.types.str;
+        default = "es";
+        description = ''
+          Idioma utilizado al construir el locale de formatos regionales.
+        '';
+      };
+
+      region = lib.mkOption {
+        type = lib.types.str;
+        default = "PE";
+        description = ''
+          Región usada para fechas, números, moneda, medidas, papel, direcciones
+          y otros formatos que no necesitan controlar el idioma de la interfaz.
+        '';
+      };
     };
 
     timeZone = lib.mkOption {
       type = lib.types.str;
       default = "America/Lima";
-      description = "Zona horaria del equipo.";
+      description = ''
+        Zona horaria de este equipo. Es estado local del host y no una preferencia
+        portable del usuario.
+      '';
     };
 
     keyboard = {
       layout = lib.mkOption {
         type = lib.types.str;
         default = "es";
-        description = "Distribución principal del teclado.";
+        description = "Distribución principal del teclado de este equipo.";
       };
 
       variant = lib.mkOption {
         type = lib.types.str;
         default = "";
-        description = "Variante de la distribución principal cuando sea necesaria.";
+        description = ''
+          Variante de la distribución principal cuando sea necesaria.
+        '';
       };
 
       additionalLayouts = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [];
-        description = "Distribuciones adicionales entre las que la persona puede alternar.";
+        description = ''
+          Distribuciones adicionales disponibles para alternar en este equipo.
+        '';
       };
 
       additionalVariants = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [];
-        description = "Variantes correspondientes a las distribuciones adicionales.";
+        description = ''
+          Variantes correspondientes a las distribuciones adicionales.
+        '';
       };
 
       displayNames = lib.mkOption {
         type = lib.types.listOf lib.types.str;
         default = [];
-        description = "Nombres humanos de las distribuciones, en el mismo orden que los layouts.";
+        description = ''
+          Nombres humanos de los teclados, en el mismo orden que los layouts.
+        '';
       };
 
       switchOption = lib.mkOption {
         type = lib.types.str;
         default = "grp:alt_shift_toggle";
-        description = "Combinación XKB utilizada para cambiar de distribución.";
+        description = ''
+          Combinación XKB para cambiar de distribución. Super+Espacio permanece
+          reservado al launcher común de Korunix.
+        '';
       };
 
       console = lib.mkOption {
         type = lib.types.str;
         default = "es";
-        description = "Mapa de teclado utilizado fuera de la sesión gráfica.";
+        description = ''
+          Mapa de teclado utilizado fuera de la sesión gráfica.
+        '';
       };
     };
   };
@@ -82,13 +136,37 @@ in {
   config = lib.mkIf config.korunix.enable {
     assertions = [
       {
+        assertion = validLanguage cfg.systemLanguage;
+        message =
+          "korunix.localization.systemLanguage debe ser un código de idioma "
+          + "compatible con locale, por ejemplo es, en o pt.";
+      }
+      {
+        assertion = validRegion cfg.region;
+        message =
+          "korunix.localization.region debe ser un código regional de dos "
+          + "letras mayúsculas, por ejemplo PE.";
+      }
+      {
+        assertion = validLanguage cfg.formats.language;
+        message =
+          "korunix.localization.formats.language debe ser un código de idioma "
+          + "compatible con locale.";
+      }
+      {
+        assertion = validRegion cfg.formats.region;
+        message =
+          "korunix.localization.formats.region debe ser un código regional de "
+          + "dos letras mayúsculas.";
+      }
+      {
         assertion =
           builtins.length cfg.keyboard.additionalLayouts
           == builtins.length cfg.keyboard.additionalVariants;
 
         message =
-          "Cada distribución adicional de teclado necesita su variante correspondiente, "
-          + "aunque esa variante sea una cadena vacía.";
+          "Cada distribución adicional de teclado necesita su variante "
+          + "correspondiente, aunque sea una cadena vacía.";
       }
       {
         assertion =
@@ -97,17 +175,35 @@ in {
           == builtins.length keyboardLayouts;
 
         message =
-          "Los nombres humanos del teclado deben corresponder uno a uno con las distribuciones.";
+          "Los nombres humanos del teclado deben corresponder uno a uno con "
+          + "las distribuciones.";
+      }
+      {
+        assertion = !(lib.hasInfix "win_space" cfg.keyboard.switchOption);
+        message =
+          "Super+Espacio está reservado al launcher de Korunix. El cambio de "
+          + "teclado no puede utilizar una opción XKB win_space.";
       }
     ];
 
-    # Idioma y región son decisiones independientes.
-    i18n.defaultLocale = "${cfg.language}_${cfg.region}.UTF-8";
+    # LANG conserva el idioma base del sistema. Los formatos regionales pueden
+    # evolucionar de forma independiente sin alterar los mensajes de interfaz.
+    i18n.defaultLocale = systemLocale;
+
+    i18n.extraLocaleSettings = {
+      LC_ADDRESS = formatLocale;
+      LC_IDENTIFICATION = formatLocale;
+      LC_MEASUREMENT = formatLocale;
+      LC_MONETARY = formatLocale;
+      LC_NAME = formatLocale;
+      LC_NUMERIC = formatLocale;
+      LC_PAPER = formatLocale;
+      LC_TELEPHONE = formatLocale;
+      LC_TIME = formatLocale;
+    };
 
     time.timeZone = cfg.timeZone;
 
-    # systemd-localed publica esta configuración a los escritorios. Niri puede
-    # consumirla directamente y otros escritorios obtienen el mismo orden.
     services.xserver.xkb = {
       layout = lib.concatStringsSep "," keyboardLayouts;
       variant = lib.concatStringsSep "," keyboardVariants;
