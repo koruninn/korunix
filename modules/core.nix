@@ -139,6 +139,11 @@ in {
       hatterIcons
     ];
 
+    # Korunix usa el agente estándar de OpenSSH. GCR pertenece a la
+    # integración de GNOME y no debe apropiarse de SSH_AUTH_SOCK.
+    services.gnome.gcr-ssh-agent.enable = false;
+    programs.ssh.startAgent = true;
+
     programs.fish = {
       enable = true;
       interactiveShellInit = builtins.readFile ../config/fish.conf;
