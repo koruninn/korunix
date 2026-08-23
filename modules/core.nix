@@ -12,6 +12,7 @@
   hatterIcons = pkgs.runCommandNoCC "korunix-hatter-icons" {} ''
     mkdir -p "$out/share/icons"
     cp -R ${inputs.hatter}/Hatter "$out/share/icons/Hatter"
+    cp -R ${inputs.hatter}/Hatter-Green "$out/share/icons/Hatter-Green"
     cp -R ${inputs.hatter}/Hatter-Slate "$out/share/icons/Hatter-Slate"
   '';
 in {

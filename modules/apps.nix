@@ -11,6 +11,23 @@
   # parte de un rol fijo de Korunix, como Alacritty o Fetch, no aparecen aquí.
   packageMap = {
     "android-tools" = pkgs.android-tools;
+
+    # Aplicaciones GNOME que Korunix conserva como aplicaciones independientes.
+    baobab = pkgs.baobab;
+    "gnome-calculator" = pkgs.gnome-calculator;
+    "gnome-calendar" = pkgs.gnome-calendar;
+    "gnome-characters" = pkgs.gnome-characters;
+    "gnome-clocks" = pkgs.gnome-clocks;
+    "gnome-disk-utility" = pkgs.gnome-disk-utility;
+    "gnome-font-viewer" = pkgs.gnome-font-viewer;
+    "gnome-maps" = pkgs.gnome-maps;
+    "gnome-text-editor" = pkgs.gnome-text-editor;
+    "gnome-weather" = pkgs.gnome-weather;
+    loupe = pkgs.loupe;
+    nautilus = pkgs.nautilus;
+    papers = pkgs.papers;
+    "simple-scan" = pkgs.simple-scan;
+    snapshot = pkgs.snapshot;
     birdfont = pkgs.birdfont;
     darktable = pkgs.darktable;
     "figma-linux" = pkgs.figma-linux;

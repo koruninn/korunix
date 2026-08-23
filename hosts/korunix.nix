@@ -59,15 +59,15 @@
 
       additional = [
         "hyprland"
-        "gnome"
       ];
     };
 
-    # Estas son aplicaciones elegidas por la persona. Alacritty, Fish, Fetch,
-    # Nautilus y otras piezas que Korunix usa como parte de una experiencia base
-    # se derivan en los módulos correspondientes y no se repiten aquí.
+    # Estas son aplicaciones elegidas para este equipo. Alacritty, Fish y Fetch
+    # forman parte de la base de Korunix; las aplicaciones gráficas permanecen
+    # desacopladas del escritorio y se declaran explícitamente aquí.
     applications = [
       "android-tools"
+      "baobab"
       "birdfont"
       "cohesion"
       "darktable"
@@ -77,6 +77,15 @@
       "genshin-impact"
       "gimp"
       "git"
+      "gnome-calculator"
+      "gnome-calendar"
+      "gnome-characters"
+      "gnome-clocks"
+      "gnome-disk-utility"
+      "gnome-font-viewer"
+      "gnome-maps"
+      "gnome-text-editor"
+      "gnome-weather"
       "google-chrome"
       "heroic"
       "honkai-star-rail"
@@ -86,10 +95,13 @@
       "kdenlive"
       "krita"
       "localsend"
+      "loupe"
       "lutris"
+      "nautilus"
       "obs-studio"
       "obsidian"
       "onlyoffice-desktopeditors"
+      "papers"
       "peazip"
       "polyglot"
       "prismlauncher"
@@ -98,6 +110,8 @@
       "rapidraw"
       "rar"
       "scrcpy"
+      "simple-scan"
+      "snapshot"
       "spotdl"
       "spotify"
       "steam"

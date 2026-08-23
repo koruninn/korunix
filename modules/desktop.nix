@@ -86,13 +86,12 @@
     mv "$target.tmp" "$target"
   '';
 
-  # El modelo reconoce los cinco escritorios objetivo. Este bloque implementa
-  # Niri, Hyprland y GNOME; Cinnamon y Plasma conservan la protección que evita
-  # activar una sesión incompleta antes de tener su implementación dedicada.
+  # Korunix mantiene cuatro escritorios objetivo. Niri y Hyprland ya tienen
+  # implementación completa; Cinnamon y Plasma permanecen protegidos hasta
+  # recibir su integración dedicada.
   desktopType = lib.types.enum [
     "niri"
     "hyprland"
-    "gnome"
     "cinnamon"
     "plasma"
   ];
@@ -100,7 +99,6 @@
   implementedDesktops = [
     "niri"
     "hyprland"
-    "gnome"
   ];
 
   enabledDesktops = lib.unique ([cfg.primary] ++ cfg.additional);
@@ -112,13 +110,10 @@
 
   niriEnabled = lib.elem "niri" enabledDesktops;
   hyprlandEnabled = lib.elem "hyprland" enabledDesktops;
-  gnomeEnabled = lib.elem "gnome" enabledDesktops;
   noctaliaEnabled = niriEnabled || hyprlandEnabled;
 
-  # GNOME habilita IBus como método de entrada del sistema. Su autostart
-  # genérico excluye GNOME y KDE, pero de otro modo también se ejecutaría en
-  # Niri y Hyprland. Esas sesiones ya usan directamente el modelo XKB de
-  # Korunix, así que no necesitan arrancar ese daemon adicional.
+  # El autostart genérico de IBus no debe competir con las sesiones que
+  # Korunix administra directamente mediante su modelo XKB.
   ibusEnabled =
     config.i18n.inputMethod.enable
     && config.i18n.inputMethod.type == "ibus";
@@ -200,8 +195,6 @@ in {
       xwayland.enable = true;
     };
 
-    services.desktopManager.gnome.enable = gnomeEnabled;
-
     # La copia en /etc/xdg tiene prioridad sobre el autostart aportado por el
     # paquete de IBus. Conservamos su comportamiento original y añadimos solo
     # las sesiones que Korunix administra directamente mediante XKB.
@@ -212,32 +205,26 @@ in {
           Name=IBus
           Type=Application
           Exec=${ibusPackage}/bin/ibus-daemon --daemonize --xim ${ibusPanelArgument}
-          # GNOME inicia IBus mediante systemd.
           # KDE lo integra desde su propio escritorio.
           # Niri y Hyprland usan el teclado XKB administrado por Korunix.
-          NotShowIn=GNOME;KDE;niri;Hyprland;hyprland;
+          NotShowIn=KDE;niri;Hyprland;hyprland;
         '';
       };
 
-    # Niri y Hyprland utilizan la misma base GTK acordada. Xwayland Satellite
-    # solo pertenece a Niri; Hyprland utiliza su integración XWayland propia.
+    # Xwayland Satellite pertenece exclusivamente a Niri. Las aplicaciones
+    # gráficas se eligen independientemente del escritorio en modules/apps.nix.
     environment.systemPackages =
-      lib.optionals (niriEnabled || hyprlandEnabled) [
-        pkgs.nautilus
-        pkgs.eog
-        pkgs.papers
-      ]
-      ++ lib.optionals niriEnabled [
+      lib.optionals niriEnabled [
         pkgs.xwayland-satellite
       ];
 
     # «Abrir en terminal» usa Alacritty en Nautilus, sin depender del escritorio
     # desde el que se haya abierto el gestor de archivos.
     programs.nautilus-open-any-terminal =
-      lib.mkIf (niriEnabled || hyprlandEnabled || gnomeEnabled) {
-      enable = true;
-      terminal = "alacritty";
-    };
+      lib.mkIf (lib.elem "nautilus" config.korunix.applications) {
+        enable = true;
+        terminal = "alacritty";
+      };
 
     # El teclado concreto del equipo se genera desde korunix.localization.
     environment.etc."korunix/niri-input.kdl" = lib.mkIf niriEnabled {
