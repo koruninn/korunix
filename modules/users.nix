@@ -144,6 +144,34 @@
   preservedGroupsFor = userId:
     (settingsFor userId).preservedGroups or [];
 
+  githubSshIdentityFileFor = userId:
+    (settingsFor userId).githubSshIdentityFile or null;
+
+  githubSshConfig = lib.concatStringsSep "\n" (
+    lib.filter
+    (entry: entry != "")
+    (map (
+        userId: let
+          identity = githubSshIdentityFileFor userId;
+          accountName = accountNameFor userId;
+          homeDirectory = homeDirectoryFor userId;
+          identityPath =
+            if identity == null
+            then null
+            else if lib.hasPrefix "/" identity
+            then identity
+            else "${homeDirectory}/${identity}";
+        in
+          lib.optionalString (identity != null) ''
+            Match host github.com localuser ${accountName}
+              IdentityFile ${identityPath}
+              IdentitiesOnly yes
+              AddKeysToAgent yes
+          ''
+      )
+      cfg.users)
+  );
+
   # La interfaz trabaja con capacidades humanas. Esta lista impide aceptar un
   # nombre inventado que luego no tenga una traducción real en el sistema.
   knownCapabilities = [
@@ -591,6 +619,11 @@
   '';
 in {
   config = lib.mkIf cfg.enable {
+
+    # La clave privada sigue fuera de Nix/Git. Korunix solo declara qué archivo
+    # local debe usar cada cuenta y OpenSSH la conserva en su agente tras usarla.
+    programs.ssh.extraConfig = githubSshConfig;
+
     assertions = [
       {
         assertion = cfg.users != [];

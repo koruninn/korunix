@@ -83,6 +83,12 @@ in {
             default = [];
             description = "Grupos técnicos locales conservados durante una adopción.";
           };
+
+          githubSshIdentityFile = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "Ruta local de la clave SSH que esta persona usa con GitHub en este host.";
+          };
         };
       });
 

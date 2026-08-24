@@ -16,6 +16,7 @@
       deferredCapabilities = [];
       deferredInputMethods = [];
       preservedGroups = [];
+      githubSshIdentityFile = ".ssh/blep";
     };
   };
 
