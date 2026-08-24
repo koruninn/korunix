@@ -69,6 +69,69 @@
       )
       hostIds);
 
+    pkgsFor = system:
+      import nixpkgs {
+        inherit system;
+      };
+
+    # La aplicación gráfica consume el checkout humano mediante KORUNIX_ROOT o
+    # ~/.korunix. Todavía no sustituye el motor ni instala una configuración.
+    korunixGuiFor = system: let
+      pkgs = pkgsFor system;
+      python = pkgs.python3.withPackages (pythonPackages: [
+        pythonPackages.babel
+        pythonPackages.pygobject3
+      ]);
+    in
+      pkgs.stdenvNoCC.mkDerivation {
+        pname = "korunix";
+        version = "0.1.0";
+        src = ./app;
+
+        nativeBuildInputs = [
+          pkgs.desktop-file-utils
+          pkgs.gobject-introspection
+          pkgs.makeWrapper
+          pkgs.wrapGAppsHook4
+        ];
+
+        buildInputs = [
+          pkgs.gtk4
+          pkgs.libadwaita
+        ];
+
+        dontBuild = true;
+        doCheck = true;
+
+        checkPhase = ''
+          runHook preCheck
+          ${python}/bin/python3 -m compileall -q .
+          runHook postCheck
+        '';
+
+        installPhase = ''
+          runHook preInstall
+
+          install -Dm755 korunix.py "$out/share/korunix/korunix.py"
+          install -Dm644 korunix_backend.py "$out/share/korunix/korunix_backend.py"
+          install -Dm644 korunix_i18n.py "$out/share/korunix/korunix_i18n.py"
+          install -Dm644 style.css "$out/share/korunix/style.css"
+          install -Dm644 io.github.koruninn.Korunix.desktop \
+            "$out/share/applications/io.github.koruninn.Korunix.desktop"
+
+          makeWrapper ${python}/bin/python3 "$out/bin/korunix" \
+            --add-flags "$out/share/korunix/korunix.py"
+
+          runHook postInstall
+        '';
+
+        meta = {
+          description = "Centro de control gráfico de Korunix";
+          mainProgram = "korunix";
+          platforms = lib.platforms.linux;
+        };
+      };
+
     makeHost = hostId: let
       hostFile = hostFileFor hostId;
       hardwareCandidate = hardwareFileFor hostId;
@@ -147,6 +210,29 @@
     formatter = lib.genAttrs systems (
       system: alejandra.defaultPackage.${system}
     );
+
+    packages = lib.genAttrs systems (system: {
+      default = korunixGuiFor system;
+      korunix = korunixGuiFor system;
+    });
+
+    apps = lib.genAttrs systems (system: {
+      default = {
+        type = "app";
+        program = "${korunixGuiFor system}/bin/korunix";
+        meta.description = "Abrir el centro de control de Korunix";
+      };
+
+      korunix = {
+        type = "app";
+        program = "${korunixGuiFor system}/bin/korunix";
+        meta.description = "Abrir el centro de control de Korunix";
+      };
+    });
+
+    checks = lib.genAttrs systems (system: {
+      korunix-gui = korunixGuiFor system;
+    });
 
     nixosConfigurations = lib.genAttrs hostIds makeHost;
   };

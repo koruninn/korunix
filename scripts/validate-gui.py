@@ -1,0 +1,294 @@
+#!/usr/bin/env python3
+"""Validación rápida y sin interfaz gráfica del primer centro de control."""
+
+from __future__ import annotations
+
+import ast
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Any
+from unittest.mock import patch
+
+
+ROOT = Path(__file__).resolve().parents[1]
+APP = ROOT / "app"
+sys.path.insert(0, str(APP))
+
+from korunix_backend import (  # noqa: E402
+    BackendError,
+    find_project_root,
+    human_architecture,
+    normalize_language,
+    present_hardware,
+    present_localization,
+    present_users,
+    load_snapshot,
+)
+from korunix_i18n import CATALOGS, Translator  # noqa: E402
+
+
+def flatten_strings(value: Any) -> list[str]:
+    if isinstance(value, dict):
+        strings: list[str] = []
+        for child in value.values():
+            strings.extend(flatten_strings(child))
+        return strings
+    if isinstance(value, list):
+        strings = []
+        for child in value:
+            strings.extend(flatten_strings(child))
+        return strings
+    return [value] if isinstance(value, str) else []
+
+
+def validate_python() -> None:
+    for path in sorted(APP.glob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        ast.parse(source, filename=str(path))
+
+
+def validate_catalogs() -> None:
+    canonical = set(CATALOGS["es"])
+    for language, catalog in CATALOGS.items():
+        missing = canonical - set(catalog)
+        extra = set(catalog) - canonical
+        if missing or extra:
+            raise SystemExit(
+                f"El catálogo {language} no coincide: faltan {sorted(missing)}, "
+                f"sobran {sorted(extra)}."
+            )
+
+    for language in CATALOGS:
+        translator = Translator(language)
+        if translator.text("summary.title") == "summary.title":
+            raise SystemExit(f"El catálogo {language} no traduce el resumen.")
+
+    tree = ast.parse((APP / "korunix.py").read_text(encoding="utf-8"))
+    used: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        if not isinstance(node.func, ast.Attribute) or node.func.attr != "text":
+            continue
+        for child in ast.walk(node.args[0]):
+            if isinstance(child, ast.Constant) and isinstance(child.value, str):
+                if "." in child.value:
+                    used.add(child.value)
+
+    missing_from_source = used - canonical
+    if missing_from_source:
+        raise SystemExit(
+            "La interfaz usa textos que no existen en español: "
+            f"{sorted(missing_from_source)}."
+        )
+
+
+def validate_partial_degradation() -> None:
+    def fake_query(_root: Path, area: str, timeout: int = 180) -> dict[str, Any]:
+        del timeout
+        if area == "hardware":
+            raise BackendError("Hardware temporalmente no disponible.")
+        return {"schemaVersion": 1, "area": area}
+
+    with patch("korunix_backend._run_json", side_effect=fake_query):
+        snapshot = load_snapshot(ROOT)
+
+    if set(snapshot.available) != {"localization", "users"}:
+        raise SystemExit("Un fallo parcial ocultó áreas que seguían disponibles.")
+    if "hardware" not in snapshot.errors:
+        raise SystemExit("El fallo parcial de hardware no quedó registrado.")
+
+
+def validate_human_presentation() -> None:
+    localization = {
+        "declared": {
+            "systemLanguage": "es",
+            "region": "PE",
+            "formats": {"language": "es", "region": "PE"},
+            "timeZone": "America/Lima",
+            "keyboard": {
+                "displayNames": [
+                    "Español — España",
+                    "Español — Latinoamérica",
+                ]
+            },
+        },
+        "runtime": {"desktop": "niri"},
+        "inputMethod": {"nixos": {"type": "none"}},
+        "noctalia": {"supportedLanguages": ["es", "en", "hu"]},
+        "contradictions": [],
+        "derived": {
+            "systemLocale": "es_PE.UTF-8",
+            "formatLocale": "es_PE.UTF-8",
+            "keyboard": {
+                "layout": "es,latam",
+                "options": "grp:alt_shift_toggle",
+            },
+        },
+    }
+
+    hardware = {
+        "machine": {"type": "desktop", "vendor": "Korunix", "model": "Prueba"},
+        "platform": {"detected": "x86_64-linux", "matches": True},
+        "firmware": {"detected": "uefi", "matches": True},
+        "cpu": {"model": "CPU de prueba", "logicalProcessors": 8},
+        "memory": {"bytes": 17_179_869_184},
+        "graphics": [
+            "VGA compatible controller [0300]: Advanced Micro Devices, Inc. "
+            "[AMD/ATI] Cezanne [Radeon Vega Series / Radeon Vega Mobile Series] "
+            "[1002:1638] (rev c9)"
+        ],
+        "graphicsDrivers": ["amdgpu"],
+        "network": [
+            "Ethernet controller [0200]: Realtek Semiconductor Co., Ltd. "
+            "RTL8111/8168/8211/8411 PCI Express Gigabit Ethernet Controller "
+            "[10ec:8168] (rev 15)"
+        ],
+    }
+
+    users = {
+        "accounts": [
+            {
+                "displayName": "Persona de prueba",
+                "accountName": "persona",
+                "administrator": True,
+                "status": "adopted",
+            }
+        ],
+        "summary": {
+            "humanAccounts": 1,
+            "adoptedAccounts": 1,
+            "detectedAdministrators": 1,
+        },
+    }
+
+    for language in CATALOGS:
+        presented = present_localization(localization, language)
+        visible = "\n".join(flatten_strings(presented))
+        forbidden = ("es_PE.UTF-8", "America/Lima", "grp:alt_shift_toggle")
+        for technical in forbidden:
+            if technical in visible:
+                raise SystemExit(
+                    f"El valor técnico {technical} se filtró en la vista {language}."
+                )
+
+        if "/" in presented["timeZone"]:
+            raise SystemExit("La zona horaria visible conserva un identificador interno.")
+
+        if language != "es" and any("Español" in name for name in presented["keyboards"]):
+            raise SystemExit(f"Los teclados no reaccionan al idioma {language}.")
+
+        hardware_view = present_hardware(hardware, language)
+        if hardware_view["architecture"] == "x86_64-linux":
+            raise SystemExit("La arquitectura visible conserva el triplete de Nix.")
+
+        hardware_visible = "\n".join(flatten_strings(hardware_view))
+        forbidden_hardware = (
+            "[0300]",
+            "[0200]",
+            "[1002:1638]",
+            "[10ec:8168]",
+            "(rev c9)",
+            "(rev 15)",
+            "amdgpu",
+            "compatible controller",
+        )
+        for technical in forbidden_hardware:
+            if technical.lower() in hardware_visible.lower():
+                raise SystemExit(
+                    f"El valor técnico {technical} se filtró en hardware {language}."
+                )
+
+        if hardware_view["graphics"] != ["AMD Radeon Vega"]:
+            raise SystemExit("La GPU no se presenta mediante su familia comercial.")
+        if hardware_view["network"] != ["Ethernet Realtek"]:
+            raise SystemExit("La red no se presenta mediante su capacidad y fabricante.")
+
+    people = present_users(users)
+    if people["accounts"][0]["name"] != "Persona de prueba":
+        raise SystemExit("La presentación de personas perdió el nombre humano.")
+
+
+def validate_structure() -> None:
+    expected = (
+        APP / "korunix.py",
+        APP / "korunix_backend.py",
+        APP / "korunix_i18n.py",
+        APP / "style.css",
+        APP / "io.github.koruninn.Korunix.desktop",
+    )
+    for path in expected:
+        if not path.is_file():
+            raise SystemExit(f"Falta {path.relative_to(ROOT)}.")
+
+    desktop = (APP / "io.github.koruninn.Korunix.desktop").read_text(
+        encoding="utf-8"
+    )
+    if "Exec=korunix" not in desktop or "Terminal=false" not in desktop:
+        raise SystemExit("El lanzador gráfico no apunta al ejecutable de Korunix.")
+
+    flake = (ROOT / "flake.nix").read_text(encoding="utf-8")
+    for required in ("korunixGuiFor", "pythonPackages.pygobject3", "pkgs.libadwaita"):
+        if required not in flake:
+            raise SystemExit(f"flake.nix no contiene {required}.")
+
+    interface = (APP / "korunix.py").read_text(encoding="utf-8")
+    for required in (
+        "Adw.BreakpointCondition.parse",
+        'breakpoint.add_setter(self.split_view, "collapsed", True)',
+        "self.add_breakpoint(breakpoint)",
+    ):
+        if required not in interface:
+            raise SystemExit(f"La ventana adaptable no contiene {required}.")
+
+    localization = (ROOT / "scripts" / "localization").read_text(encoding="utf-8")
+    optional_functions = {
+        "tipo": localization.split("backend_input_tipo()", 1)[1].split(
+            "backend_input_paquete()", 1
+        )[0],
+        "paquete": localization.split("backend_input_paquete()", 1)[1].split(
+            "noctalia_source()", 1
+        )[0],
+    }
+    for name, function in optional_functions.items():
+        if "--raw" in function or "--json" not in function:
+            raise SystemExit(
+                f"El {name} opcional del método de entrada no admite el valor nulo."
+            )
+
+
+def main() -> None:
+    os.chdir(ROOT)
+    validate_python()
+    validate_catalogs()
+    validate_partial_degradation()
+    validate_human_presentation()
+    validate_structure()
+
+    if find_project_root() != ROOT:
+        raise SystemExit("La interfaz no reconoce la raíz del checkout actual.")
+
+    if normalize_language("es_PE.UTF-8") != "es":
+        raise SystemExit("La detección de idioma no normaliza locales de NixOS.")
+
+    if human_architecture("x86_64-linux") == "x86_64-linux":
+        raise SystemExit("La arquitectura no se presenta en lenguaje humano.")
+
+    print(
+        json.dumps(
+            {
+                "python": "correcto",
+                "catalogs": sorted(CATALOGS),
+                "humanPresentation": "correcta",
+                "projectRoot": str(ROOT),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+if __name__ == "__main__":
+    main()

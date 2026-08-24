@@ -72,13 +72,25 @@ backend_input_habilitado() {
 backend_input_tipo() {
   nix eval \
     ".#nixosConfigurations.${HOST}.config.i18n.inputMethod.type" \
-    --raw
+    --json \
+    | jq -r '
+        if type == "string"
+        then .
+        else "none"
+        end
+      '
 }
 
 backend_input_paquete() {
   nix eval \
     ".#nixosConfigurations.${HOST}.config.i18n.inputMethod.package" \
-    --raw
+    --json \
+    | jq -r '
+        if type == "string"
+        then .
+        else ""
+        end
+      '
 }
 
 noctalia_source() {

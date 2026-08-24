@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Korunix
+Comment=Administra NixOS mediante decisiones humanas
+Exec=korunix
+Icon=preferences-system-symbolic
+Terminal=false
+Categories=Settings;System;
+StartupNotify=true

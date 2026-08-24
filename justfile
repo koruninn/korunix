@@ -101,3 +101,11 @@ fmt:
 # Abre el punto de entrada humano actual de Korunix.
 korunix:
     ./scripts/korunix status
+
+# Abre la primera interfaz gráfica sin instalarla ni aplicar NixOS.
+gui:
+    nix run .#korunix
+
+# Comprueba el motor de presentación y los archivos de la interfaz.
+gui-check:
+    python3 scripts/validate-gui.py
