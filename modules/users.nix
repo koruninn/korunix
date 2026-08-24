@@ -659,7 +659,6 @@
   '';
 in {
   config = lib.mkIf cfg.enable {
-
     # La clave privada sigue fuera de Nix/Git. Korunix solo declara qué archivo
     # local debe usar cada cuenta y OpenSSH la conserva en su agente tras usarla.
     programs.ssh.extraConfig = githubSshConfig;
