@@ -185,9 +185,11 @@ source = "community"
 
 [theme.templates]
 builtin_ids = ["alacritty", "gtk3", "gtk4", "niri", "qt"]
-community_ids = ["discord", "fastfetch", "gimp", "heroiclauncher", "inkscape", "obs", "obsidian", "prismlauncher", "pywalfox-beta4", "spicetify", "steam", "vscode"]
+community_ids = ["discord", "fastfetch", "gimp", "heroiclauncher", "inkscape", "obs", "obsidian", "prismlauncher", "pywalfox-beta4", "steam", "vscode"]
 enable_builtin_templates = true
 enable_community_templates = true
+
+# @KORUNIX_SPOTIFY_TEMPLATE@
 
 [wallpaper]
 directory = "~/.korunix/config/noctalia/wallpapers"

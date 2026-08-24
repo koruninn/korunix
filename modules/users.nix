@@ -397,6 +397,34 @@
     korunix_state="$state_home/korunix"
     mkdir -p "$korunix_state"
 
+    ${lib.optionalString (lib.elem "spotify" config.korunix.applications) ''
+      # Una implementación anterior creó un lanzador personal que apuntaba a
+      # ~/.local/share/korunix/spotify. Los archivos personales tienen prioridad
+      # sobre el .desktop declarativo y evitaban el selector por sesión. Solo
+      # retiramos el archivo si todavía coincide exactamente con aquel residuo;
+      # cualquier lanzador personalizado por la persona se conserva.
+      data_home="$HOME/.local/share"
+
+      if [ -n "''${XDG_DATA_HOME:-}" ]; then
+        data_home="$XDG_DATA_HOME"
+      fi
+
+      legacy_spotify="$HOME/.local/share/korunix/spotify/spotify"
+      legacy_launcher="$data_home/applications/spotify.desktop"
+
+      if [ -f "$legacy_launcher" ] \
+          && grep -Fqx "TryExec=$legacy_spotify" "$legacy_launcher" \
+          && grep -Fqx "Exec=$legacy_spotify %U" "$legacy_launcher"
+      then
+        launcher_backup="$korunix_state/backups/spotify-launcher"
+        mkdir -p "$launcher_backup"
+
+        mv \
+          "$legacy_launcher" \
+          "$launcher_backup/spotify.desktop.$(date +%Y%m%d-%H%M%S)-$$"
+      fi
+    ''}
+
     # Un enlace se puede actualizar porque sabemos que pertenece a Korunix. Un
     # archivo normal se conserva: puede haber sido editado manualmente.
     ensure_link() {
@@ -585,6 +613,18 @@
       /etc/korunix/noctalia/config.toml \
       > "$noctalia_tmp"
 
+    # Spotify solo recibe la plantilla cuando forma parte de las aplicaciones
+    # elegidas. El marcador se retira siempre para que el TOML final sea normal.
+    if [ -e /etc/korunix/noctalia/spicetify-template.toml ]; then
+      sed -i \
+        '/# @KORUNIX_SPOTIFY_TEMPLATE@/r /etc/korunix/noctalia/spicetify-template.toml' \
+        "$noctalia_tmp"
+    fi
+
+    sed -i \
+      '/# @KORUNIX_SPOTIFY_TEMPLATE@/d' \
+      "$noctalia_tmp"
+
     new_hash="$(sha256sum "$noctalia_tmp" | cut -d' ' -f1)"
 
     if [ -L "$noctalia_target" ]; then
@@ -768,6 +808,7 @@ in {
 
       path = [
         pkgs.coreutils
+        pkgs.gnugrep
         pkgs.gnused
         pkgs.xdg-user-dirs
       ];

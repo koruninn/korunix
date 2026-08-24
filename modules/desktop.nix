@@ -124,6 +124,9 @@
 
   noctaliaEnabled = niriEnabled || hyprlandEnabled;
 
+  noctaliaPackage =
+    inputs.noctalia.packages.${pkgs.stdenv.hostPlatform.system}.default;
+
   # La integración de dispositivos sigue el escritorio activo: Valent pertenece
   # a los escritorios GTK/Noctalia y KDE Connect a Plasma.
   valentDesktopEnabled = niriEnabled || hyprlandEnabled || cinnamonEnabled;
@@ -427,6 +430,115 @@
       exit 1
     '';
 
+  # El perfil visual de Noctalia usa una base de usuario distinta de la base
+  # normal. Así puede cambiar con la paleta sin escribir la preferencia que
+  # Cinnamon y Plasma leen al iniciar sus propias sesiones.
+  noctaliaDconfProfile = pkgs.writeText "korunix-noctalia-dconf-profile" ''
+    user-db:noctalia
+  '';
+
+  # Hatter Slate acompaña la apariencia predeterminada y las paletas generadas
+  # desde el fondo. Hatter Green solo corresponde a Everforest cuando esa es la
+  # selección efectiva de Noctalia, incluidos los cambios guardados por su GUI.
+  applyNoctaliaIconTheme =
+    pkgs.writeShellScript "korunix-noctalia-icon-theme" ''
+      set -eu
+
+      mode="''${1:---default}"
+      selection=""
+
+      case "$mode" in
+        --default)
+          # Antes de iniciar Noctalia no inferimos preferencias desde archivos
+          # parciales: Slate es siempre el valor seguro y predeterminado.
+          ;;
+        --resolved)
+          attempt=0
+
+          # La GUI guarda primero su estado y después lo publica por IPC. Esta
+          # espera breve evita leer la selección anterior durante ese relevo.
+          while [ "$attempt" -lt 40 ]; do
+            selection="$(${lib.getExe noctaliaPackage} msg color-scheme-get 2>/dev/null || true)"
+
+            if [ -n "$selection" ]; then
+              break
+            fi
+
+            attempt=$((attempt + 1))
+            ${pkgs.coreutils}/bin/sleep 0.1
+          done
+          ;;
+        *)
+          echo "Korunix: modo de sincronización no válido: $mode" >&2
+          exit 1
+          ;;
+      esac
+
+      selection="$(
+        printf '%s\n' "$selection" |
+          ${pkgs.coreutils}/bin/head -n 1 |
+          ${pkgs.coreutils}/bin/tr '[:upper:]' '[:lower:]'
+      )"
+
+      case "$selection" in
+        "community everforest")
+          theme="Hatter-Green"
+          ;;
+        *)
+          theme="Hatter-Slate"
+          ;;
+      esac
+
+      case "$theme" in
+        Hatter-Slate|Hatter-Green)
+          ;;
+        *)
+          echo "Korunix: variante de iconos no válida: $theme" >&2
+          exit 1
+          ;;
+      esac
+
+      DCONF_PROFILE=noctalia \
+        ${lib.getExe' pkgs.glib "gsettings"} set \
+        org.gnome.desktop.interface \
+        icon-theme \
+        "$theme"
+
+      if [ -n "$selection" ]; then
+        echo "Korunix: Noctalia usa $theme para '$selection'."
+      else
+        echo "Korunix: Noctalia usa Hatter-Slate como variante predeterminada."
+      fi
+    '';
+
+  # GTK4 consulta el tema de iconos mediante el portal y no directamente desde
+  # el proceso de la aplicación. Los portales comparten unidades entre todos los
+  # escritorios, así que el perfil debe elegirse al arrancar cada sesión.
+  portalSessionWrapper =
+    name: executable:
+      pkgs.writeShellScript name ''
+        case ":''${XDG_CURRENT_DESKTOP:-}:''${XDG_SESSION_DESKTOP:-}:''${DESKTOP_SESSION:-}:" in
+          *:niri:*|*:Niri:*|*:Hyprland:*|*:hyprland:*|*:hyprland-uwsm:*)
+            export DCONF_PROFILE=noctalia
+            ;;
+          *)
+            unset DCONF_PROFILE
+            ;;
+        esac
+
+        exec ${executable}
+      '';
+
+  gtkPortalSession =
+    portalSessionWrapper
+    "korunix-xdg-desktop-portal-gtk"
+    "${pkgs.xdg-desktop-portal-gtk}/libexec/xdg-desktop-portal-gtk";
+
+  gnomePortalSession =
+    portalSessionWrapper
+    "korunix-xdg-desktop-portal-gnome"
+    "${pkgs.xdg-desktop-portal-gnome}/libexec/xdg-desktop-portal-gnome";
+
   # Los módulos pueden traer varias sesiones, pero Korunix publica una sola
   # sesión Wayland por escritorio. El propio paquete declara exactamente esos
   # nombres a services.displayManager.
@@ -617,6 +729,12 @@ in {
       xwayland.enable = true;
     };
 
+    # El backend GTK aporta Settings a las aplicaciones de la experiencia
+    # Noctalia incluso cuando Hyprland es el único compositor elegido.
+    xdg.portal.extraPortals = lib.mkIf noctaliaEnabled [
+      pkgs.xdg-desktop-portal-gtk
+    ];
+
     # Cinnamon conserva tanto el escritorio como su conjunto nativo de
     # aplicaciones. Cada escritorio completo mantiene su propia experiencia.
     services.xserver.desktopManager.cinnamon.enable = cinnamonEnabled;
@@ -739,31 +857,100 @@ in {
       source = hyprlandConfig;
     };
 
-    # Noctalia usa un perfil dconf propio para resolver Hatter sin alterar
-    # las preferencias de iconos de Plasma, Cinnamon ni del usuario.
-    programs.dconf.profiles.noctalia = lib.mkIf noctaliaEnabled {
-      enableUserDb = true;
+    # La base de Noctalia es independiente de user-db:user. El servicio siguiente
+    # escribe aquí la variante que corresponde y nunca toca el tema de Cinnamon.
+    programs.dconf.profiles.noctalia =
+      lib.mkIf noctaliaEnabled noctaliaDconfProfile;
 
-      databases = [
-        {
-          settings = {
-            "org/gnome/desktop/interface" = {
-              icon-theme = "Hatter";
-            };
-          };
+    # Slate se fija antes de que arranquen Noctalia y los portales. Esto evita
+    # reutilizar la variante de una sesión anterior mientras el IPC aún no está
+    # disponible.
+    systemd.user.services.korunix-noctalia-icon-theme-default =
+      lib.mkIf noctaliaEnabled {
+        description = "Prepara Hatter Slate para la sesión Noctalia";
 
-          locks = [
-            "/org/gnome/desktop/interface/icon-theme"
+        wantedBy = ["graphical-session-pre.target"];
+        after = ["korunix-user-prepare.service"];
+        requires = ["korunix-user-prepare.service"];
+        before = [
+          "graphical-session.target"
+          "noctalia.service"
+          "xdg-desktop-portal-gtk.service"
+          "xdg-desktop-portal-gnome.service"
+        ];
+
+        serviceConfig = {
+          Type = "oneshot";
+          ExecCondition = noctaliaSessionCheck;
+          ExecStart = "${applyNoctaliaIconTheme} --default";
+        };
+      };
+
+    # Después de iniciar Noctalia, su IPC informa la selección efectiva. Así las
+    # preferencias guardadas por la GUI tienen prioridad sobre el archivo base.
+    systemd.user.services.korunix-noctalia-icon-theme-sync =
+      lib.mkIf noctaliaEnabled {
+        description = "Sincroniza Hatter con la paleta efectiva de Noctalia";
+
+        wantedBy = ["graphical-session.target"];
+        after = ["noctalia.service"];
+        wants = ["noctalia.service"];
+
+        serviceConfig = {
+          Type = "oneshot";
+          ExecCondition = noctaliaSessionCheck;
+          ExecStart = "${applyNoctaliaIconTheme} --resolved";
+        };
+      };
+
+    # Noctalia conserva la configuración humana en config.toml y los cambios de
+    # su interfaz en settings.toml. Cualquiera de los dos vuelve a consultar el
+    # estado efectivo, sin deducirlo directamente del contenido de esos archivos.
+    systemd.user.paths.korunix-noctalia-icon-theme-sync =
+      lib.mkIf noctaliaEnabled {
+        description = "Observa la paleta activa de Noctalia";
+        wantedBy = ["graphical-session.target"];
+
+        pathConfig = {
+          PathChanged = [
+            "%h/.config/noctalia/config.toml"
+            "%h/.config/noctalia/settings.toml"
           ];
-        }
-      ];
-    };
+          Unit = "korunix-noctalia-icon-theme-sync.service";
+        };
+      };
+
+    # En Wayland, GTK4 recibe el tema mediante org.freedesktop.portal.Settings.
+    # Estos drop-ins conservan las unidades originales y sustituyen únicamente
+    # su ejecutable por un selector que aplica la variante Hatter elegida para
+    # Niri/Hyprland y deja el perfil nativo intacto en Cinnamon y Plasma.
+    systemd.user.services.xdg-desktop-portal-gtk =
+      lib.mkIf noctaliaEnabled {
+        after = ["korunix-noctalia-icon-theme-sync.service"];
+        wants = ["korunix-noctalia-icon-theme-sync.service"];
+
+        serviceConfig.ExecStart = [
+          ""
+          "${gtkPortalSession}"
+        ];
+      };
+
+    systemd.user.services.xdg-desktop-portal-gnome =
+      lib.mkIf niriEnabled {
+        after = ["korunix-noctalia-icon-theme-sync.service"];
+        wants = ["korunix-noctalia-icon-theme-sync.service"];
+
+        serviceConfig.ExecStart = [
+          ""
+          "${gnomePortalSession}"
+        ];
+      };
 
     # Noctalia utiliza su módulo NixOS oficial. Su servicio de usuario arranca
     # después de que Korunix haya preparado la configuración de esa persona.
     programs.noctalia = lib.mkIf noctaliaEnabled {
       enable = true;
-      package = inputs.noctalia.packages.${pkgs.stdenv.hostPlatform.system}.default;
+      package = noctaliaPackage;
       systemd.enable = true;
       recommendedServices.enable = false;
     };
@@ -787,12 +974,15 @@ in {
       after = [
         "korunix-user-prepare.service"
         "korunix-noctalia-keyboard-labels.service"
+        "korunix-noctalia-icon-theme-default.service"
       ];
 
       requires = [
         "korunix-user-prepare.service"
         "korunix-noctalia-keyboard-labels.service"
       ];
+
+      wants = ["korunix-noctalia-icon-theme-default.service"];
 
       environment.DCONF_PROFILE = "noctalia";
 

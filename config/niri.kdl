@@ -38,6 +38,10 @@ input {
 
 environment {
     QT_QPA_PLATFORMTHEME "qt6ct"
+
+    // Las aplicaciones GTK de esta sesión leen el perfil aislado de Noctalia.
+    // Cinnamon conserva su perfil normal y no puede dejar aquí su tema de iconos.
+    DCONF_PROFILE "noctalia"
 }
 // El cursor Bibata mantiene la identidad visual acordada.
 cursor {

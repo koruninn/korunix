@@ -132,6 +132,69 @@ validar_estructura() {
     [[ -f "hardware/${host_id}.nix" ]] \
       || error "Falta hardware/${host_id}.nix."
   done < <(hosts_disponibles)
+
+  grep -Fq 'DCONF_PROFILE "noctalia"' config/niri.kdl \
+    || error "Niri no entrega a sus aplicaciones el perfil visual de Noctalia."
+
+  grep -Fq 'hl.env("DCONF_PROFILE", "noctalia")' config/hyprland.lua \
+    || error "Hyprland no entrega a sus aplicaciones el perfil visual de Noctalia."
+
+  grep -Fq 'environment.DCONF_PROFILE = "noctalia";' modules/desktop.nix \
+    || error "El servicio de Noctalia no usa su perfil dconf aislado."
+
+  grep -Fq 'user-db:noctalia' modules/desktop.nix \
+    || error "Noctalia no tiene una base dconf separada de Cinnamon."
+
+  grep -Fq 'theme="Hatter-Slate"' modules/desktop.nix \
+    || error "Falta Hatter Slate como variante predeterminada de Noctalia."
+
+  grep -Fq 'theme="Hatter-Green"' modules/desktop.nix \
+    || error "Falta Hatter Green para la paleta Everforest."
+
+  grep -Fq 'msg color-scheme-get' modules/desktop.nix \
+    || error "La variante Hatter no consulta la paleta efectiva de Noctalia."
+
+  grep -Fq '"community everforest")' modules/desktop.nix \
+    || error "Everforest no selecciona exclusivamente Hatter Green."
+
+  grep -Fq 'systemd.user.paths.korunix-noctalia-icon-theme-sync' modules/desktop.nix \
+    || error "Los iconos Hatter no reaccionan a los cambios de paleta."
+
+  grep -Fq '%h/.config/noctalia/settings.toml' modules/desktop.nix \
+    || error "Los iconos Hatter no observan los cambios guardados por la GUI."
+
+  grep -Fq 'korunix-xdg-desktop-portal-gtk' modules/desktop.nix \
+    || error "El portal GTK no selecciona el perfil visual por sesión."
+
+  grep -Fq 'korunix-xdg-desktop-portal-gnome' modules/desktop.nix \
+    || error "El portal GNOME no selecciona el perfil visual por sesión."
+
+  grep -Fq 'theme = comfyTheme;' modules/apps.nix \
+    || error "Spotify no usa Comfy desde spicetify-nix."
+
+  grep -Fq 'colorScheme = "Comfy";' modules/apps.nix \
+    || error "Spotify no declara el esquema base de Comfy."
+
+  ! grep -Fq 'spicePkgs.themes.defaultDynamic' modules/apps.nix \
+    || error "Spotify todavía usa DefaultDynamic en vez de Comfy."
+
+  grep -Fq 'korunix-spotify-theme-sync' modules/apps.nix \
+    || error "Falta el adaptador de la paleta Noctalia para Spotify."
+
+  grep -Fq 'noctalia-palette.js' modules/apps.nix \
+    || error "Spotify no puede recargar en vivo la paleta de Noctalia."
+
+  grep -Fq 'systemd.user.paths.korunix-spicetify-palette-sync' modules/apps.nix \
+    || error "Spotify no observa los cambios de la paleta de Noctalia."
+
+  grep -Fq '# @KORUNIX_SPOTIFY_TEMPLATE@' config/noctalia/config.toml \
+    || error "Falta el punto de inserción de la plantilla Spotify."
+
+  ! grep -F 'community_ids' config/noctalia/config.toml | grep -Fq '"spicetify"' \
+    || error "La plantilla comunitaria de Spicetify duplicaría la integración Korunix."
+
+  [[ -f config/noctalia/themes/spicetify/color.ini ]] \
+    || error "Falta la plantilla Material 3 para Spotify."
 }
 
 validar() {
@@ -604,6 +667,8 @@ hardware_detectado_json() {
     almacenamiento_json='{"blockdevices":[]}'
   fi
 
+  # Estas variables pertenecen al programa jq y no deben expandirse en Bash.
+  # shellcheck disable=SC2016
   "$jq_bin" -n \
     --argjson schemaVersion 1 \
     --arg hostId "$HOST" \

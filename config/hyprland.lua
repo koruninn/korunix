@@ -84,6 +84,10 @@ hl.env("XCURSOR_THEME", "Bibata-Modern-Classic")
 hl.env("XCURSOR_SIZE", "24")
 hl.env("HYPRCURSOR_SIZE", "24")
 
+-- Las aplicaciones GTK de esta sesión leen el perfil aislado de Noctalia.
+-- Cinnamon conserva su perfil normal y no puede dejar aquí su tema de iconos.
+hl.env("DCONF_PROFILE", "noctalia")
+
 local noctalia = "noctalia msg"
 
 -- ============================================================
