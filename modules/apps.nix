@@ -192,112 +192,109 @@
   # de ejecución derivada exactamente del Spotify construido por spicetify-nix.
   # No contiene configuración humana y se renueva solo cuando cambia la
   # derivación de origen.
-  prepareSpicetifyRuntime =
-    pkgs.writeShellScript "korunix-spicetify-runtime-prepare" ''
-      set -eu
+  prepareSpicetifyRuntime = pkgs.writeShellScript "korunix-spicetify-runtime-prepare" ''
+    set -eu
 
-      case ":''${XDG_CURRENT_DESKTOP:-}:''${XDG_SESSION_DESKTOP:-}:''${DESKTOP_SESSION:-}:" in
-        *:niri:*|*:Niri:*|*:Hyprland:*|*:hyprland:*|*:hyprland-uwsm:*)
-          ;;
-        *)
-          exit 0
-          ;;
-      esac
-
-      state_home="''${XDG_STATE_HOME:-$HOME/.local/state}"
-      runtime_root="$state_home/korunix/spicetify"
-      target="$runtime_root/spotify"
-      marker="$runtime_root/source"
-      source=${lib.escapeShellArg (toString config.programs.spicetify.spicedSpotify)}
-
-      mkdir -p "$runtime_root"
-
-      if [ -x "$target/spotify" ] \
-          && [ -f "$marker" ] \
-          && [ "$(cat "$marker")" = "$source" ]
-      then
+    case ":''${XDG_CURRENT_DESKTOP:-}:''${XDG_SESSION_DESKTOP:-}:''${DESKTOP_SESSION:-}:" in
+      *:niri:*|*:Niri:*|*:Hyprland:*|*:hyprland:*|*:hyprland-uwsm:*)
+        ;;
+      *)
         exit 0
+        ;;
+    esac
+
+    state_home="''${XDG_STATE_HOME:-$HOME/.local/state}"
+    runtime_root="$state_home/korunix/spicetify"
+    target="$runtime_root/spotify"
+    marker="$runtime_root/source"
+    source=${lib.escapeShellArg (toString config.programs.spicetify.spicedSpotify)}
+
+    mkdir -p "$runtime_root"
+
+    if [ -x "$target/spotify" ] \
+        && [ -f "$marker" ] \
+        && [ "$(cat "$marker")" = "$source" ]
+    then
+      exit 0
+    fi
+
+    temporary=""
+    previous="$runtime_root/.spotify.previous"
+
+    hacer_extraible() {
+      path="$1"
+
+      [ -e "$path" ] || return 0
+
+      # cp -a conserva el modo de solo lectura del almacén de Nix. Para
+      # borrar una copia incompleta solo hace falta devolver escritura y
+      # recorrido a sus directorios; los archivos continúan inmutables.
+      ${pkgs.findutils}/bin/find "$path" \
+        -type d \
+        -exec chmod u+rwx {} +
+    }
+    cleanup() {
+      if [ -n "''${temporary:-}" ] && [ -d "$temporary" ]; then
+        hacer_extraible "$temporary" || true
+        rm -rf -- "$temporary"
       fi
+    }
 
-      temporary=""
-      previous="$runtime_root/.spotify.previous"
+    trap cleanup EXIT HUP INT TERM
 
-      hacer_extraible() {
-        path="$1"
+    # Una interrupción anterior puede dejar una copia de trabajo incompleta.
+    # Siempre se elimina antes de preparar la siguiente; no contiene datos
+    # personales y puede reconstruirse desde spicetify-nix.
+    for stale in "$runtime_root"/.spotify.new.*; do
+      [ -e "$stale" ] || continue
+      hacer_extraible "$stale"
+      rm -rf -- "$stale"
+    done
 
-        [ -e "$path" ] || return 0
+    temporary="$(${pkgs.coreutils}/bin/mktemp -d "$runtime_root/.spotify.new.XXXXXX")"
+    cp -a --reflink=auto "$source/share/spotify/." "$temporary/"
 
-        # cp -a conserva el modo de solo lectura del almacén de Nix. Para
-        # borrar una copia incompleta solo hace falta devolver escritura y
-        # recorrido a sus directorios; los archivos continúan inmutables.
-        ${pkgs.findutils}/bin/find "$path" \
-          -type d \
-          -exec chmod u+rwx {} +
-      }
+    hacer_extraible "$temporary"
+    chmod u+w \
+      "$temporary/spotify" \
+      "$temporary/Apps/xpui/colors.css"
+    # El wrapper construido por Nix contiene la ruta absoluta de su propia
+    # derivación. Solo sustituimos el directorio de recursos para que el
+    # ejecutable copiado lea el xpui mutable; las bibliotecas siguen fijadas.
+    ${pkgs.python3}/bin/python3 - \
+      "$temporary/spotify" \
+      "$source/share/spotify" \
+      "$target" \
+      <<'PY'
+    import sys
+    from pathlib import Path
 
-      cleanup() {
-        if [ -n "''${temporary:-}" ] && [ -d "$temporary" ]; then
-          hacer_extraible "$temporary" || true
-          rm -rf -- "$temporary"
-        fi
-      }
+    wrapper = Path(sys.argv[1])
+    source = sys.argv[2]
+    target = sys.argv[3]
+    content = wrapper.read_text(encoding="utf-8")
 
-      trap cleanup EXIT HUP INT TERM
+    if source not in content:
+        raise SystemExit("Korunix: el lanzador de Spotify no contiene la ruta esperada.")
 
-      # Una interrupción anterior puede dejar una copia de trabajo incompleta.
-      # Siempre se elimina antes de preparar la siguiente; no contiene datos
-      # personales y puede reconstruirse desde spicetify-nix.
-      for stale in "$runtime_root"/.spotify.new.*; do
-        [ -e "$stale" ] || continue
-        hacer_extraible "$stale"
-        rm -rf -- "$stale"
-      done
+    wrapper.write_text(content.replace(source, target), encoding="utf-8")
+    PY
 
-      temporary="$(${pkgs.coreutils}/bin/mktemp -d "$runtime_root/.spotify.new.XXXXXX")"
-      cp -a --reflink=auto "$source/share/spotify/." "$temporary/"
+    hacer_extraible "$previous"
+    rm -rf -- "$previous"
 
-      hacer_extraible "$temporary"
-      chmod u+w \
-        "$temporary/spotify" \
-        "$temporary/Apps/xpui/colors.css"
+    if [ -e "$target" ]; then
+      mv "$target" "$previous"
+    fi
 
-      # El wrapper construido por Nix contiene la ruta absoluta de su propia
-      # derivación. Solo sustituimos el directorio de recursos para que el
-      # ejecutable copiado lea el xpui mutable; las bibliotecas siguen fijadas.
-      ${pkgs.python3}/bin/python3 - \
-        "$temporary/spotify" \
-        "$source/share/spotify" \
-        "$target" \
-        <<'PY'
-      import sys
-      from pathlib import Path
+    mv "$temporary" "$target"
+    temporary=""
 
-      wrapper = Path(sys.argv[1])
-      source = sys.argv[2]
-      target = sys.argv[3]
-      content = wrapper.read_text(encoding="utf-8")
-
-      if source not in content:
-          raise SystemExit("Korunix: el lanzador de Spotify no contiene la ruta esperada.")
-
-      wrapper.write_text(content.replace(source, target), encoding="utf-8")
-      PY
-
-      hacer_extraible "$previous"
-      rm -rf -- "$previous"
-
-      if [ -e "$target" ]; then
-        mv "$target" "$previous"
-      fi
-
-      mv "$temporary" "$target"
-      temporary=""
-
-      printf '%s\n' "$source" > "$marker.new"
-      mv "$marker.new" "$marker"
-      hacer_extraible "$previous"
-      rm -rf -- "$previous"
-    '';
+    printf '%s\n' "$source" > "$marker.new"
+    mv "$marker.new" "$marker"
+    hacer_extraible "$previous"
+    rm -rf -- "$previous"
+  '';
 
   # Noctalia entrega un INI con roles Material 3. El adaptador solo convierte
   # esos colores al formato CSS que el Spotify ya construido por spicetify-nix
@@ -517,55 +514,51 @@ in {
 
     # El servicio prepara únicamente estado derivado y no modifica la copia
     # declarativa, la configuración externa de ~/.config/spicetify ni Git.
-    systemd.user.services.korunix-spicetify-runtime =
-      lib.mkIf (spotifySelected && noctaliaDesktopAvailable) {
-        description = "Prepara Spotify Comfy para la paleta de Noctalia";
+    systemd.user.services.korunix-spicetify-runtime = lib.mkIf (spotifySelected && noctaliaDesktopAvailable) {
+      description = "Prepara Spotify Comfy para la paleta de Noctalia";
 
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = prepareSpicetifyRuntime;
-          ExecStartPost = lib.getExe syncNoctaliaSpotify;
-        };
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = prepareSpicetifyRuntime;
+        ExecStartPost = lib.getExe syncNoctaliaSpotify;
       };
+    };
 
-    systemd.user.services.korunix-spicetify-palette-sync =
-      lib.mkIf (spotifySelected && noctaliaDesktopAvailable) {
-        description = "Sincroniza Spotify Comfy con la paleta de Noctalia";
+    systemd.user.services.korunix-spicetify-palette-sync = lib.mkIf (spotifySelected && noctaliaDesktopAvailable) {
+      description = "Sincroniza Spotify Comfy con la paleta de Noctalia";
 
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = lib.getExe syncNoctaliaSpotify;
-        };
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe syncNoctaliaSpotify;
       };
+    };
 
-    systemd.user.paths.korunix-spicetify-palette-sync =
-      lib.mkIf (spotifySelected && noctaliaDesktopAvailable) {
-        description = "Observa la paleta de Spotify generada por Noctalia";
-        wantedBy = ["graphical-session.target"];
+    systemd.user.paths.korunix-spicetify-palette-sync = lib.mkIf (spotifySelected && noctaliaDesktopAvailable) {
+      description = "Observa la paleta de Spotify generada por Noctalia";
+      wantedBy = ["graphical-session.target"];
 
-        pathConfig = {
-          PathChanged = [
-            "%h/.local/state/korunix/spicetify/noctalia.ini"
-            "%h/.config/spicetify/Themes/Comfy/color.ini"
-          ];
-          Unit = "korunix-spicetify-palette-sync.service";
-        };
+      pathConfig = {
+        PathChanged = [
+          "%h/.local/state/korunix/spicetify/noctalia.ini"
+          "%h/.config/spicetify/Themes/Comfy/color.ini"
+        ];
+        Unit = "korunix-spicetify-palette-sync.service";
       };
+    };
 
     # La plantilla se inserta en la configuración personal solo cuando Spotify
     # está seleccionado. Así Noctalia no muestra ni ejecuta una integración para
     # una aplicación ausente.
-    environment.etc."korunix/noctalia/spicetify-template.toml" =
-      lib.mkIf (spotifySelected && noctaliaDesktopAvailable) {
-        text = ''
-          # Esta plantilla pertenece a Korunix. Noctalia genera la paleta y el
-          # adaptador actualiza la copia de ejecución creada desde spicetify-nix.
-          [theme.templates.user.spicetify]
-          input_path = "/etc/korunix/noctalia/themes/spicetify/color.ini"
-          output_path = "~/.local/state/korunix/spicetify/noctalia.ini"
-          post_hook = "/run/current-system/sw/bin/korunix-spotify-theme-sync"
-        '';
-      };
+    environment.etc."korunix/noctalia/spicetify-template.toml" = lib.mkIf (spotifySelected && noctaliaDesktopAvailable) {
+      text = ''
+        # Esta plantilla pertenece a Korunix. Noctalia genera la paleta y el
+        # adaptador actualiza la copia de ejecución creada desde spicetify-nix.
+        [theme.templates.user.spicetify]
+        input_path = "/etc/korunix/noctalia/themes/spicetify/color.ini"
+        output_path = "~/.local/state/korunix/spicetify/noctalia.ini"
+        post_hook = "/run/current-system/sw/bin/korunix-spotify-theme-sync"
+      '';
+    };
 
     # Flatpak es una capacidad del sistema, no una pregunta técnica. Puede quedar
     # habilitado aunque en este momento no haya ninguna aplicación Flatpak elegida.

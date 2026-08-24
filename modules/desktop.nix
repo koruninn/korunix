@@ -18,8 +18,8 @@
 
   keyboardLabelsFile =
     pkgs.writeText
-      "korunix-keyboard-labels.json"
-      (builtins.toJSON localization.keyboard.displayNames);
+    "korunix-keyboard-labels.json"
+    (builtins.toJSON localization.keyboard.displayNames);
 
   prepareKeyboardLabels = pkgs.writeShellScript "korunix-noctalia-keyboard-labels" ''
     set -e
@@ -115,7 +115,8 @@
   plasmaEnabled = lib.elem "plasma" enabledDesktops;
 
   monitorConfigured =
-    cfg.monitor.output != null
+    cfg.monitor.output
+    != null
     && cfg.monitor.mode != null;
 
   monitorMode =
@@ -197,26 +198,26 @@
       systemsettings
     ])
     ++ lib.optional
-      config.networking.networkmanager.enable
-      pkgs.kdePackages.qrca
+    config.networking.networkmanager.enable
+    pkgs.kdePackages.qrca
     ++ lib.optional
-      (config.services.flatpak.enable || config.services.fwupd.enable)
-      pkgs.kdePackages.discover
+    (config.services.flatpak.enable || config.services.fwupd.enable)
+    pkgs.kdePackages.discover
     ++ lib.optional
-      config.services.printing.enable
-      pkgs.kdePackages.print-manager
+    config.services.printing.enable
+    pkgs.kdePackages.print-manager
     ++ lib.optional
-      config.hardware.sane.enable
-      pkgs.kdePackages.skanpage
+    config.hardware.sane.enable
+    pkgs.kdePackages.skanpage
     ++ lib.optional
-      config.services.colord.enable
-      pkgs.kdePackages.colord-kde
+    config.services.colord.enable
+    pkgs.kdePackages.colord-kde
     ++ lib.optional
-      config.services.hardware.bolt.enable
-      pkgs.kdePackages.plasma-thunderbolt
+    config.services.hardware.bolt.enable
+    pkgs.kdePackages.plasma-thunderbolt
     ++ lib.optional
-      config.services.flatpak.enable
-      pkgs.kdePackages.flatpak-kcm;
+    config.services.flatpak.enable
+    pkgs.kdePackages.flatpak-kcm;
 
   # Suite nativa de Cinnamon. Las tres aplicaciones compartidas con Noctalia
   # se administran en noctaliaCinnamonApplications para no duplicar reglas.
@@ -242,193 +243,190 @@
   # Algunos módulos enlazan también sus sesiones originales dentro del perfil
   # general de NixOS. Estas máscaras XDG impiden que GDM vuelva a descubrir las
   # variantes que Korunix no ofrece, sin modificar ni recortar los paquetes.
-  hiddenUnselectedSessions =
-    pkgs.runCommand "korunix-hidden-unselected-sessions" {} ''
-      set -eu
+  hiddenUnselectedSessions = pkgs.runCommand "korunix-hidden-unselected-sessions" {} ''
+    set -eu
 
-      mask_session() {
-        directory="$1"
-        filename="$2"
+    mask_session() {
+      directory="$1"
+      filename="$2"
 
-        mkdir -p "$out/share/$directory"
+      mkdir -p "$out/share/$directory"
 
-        {
-          echo "[Desktop Entry]"
-          echo "Type=Application"
-          echo "Name=Hidden by Korunix"
-          echo "Exec=/run/current-system/sw/bin/false"
-          echo "Hidden=true"
-          echo "NoDisplay=true"
-        } > "$out/share/$directory/$filename"
-      }
+      {
+        echo "[Desktop Entry]"
+        echo "Type=Application"
+        echo "Name=Hidden by Korunix"
+        echo "Exec=/run/current-system/sw/bin/false"
+        echo "Hidden=true"
+        echo "NoDisplay=true"
+      } > "$out/share/$directory/$filename"
+    }
 
-      # Hyprland se ofrece únicamente mediante UWSM.
-      mask_session "wayland-sessions" "hyprland.desktop"
+    # Hyprland se ofrece únicamente mediante UWSM.
+    mask_session "wayland-sessions" "hyprland.desktop"
 
-      # Cinnamon se ofrece únicamente mediante su sesión Wayland.
-      mask_session "xsessions" "cinnamon.desktop"
-      mask_session "xsessions" "cinnamon2d.desktop"
+    # Cinnamon se ofrece únicamente mediante su sesión Wayland.
+    mask_session "xsessions" "cinnamon.desktop"
+    mask_session "xsessions" "cinnamon2d.desktop"
 
-      # Plasma se ofrece únicamente mediante Wayland.
-      mask_session "xsessions" "plasmax11.desktop"
-    '';
+    # Plasma se ofrece únicamente mediante Wayland.
+    mask_session "xsessions" "plasmax11.desktop"
+  '';
 
   # Genera copias de los lanzadores con OnlyShowIn. Los ejecutables siguen
   # instalados: únicamente se separa lo que muestra cada menú/launcher.
-  desktopVisibilityOverlay =
-    pkgs.runCommand "korunix-desktop-visibility" {} ''
-      set -eu
+  desktopVisibilityOverlay = pkgs.runCommand "korunix-desktop-visibility" {} ''
+    set -eu
 
-      mkdir -p "$out/share/applications" "$out/etc/xdg/autostart"
+    mkdir -p "$out/share/applications" "$out/etc/xdg/autostart"
 
-      patch_desktop_file() {
-        source="$1"
-        target="$2"
-        desktops="$3"
+    patch_desktop_file() {
+      source="$1"
+      target="$2"
+      desktops="$3"
 
-        mkdir -p "$(dirname "$target")"
+      mkdir -p "$(dirname "$target")"
 
-        ${pkgs.gawk}/bin/awk \
-          -v desktops="$desktops" \
-          '
-            /^\[Desktop Entry\]$/ {
-              print
-              print "OnlyShowIn=" desktops ";"
-              in_desktop = 1
-              next
-            }
+      ${pkgs.gawk}/bin/awk \
+        -v desktops="$desktops" \
+        '
+          /^\[Desktop Entry\]$/ {
+            print
+            print "OnlyShowIn=" desktops ";"
+            in_desktop = 1
+            next
+          }
 
-            in_desktop && /^(OnlyShowIn|NotShowIn)=/ {
-              next
-            }
+          in_desktop && /^(OnlyShowIn|NotShowIn)=/ {
+            next
+          }
 
-            /^\[/ {
-              in_desktop = 0
-            }
+          /^\[/ {
+            in_desktop = 0
+          }
 
-            {
-              print
-            }
-          ' \
-          "$source" > "$target"
-      }
+          {
+            print
+          }
+        ' \
+        "$source" > "$target"
+    }
 
-      patch_package() {
-        package="$1"
-        desktops="$2"
-        directory="$package/share/applications"
+    patch_package() {
+      package="$1"
+      desktops="$2"
+      directory="$package/share/applications"
 
-        [ -d "$directory" ] || return 0
+      [ -d "$directory" ] || return 0
 
-        for source in "$directory"/*.desktop; do
-          [ -f "$source" ] || continue
+      for source in "$directory"/*.desktop; do
+        [ -f "$source" ] || continue
 
-          target="$out/share/applications/$(basename "$source")"
-          patch_desktop_file "$source" "$target" "$desktops"
-        done
-      }
-
-      for package in ${lib.escapeShellArgs (
-        map toString (
-          lib.optionals noctaliaEnabled noctaliaOnlyApplications
-        )
-      )}; do
-        patch_package "$package" "niri;Hyprland"
+        target="$out/share/applications/$(basename "$source")"
+        patch_desktop_file "$source" "$target" "$desktops"
       done
+    }
 
-      for package in ${lib.escapeShellArgs (
-        map toString (
-          lib.optionals
-            (noctaliaEnabled || cinnamonEnabled)
-            noctaliaCinnamonApplications
-        )
-      )}; do
-        patch_package "$package" "niri;Hyprland;X-Cinnamon"
-      done
+    for package in ${lib.escapeShellArgs (
+      map toString (
+        lib.optionals noctaliaEnabled noctaliaOnlyApplications
+      )
+    )}; do
+      patch_package "$package" "niri;Hyprland"
+    done
 
-      for package in ${lib.escapeShellArgs (
-        map toString (
-          lib.optionals plasmaEnabled plasmaMenuApplications
-        )
-      )}; do
-        patch_package "$package" "KDE"
-      done
+    for package in ${lib.escapeShellArgs (
+      map toString (
+        lib.optionals
+        (noctaliaEnabled || cinnamonEnabled)
+        noctaliaCinnamonApplications
+      )
+    )}; do
+      patch_package "$package" "niri;Hyprland;X-Cinnamon"
+    done
 
-      for package in ${lib.escapeShellArgs (
-        map toString (
-          lib.optionals cinnamonEnabled cinnamonMenuApplications
-        )
-      )}; do
-        patch_package "$package" "X-Cinnamon"
-      done
+    for package in ${lib.escapeShellArgs (
+      map toString (
+        lib.optionals plasmaEnabled plasmaMenuApplications
+      )
+    )}; do
+      patch_package "$package" "KDE"
+    done
 
-      # Valent solo pertenece a Niri, Hyprland y Cinnamon.
-      for package in ${lib.escapeShellArgs (
-        map toString (
-          lib.optionals valentDesktopEnabled [pkgs.valent]
-        )
-      )}; do
-        patch_package "$package" "niri;Hyprland;X-Cinnamon"
+    for package in ${lib.escapeShellArgs (
+      map toString (
+        lib.optionals cinnamonEnabled cinnamonMenuApplications
+      )
+    )}; do
+      patch_package "$package" "X-Cinnamon"
+    done
 
-        patch_desktop_file \
-          "$package/etc/xdg/autostart/ca.andyholmes.Valent-autostart.desktop" \
-          "$out/etc/xdg/autostart/ca.andyholmes.Valent-autostart.desktop" \
-          "niri;Hyprland;X-Cinnamon"
-      done
+    # Valent solo pertenece a Niri, Hyprland y Cinnamon.
+    for package in ${lib.escapeShellArgs (
+      map toString (
+        lib.optionals valentDesktopEnabled [pkgs.valent]
+      )
+    )}; do
+      patch_package "$package" "niri;Hyprland;X-Cinnamon"
 
-      # Plasma utiliza KDE Connect y no arranca Valent.
-      for package in ${lib.escapeShellArgs (
-        map toString (
-          lib.optionals kdeConnectDesktopEnabled [
-            pkgs.kdePackages.kdeconnect-kde
-          ]
-        )
-      )}; do
-        patch_package "$package" "KDE"
+      patch_desktop_file \
+        "$package/etc/xdg/autostart/ca.andyholmes.Valent-autostart.desktop" \
+        "$out/etc/xdg/autostart/ca.andyholmes.Valent-autostart.desktop" \
+        "niri;Hyprland;X-Cinnamon"
+    done
 
-        patch_desktop_file \
-          "$package/etc/xdg/autostart/org.kde.kdeconnect.daemon.desktop" \
-          "$out/etc/xdg/autostart/org.kde.kdeconnect.daemon.desktop" \
-          "KDE"
+    # Plasma utiliza KDE Connect y no arranca Valent.
+    for package in ${lib.escapeShellArgs (
+      map toString (
+        lib.optionals kdeConnectDesktopEnabled [
+          pkgs.kdePackages.kdeconnect-kde
+        ]
+      )
+    )}; do
+      patch_package "$package" "KDE"
 
-        # El indicador non-Plasma no se utiliza: fuera de KDE usamos Valent.
-        printf '%s\n' \
-          '[Desktop Entry]' \
-          'Type=Application' \
-          'Name=KDE Connect Indicator' \
-          'Exec=/run/current-system/sw/bin/false' \
-          'Hidden=true' \
-          'NoDisplay=true' \
-          > "$out/share/applications/org.kde.kdeconnect.nonplasma.desktop"
-      done
-    '';
+      patch_desktop_file \
+        "$package/etc/xdg/autostart/org.kde.kdeconnect.daemon.desktop" \
+        "$out/etc/xdg/autostart/org.kde.kdeconnect.daemon.desktop" \
+        "KDE"
+
+      # El indicador non-Plasma no se utiliza: fuera de KDE usamos Valent.
+      printf '%s\n' \
+        '[Desktop Entry]' \
+        'Type=Application' \
+        'Name=KDE Connect Indicator' \
+        'Exec=/run/current-system/sw/bin/false' \
+        'Hidden=true' \
+        'NoDisplay=true' \
+        > "$out/share/applications/org.kde.kdeconnect.nonplasma.desktop"
+    done
+  '';
 
   # El servicio de Noctalia existe porque Niri/Hyprland están instalados,
   # pero solo arranca cuando systemd pertenece realmente a una de esas sesiones.
   # Usamos el entorno importado de la sesión y no buscamos procesos: así se evita
   # una carrera durante el inicio de Hyprland.
-  noctaliaSessionCheck =
-    pkgs.writeShellScript "korunix-noctalia-session-check" ''
-      case "''${XDG_CURRENT_DESKTOP:-}" in
-        niri|Hyprland)
-          exit 0
-          ;;
-      esac
+  noctaliaSessionCheck = pkgs.writeShellScript "korunix-noctalia-session-check" ''
+    case "''${XDG_CURRENT_DESKTOP:-}" in
+      niri|Hyprland)
+        exit 0
+        ;;
+    esac
 
-      case "''${XDG_SESSION_DESKTOP:-}" in
-        niri|Hyprland)
-          exit 0
-          ;;
-      esac
+    case "''${XDG_SESSION_DESKTOP:-}" in
+      niri|Hyprland)
+        exit 0
+        ;;
+    esac
 
-      case "''${DESKTOP_SESSION:-}" in
-        niri|hyprland-uwsm)
-          exit 0
-          ;;
-      esac
+    case "''${DESKTOP_SESSION:-}" in
+      niri|hyprland-uwsm)
+        exit 0
+        ;;
+    esac
 
-      exit 1
-    '';
+    exit 1
+  '';
 
   # El perfil visual de Noctalia usa una base de usuario distinta de la base
   # normal. Así puede cambiar con la paleta sin escribir la preferencia que
@@ -440,94 +438,92 @@
   # Hatter Slate acompaña la apariencia predeterminada y las paletas generadas
   # desde el fondo. Hatter Green solo corresponde a Everforest cuando esa es la
   # selección efectiva de Noctalia, incluidos los cambios guardados por su GUI.
-  applyNoctaliaIconTheme =
-    pkgs.writeShellScript "korunix-noctalia-icon-theme" ''
-      set -eu
+  applyNoctaliaIconTheme = pkgs.writeShellScript "korunix-noctalia-icon-theme" ''
+    set -eu
 
-      mode="''${1:---default}"
-      selection=""
+    mode="''${1:---default}"
+    selection=""
 
-      case "$mode" in
-        --default)
-          # Antes de iniciar Noctalia no inferimos preferencias desde archivos
-          # parciales: Slate es siempre el valor seguro y predeterminado.
-          ;;
-        --resolved)
-          attempt=0
+    case "$mode" in
+      --default)
+        # Antes de iniciar Noctalia no inferimos preferencias desde archivos
+        # parciales: Slate es siempre el valor seguro y predeterminado.
+        ;;
+      --resolved)
+        attempt=0
 
-          # La GUI guarda primero su estado y después lo publica por IPC. Esta
-          # espera breve evita leer la selección anterior durante ese relevo.
-          while [ "$attempt" -lt 40 ]; do
-            selection="$(${lib.getExe noctaliaPackage} msg color-scheme-get 2>/dev/null || true)"
+        # La GUI guarda primero su estado y después lo publica por IPC. Esta
+        # espera breve evita leer la selección anterior durante ese relevo.
+        while [ "$attempt" -lt 40 ]; do
+          selection="$(${lib.getExe noctaliaPackage} msg color-scheme-get 2>/dev/null || true)"
 
-            if [ -n "$selection" ]; then
-              break
-            fi
+          if [ -n "$selection" ]; then
+            break
+          fi
 
-            attempt=$((attempt + 1))
-            ${pkgs.coreutils}/bin/sleep 0.1
-          done
-          ;;
-        *)
-          echo "Korunix: modo de sincronización no válido: $mode" >&2
-          exit 1
-          ;;
-      esac
+          attempt=$((attempt + 1))
+          ${pkgs.coreutils}/bin/sleep 0.1
+        done
+        ;;
+      *)
+        echo "Korunix: modo de sincronización no válido: $mode" >&2
+        exit 1
+        ;;
+    esac
 
-      selection="$(
-        printf '%s\n' "$selection" |
-          ${pkgs.coreutils}/bin/head -n 1 |
-          ${pkgs.coreutils}/bin/tr '[:upper:]' '[:lower:]'
-      )"
+    selection="$(
+      printf '%s\n' "$selection" |
+        ${pkgs.coreutils}/bin/head -n 1 |
+        ${pkgs.coreutils}/bin/tr '[:upper:]' '[:lower:]'
+    )"
 
-      case "$selection" in
-        "community everforest")
-          theme="Hatter-Green"
-          ;;
-        *)
-          theme="Hatter-Slate"
-          ;;
-      esac
+    case "$selection" in
+      "community everforest")
+        theme="Hatter-Green"
+        ;;
+      *)
+        theme="Hatter-Slate"
+        ;;
+    esac
 
-      case "$theme" in
-        Hatter-Slate|Hatter-Green)
-          ;;
-        *)
-          echo "Korunix: variante de iconos no válida: $theme" >&2
-          exit 1
-          ;;
-      esac
+    case "$theme" in
+      Hatter-Slate|Hatter-Green)
+        ;;
+      *)
+        echo "Korunix: variante de iconos no válida: $theme" >&2
+        exit 1
+        ;;
+    esac
 
-      DCONF_PROFILE=noctalia \
-        ${lib.getExe' pkgs.glib "gsettings"} set \
-        org.gnome.desktop.interface \
-        icon-theme \
-        "$theme"
+    DCONF_PROFILE=noctalia \
+      ${lib.getExe' pkgs.glib "gsettings"} set \
+      org.gnome.desktop.interface \
+      icon-theme \
+      "$theme"
 
-      if [ -n "$selection" ]; then
-        echo "Korunix: Noctalia usa $theme para '$selection'."
-      else
-        echo "Korunix: Noctalia usa Hatter-Slate como variante predeterminada."
-      fi
-    '';
+    if [ -n "$selection" ]; then
+      echo "Korunix: Noctalia usa $theme para '$selection'."
+    else
+      echo "Korunix: Noctalia usa Hatter-Slate como variante predeterminada."
+    fi
+  '';
 
   # GTK4 consulta el tema de iconos mediante el portal y no directamente desde
   # el proceso de la aplicación. Los portales comparten unidades entre todos los
   # escritorios, así que el perfil debe elegirse al arrancar cada sesión.
-  portalSessionWrapper =
-    name: executable:
-      pkgs.writeShellScript name ''
-        case ":''${XDG_CURRENT_DESKTOP:-}:''${XDG_SESSION_DESKTOP:-}:''${DESKTOP_SESSION:-}:" in
-          *:niri:*|*:Niri:*|*:Hyprland:*|*:hyprland:*|*:hyprland-uwsm:*)
-            export DCONF_PROFILE=noctalia
-            ;;
-          *)
-            unset DCONF_PROFILE
-            ;;
-        esac
+  portalSessionWrapper = name: executable:
+    pkgs.writeShellScript name ''
+      case ":''${XDG_CURRENT_DESKTOP:-}:''${XDG_SESSION_DESKTOP:-}:''${DESKTOP_SESSION:-}:" in
+        *:niri:*|*:Niri:*|*:Hyprland:*|*:hyprland:*|*:hyprland-uwsm:*)
+          export DCONF_PROFILE=noctalia
+          ;;
+        *)
+          unset DCONF_PROFILE
+          ;;
+      esac
 
-        exec ${executable}
-      '';
+      exec ${executable}
+    '';
 
   gtkPortalSession =
     portalSessionWrapper
@@ -542,60 +538,61 @@
   # Los módulos pueden traer varias sesiones, pero Korunix publica una sola
   # sesión Wayland por escritorio. El propio paquete declara exactamente esos
   # nombres a services.displayManager.
-  waylandSessions = pkgs.runCommand "korunix-wayland-sessions" {
-    passthru.providedSessions = waylandSessionNames;
-  } ''
-    set -eu
+  waylandSessions =
+    pkgs.runCommand "korunix-wayland-sessions" {
+      passthru.providedSessions = waylandSessionNames;
+    } ''
+      set -eu
 
-    mkdir -p "$out/share/wayland-sessions"
-    mkdir -p "$out/share/xsessions"
+      mkdir -p "$out/share/wayland-sessions"
+      mkdir -p "$out/share/xsessions"
 
-    ${lib.optionalString niriEnabled ''
-      cp \
-        ${config.programs.niri.package}/share/wayland-sessions/niri.desktop \
-        "$out/share/wayland-sessions/niri.desktop"
-    ''}
+      ${lib.optionalString niriEnabled ''
+        cp \
+          ${config.programs.niri.package}/share/wayland-sessions/niri.desktop \
+          "$out/share/wayland-sessions/niri.desktop"
+      ''}
 
-    ${lib.optionalString hyprlandEnabled ''
-      # No reutilizamos hyprland-uwsm.desktop del paquete porque esa entrada
-      # vuelve a resolver hyprland.desktop. Korunix oculta esa sesión directa
-      # en GDM, por lo que la sesión UWSM debe ser autosuficiente.
-      cat > "$out/share/wayland-sessions/hyprland-uwsm.desktop" <<EOF
-[Desktop Entry]
-Name=Hyprland (uwsm-managed)
-Comment=Hyprland Wayland administrado por UWSM
-Exec=${lib.getExe config.programs.uwsm.package} start -- ${config.programs.hyprland.package}/share/wayland-sessions/hyprland.desktop
-Type=Application
-DesktopNames=Hyprland
-EOF
-    ''}
+      ${lib.optionalString hyprlandEnabled ''
+              # No reutilizamos hyprland-uwsm.desktop del paquete porque esa entrada
+              # vuelve a resolver hyprland.desktop. Korunix oculta esa sesión directa
+              # en GDM, por lo que la sesión UWSM debe ser autosuficiente.
+              cat > "$out/share/wayland-sessions/hyprland-uwsm.desktop" <<EOF
+        [Desktop Entry]
+        Name=Hyprland (uwsm-managed)
+        Comment=Hyprland Wayland administrado por UWSM
+        Exec=${lib.getExe config.programs.uwsm.package} start -- ${config.programs.hyprland.package}/share/wayland-sessions/hyprland.desktop
+        Type=Application
+        DesktopNames=Hyprland
+        EOF
+      ''}
 
-    ${lib.optionalString plasmaEnabled ''
-      cp \
-        ${pkgs.kdePackages.plasma-workspace.sessions}/share/wayland-sessions/plasma.desktop \
-        "$out/share/wayland-sessions/plasma.desktop"
-    ''}
+      ${lib.optionalString plasmaEnabled ''
+        cp \
+          ${pkgs.kdePackages.plasma-workspace.sessions}/share/wayland-sessions/plasma.desktop \
+          "$out/share/wayland-sessions/plasma.desktop"
+      ''}
 
-    ${lib.optionalString cinnamonEnabled ''
-      cp \
-        ${pkgs.cinnamon}/share/wayland-sessions/cinnamon-wayland.desktop \
-        "$out/share/wayland-sessions/cinnamon-wayland.desktop"
-
-      # Cinnamon no declara DesktopNames upstream. Korunix lo hace explícito
-      # para poder separar después sus aplicaciones mediante OnlyShowIn.
-      if ${pkgs.gnugrep}/bin/grep -q '^DesktopNames=' \
-        "$out/share/wayland-sessions/cinnamon-wayland.desktop"
-      then
-        ${pkgs.gnused}/bin/sed -i \
-          's/^DesktopNames=.*/DesktopNames=X-Cinnamon/' \
+      ${lib.optionalString cinnamonEnabled ''
+        cp \
+          ${pkgs.cinnamon}/share/wayland-sessions/cinnamon-wayland.desktop \
           "$out/share/wayland-sessions/cinnamon-wayland.desktop"
-      else
-        ${pkgs.gnused}/bin/sed -i \
-          '/^\[Desktop Entry\]$/a DesktopNames=X-Cinnamon' \
+
+        # Cinnamon no declara DesktopNames upstream. Korunix lo hace explícito
+        # para poder separar después sus aplicaciones mediante OnlyShowIn.
+        if ${pkgs.gnugrep}/bin/grep -q '^DesktopNames=' \
           "$out/share/wayland-sessions/cinnamon-wayland.desktop"
-      fi
-    ''}
-  '';
+        then
+          ${pkgs.gnused}/bin/sed -i \
+            's/^DesktopNames=.*/DesktopNames=X-Cinnamon/' \
+            "$out/share/wayland-sessions/cinnamon-wayland.desktop"
+        else
+          ${pkgs.gnused}/bin/sed -i \
+            '/^\[Desktop Entry\]$/a DesktopNames=X-Cinnamon' \
+            "$out/share/wayland-sessions/cinnamon-wayland.desktop"
+        fi
+      ''}
+    '';
 
   # El autostart genérico de IBus no debe competir con las sesiones que
   # Korunix administra directamente mediante su modelo XKB.
@@ -603,46 +600,43 @@ EOF
     config.i18n.inputMethod.enable
     && config.i18n.inputMethod.type == "ibus";
 
-  ibusPackage =
-    pkgs.ibus-with-plugins.override {
-      plugins = config.i18n.inputMethod.ibus.engines;
-    };
+  ibusPackage = pkgs.ibus-with-plugins.override {
+    plugins = config.i18n.inputMethod.ibus.engines;
+  };
 
   ibusPanel = config.i18n.inputMethod.ibus.panel;
 
   ibusPanelArgument =
     lib.optionalString
-      (ibusPanel != null)
-      "--panel=${toString ibusPanel}";
+    (ibusPanel != null)
+    "--panel=${toString ibusPanel}";
 
-  hyprlandMonitorRule =
-    lib.optionalString monitorConfigured ''
-      hl.monitor({
-          output = ${builtins.toJSON cfg.monitor.output},
-          mode = ${builtins.toJSON monitorMode},
-      })
+  hyprlandMonitorRule = lib.optionalString monitorConfigured ''
+    hl.monitor({
+        output = ${builtins.toJSON cfg.monitor.output},
+        mode = ${builtins.toJSON monitorMode},
+    })
 
-    '';
+  '';
 
   # Hyprland 0.55+ usa Lua. El archivo humano permanece en config/ y estos
   # marcadores reciben las decisiones específicas del equipo.
-  hyprlandConfig =
-    pkgs.writeText "korunix-hyprland.lua" (
-      builtins.replaceStrings
-        [
-          "@KORUNIX_MONITOR_RULE@"
-          "@KORUNIX_KEYBOARD_LAYOUTS@"
-          "@KORUNIX_KEYBOARD_VARIANTS@"
-          "@KORUNIX_KEYBOARD_OPTIONS@"
-        ]
-        [
-          hyprlandMonitorRule
-          (lib.concatStringsSep "," keyboardLayouts)
-          (lib.concatStringsSep "," keyboardVariants)
-          localization.keyboard.switchOption
-        ]
-        (builtins.readFile ../config/hyprland.lua)
-    );
+  hyprlandConfig = pkgs.writeText "korunix-hyprland.lua" (
+    builtins.replaceStrings
+    [
+      "@KORUNIX_MONITOR_RULE@"
+      "@KORUNIX_KEYBOARD_LAYOUTS@"
+      "@KORUNIX_KEYBOARD_VARIANTS@"
+      "@KORUNIX_KEYBOARD_OPTIONS@"
+    ]
+    [
+      hyprlandMonitorRule
+      (lib.concatStringsSep "," keyboardLayouts)
+      (lib.concatStringsSep "," keyboardVariants)
+      localization.keyboard.switchOption
+    ]
+    (builtins.readFile ../config/hyprland.lua)
+  );
 in {
   options.korunix.desktop = {
     primary = lib.mkOption {
@@ -755,18 +749,17 @@ in {
     # La copia en /etc/xdg tiene prioridad sobre el autostart aportado por el
     # paquete de IBus. Conservamos su comportamiento original y añadimos solo
     # las sesiones que Korunix administra directamente mediante XKB.
-    environment.etc."xdg/autostart/ibus-daemon.desktop" =
-      lib.mkIf (ibusEnabled && (niriEnabled || hyprlandEnabled)) {
-        text = ''
-          [Desktop Entry]
-          Name=IBus
-          Type=Application
-          Exec=${ibusPackage}/bin/ibus-daemon --daemonize --xim ${ibusPanelArgument}
-          # KDE lo integra desde su propio escritorio.
-          # Niri y Hyprland usan el teclado XKB administrado por Korunix.
-          NotShowIn=KDE;niri;Hyprland;hyprland;
-        '';
-      };
+    environment.etc."xdg/autostart/ibus-daemon.desktop" = lib.mkIf (ibusEnabled && (niriEnabled || hyprlandEnabled)) {
+      text = ''
+        [Desktop Entry]
+        Name=IBus
+        Type=Application
+        Exec=${ibusPackage}/bin/ibus-daemon --daemonize --xim ${ibusPanelArgument}
+        # KDE lo integra desde su propio escritorio.
+        # Niri y Hyprland usan el teclado XKB administrado por Korunix.
+        NotShowIn=KDE;niri;Hyprland;hyprland;
+      '';
+    };
 
     # El overlay tiene prioridad sobre los .desktop originales y separa los
     # menús sin desinstalar componentes que cada escritorio necesite.
@@ -797,11 +790,10 @@ in {
     };
 
     # Nautilus pertenece a la experiencia Noctalia.
-    programs.nautilus-open-any-terminal =
-      lib.mkIf noctaliaEnabled {
-        enable = true;
-        terminal = "alacritty";
-      };
+    programs.nautilus-open-any-terminal = lib.mkIf noctaliaEnabled {
+      enable = true;
+      terminal = "alacritty";
+    };
 
     # El teclado concreto del equipo se genera desde korunix.localization.
     environment.etc."korunix/niri-input.kdl" = lib.mkIf niriEnabled {
@@ -824,17 +816,16 @@ in {
     };
 
     # La salida específica del equipo vive separada de la experiencia común.
-    environment.etc."korunix/niri-output.kdl" =
-      lib.mkIf (niriEnabled && monitorConfigured) {
-        text = ''
-          // Archivo generado por Korunix.
-          // Edita korunix.desktop.monitor, no este archivo.
+    environment.etc."korunix/niri-output.kdl" = lib.mkIf (niriEnabled && monitorConfigured) {
+      text = ''
+        // Archivo generado por Korunix.
+        // Edita korunix.desktop.monitor, no este archivo.
 
-          output ${builtins.toJSON cfg.monitor.output} {
-            mode ${builtins.toJSON monitorMode}
-          }
-        '';
-      };
+        output ${builtins.toJSON cfg.monitor.output} {
+          mode ${builtins.toJSON monitorMode}
+        }
+      '';
+    };
 
     # La experiencia común de Niri permanece como archivo humano del repositorio.
     environment.etc."niri/config.kdl" = lib.mkIf niriEnabled {
@@ -865,86 +856,81 @@ in {
     # Slate se fija antes de que arranquen Noctalia y los portales. Esto evita
     # reutilizar la variante de una sesión anterior mientras el IPC aún no está
     # disponible.
-    systemd.user.services.korunix-noctalia-icon-theme-default =
-      lib.mkIf noctaliaEnabled {
-        description = "Prepara Hatter Slate para la sesión Noctalia";
+    systemd.user.services.korunix-noctalia-icon-theme-default = lib.mkIf noctaliaEnabled {
+      description = "Prepara Hatter Slate para la sesión Noctalia";
 
-        wantedBy = ["graphical-session-pre.target"];
-        after = ["korunix-user-prepare.service"];
-        requires = ["korunix-user-prepare.service"];
-        before = [
-          "graphical-session.target"
-          "noctalia.service"
-          "xdg-desktop-portal-gtk.service"
-          "xdg-desktop-portal-gnome.service"
-        ];
+      wantedBy = ["graphical-session-pre.target"];
+      after = ["korunix-user-prepare.service"];
+      requires = ["korunix-user-prepare.service"];
+      before = [
+        "graphical-session.target"
+        "noctalia.service"
+        "xdg-desktop-portal-gtk.service"
+        "xdg-desktop-portal-gnome.service"
+      ];
 
-        serviceConfig = {
-          Type = "oneshot";
-          ExecCondition = noctaliaSessionCheck;
-          ExecStart = "${applyNoctaliaIconTheme} --default";
-        };
+      serviceConfig = {
+        Type = "oneshot";
+        ExecCondition = noctaliaSessionCheck;
+        ExecStart = "${applyNoctaliaIconTheme} --default";
       };
+    };
 
     # Después de iniciar Noctalia, su IPC informa la selección efectiva. Así las
     # preferencias guardadas por la GUI tienen prioridad sobre el archivo base.
-    systemd.user.services.korunix-noctalia-icon-theme-sync =
-      lib.mkIf noctaliaEnabled {
-        description = "Sincroniza Hatter con la paleta efectiva de Noctalia";
+    systemd.user.services.korunix-noctalia-icon-theme-sync = lib.mkIf noctaliaEnabled {
+      description = "Sincroniza Hatter con la paleta efectiva de Noctalia";
 
-        wantedBy = ["graphical-session.target"];
-        after = ["noctalia.service"];
-        wants = ["noctalia.service"];
+      wantedBy = ["graphical-session.target"];
+      after = ["noctalia.service"];
+      wants = ["noctalia.service"];
 
-        serviceConfig = {
-          Type = "oneshot";
-          ExecCondition = noctaliaSessionCheck;
-          ExecStart = "${applyNoctaliaIconTheme} --resolved";
-        };
+      serviceConfig = {
+        Type = "oneshot";
+        ExecCondition = noctaliaSessionCheck;
+        ExecStart = "${applyNoctaliaIconTheme} --resolved";
       };
+    };
 
     # Noctalia conserva la configuración humana en config.toml y los cambios de
     # su interfaz en settings.toml. Cualquiera de los dos vuelve a consultar el
     # estado efectivo, sin deducirlo directamente del contenido de esos archivos.
-    systemd.user.paths.korunix-noctalia-icon-theme-sync =
-      lib.mkIf noctaliaEnabled {
-        description = "Observa la paleta activa de Noctalia";
-        wantedBy = ["graphical-session.target"];
+    systemd.user.paths.korunix-noctalia-icon-theme-sync = lib.mkIf noctaliaEnabled {
+      description = "Observa la paleta activa de Noctalia";
+      wantedBy = ["graphical-session.target"];
 
-        pathConfig = {
-          PathChanged = [
-            "%h/.config/noctalia/config.toml"
-            "%h/.config/noctalia/settings.toml"
-          ];
-          Unit = "korunix-noctalia-icon-theme-sync.service";
-        };
+      pathConfig = {
+        PathChanged = [
+          "%h/.config/noctalia/config.toml"
+          "%h/.config/noctalia/settings.toml"
+        ];
+        Unit = "korunix-noctalia-icon-theme-sync.service";
       };
+    };
 
     # En Wayland, GTK4 recibe el tema mediante org.freedesktop.portal.Settings.
     # Estos drop-ins conservan las unidades originales y sustituyen únicamente
     # su ejecutable por un selector que aplica la variante Hatter elegida para
     # Niri/Hyprland y deja el perfil nativo intacto en Cinnamon y Plasma.
-    systemd.user.services.xdg-desktop-portal-gtk =
-      lib.mkIf noctaliaEnabled {
-        after = ["korunix-noctalia-icon-theme-sync.service"];
-        wants = ["korunix-noctalia-icon-theme-sync.service"];
+    systemd.user.services.xdg-desktop-portal-gtk = lib.mkIf noctaliaEnabled {
+      after = ["korunix-noctalia-icon-theme-sync.service"];
+      wants = ["korunix-noctalia-icon-theme-sync.service"];
 
-        serviceConfig.ExecStart = [
-          ""
-          "${gtkPortalSession}"
-        ];
-      };
+      serviceConfig.ExecStart = [
+        ""
+        "${gtkPortalSession}"
+      ];
+    };
 
-    systemd.user.services.xdg-desktop-portal-gnome =
-      lib.mkIf niriEnabled {
-        after = ["korunix-noctalia-icon-theme-sync.service"];
-        wants = ["korunix-noctalia-icon-theme-sync.service"];
+    systemd.user.services.xdg-desktop-portal-gnome = lib.mkIf niriEnabled {
+      after = ["korunix-noctalia-icon-theme-sync.service"];
+      wants = ["korunix-noctalia-icon-theme-sync.service"];
 
-        serviceConfig.ExecStart = [
-          ""
-          "${gnomePortalSession}"
-        ];
-      };
+      serviceConfig.ExecStart = [
+        ""
+        "${gnomePortalSession}"
+      ];
+    };
 
     # Noctalia utiliza su módulo NixOS oficial. Su servicio de usuario arranca
     # después de que Korunix haya preparado la configuración de esa persona.
@@ -955,20 +941,19 @@ in {
       recommendedServices.enable = false;
     };
 
-    systemd.user.services.korunix-noctalia-keyboard-labels =
-      lib.mkIf noctaliaEnabled {
-        description = "Prepara los nombres humanos del teclado para Noctalia";
+    systemd.user.services.korunix-noctalia-keyboard-labels = lib.mkIf noctaliaEnabled {
+      description = "Prepara los nombres humanos del teclado para Noctalia";
 
-        after = ["korunix-user-prepare.service"];
-        requires = ["korunix-user-prepare.service"];
-        before = ["noctalia.service"];
+      after = ["korunix-user-prepare.service"];
+      requires = ["korunix-user-prepare.service"];
+      before = ["noctalia.service"];
 
-        serviceConfig = {
-          Type = "oneshot";
-          ExecCondition = noctaliaSessionCheck;
-          ExecStart = prepareKeyboardLabels;
-        };
+      serviceConfig = {
+        Type = "oneshot";
+        ExecCondition = noctaliaSessionCheck;
+        ExecStart = prepareKeyboardLabels;
       };
+    };
 
     systemd.user.services.noctalia = lib.mkIf noctaliaEnabled {
       after = [
