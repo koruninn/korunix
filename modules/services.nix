@@ -5,10 +5,6 @@
   ...
 }: let
   cfg = config.korunix.services;
-
-  # Valent utiliza el protocolo de KDE Connect. Sus puertos solo se abren cuando
-  # la aplicación está realmente seleccionada, en lugar de dejarlos globalmente.
-  valentEnabled = lib.elem "valent" config.korunix.applications;
 in {
   options.korunix.services = {
     avahi = lib.mkEnableOption "descubrimiento de dispositivos en la red local";
@@ -34,20 +30,6 @@ in {
     # capacidades habilitadas para que nadie tenga que administrar puertos a mano.
     networking.firewall = {
       enable = true;
-
-      allowedTCPPortRanges = lib.optionals valentEnabled [
-        {
-          from = 1714;
-          to = 1764;
-        }
-      ];
-
-      allowedUDPPortRanges = lib.optionals valentEnabled [
-        {
-          from = 1714;
-          to = 1764;
-        }
-      ];
     };
 
     services.pulseaudio.enable = false;

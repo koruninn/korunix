@@ -86,9 +86,8 @@
     mv "$target.tmp" "$target"
   '';
 
-  # Korunix mantiene cuatro escritorios objetivo. Niri y Hyprland ya tienen
-  # implementación completa; Cinnamon y Plasma permanecen protegidos hasta
-  # recibir su integración dedicada.
+  # Korunix mantiene cuatro escritorios soportados. Cada uno conserva su
+  # integración nativa; Noctalia pertenece únicamente a Niri y Hyprland.
   desktopType = lib.types.enum [
     "niri"
     "hyprland"
@@ -99,6 +98,8 @@
   implementedDesktops = [
     "niri"
     "hyprland"
+    "cinnamon"
+    "plasma"
   ];
 
   enabledDesktops = lib.unique ([cfg.primary] ++ cfg.additional);
@@ -110,7 +111,379 @@
 
   niriEnabled = lib.elem "niri" enabledDesktops;
   hyprlandEnabled = lib.elem "hyprland" enabledDesktops;
+  cinnamonEnabled = lib.elem "cinnamon" enabledDesktops;
+  plasmaEnabled = lib.elem "plasma" enabledDesktops;
+
+  monitorConfigured =
+    cfg.monitor.output != null
+    && cfg.monitor.mode != null;
+
+  monitorMode =
+    lib.optionalString monitorConfigured
+    "${cfg.monitor.mode}@${toString cfg.monitor.refreshRate}.000";
+
   noctaliaEnabled = niriEnabled || hyprlandEnabled;
+
+  # La integración de dispositivos sigue el escritorio activo: Valent pertenece
+  # a los escritorios GTK/Noctalia y KDE Connect a Plasma.
+  valentDesktopEnabled = niriEnabled || hyprlandEnabled || cinnamonEnabled;
+  kdeConnectDesktopEnabled = plasmaEnabled;
+  deviceConnectEnabled = valentDesktopEnabled || kdeConnectDesktopEnabled;
+
+  # Korunix publica una sola sesión por escritorio y todas son Wayland.
+  desktopSessionNames = {
+    niri = "niri";
+    hyprland = "hyprland-uwsm";
+    plasma = "plasma";
+    cinnamon = "cinnamon-wayland";
+  };
+
+  waylandSessionNames =
+    map (
+      desktop: desktopSessionNames.${desktop}
+    )
+    enabledDesktops;
+
+  primarySession = desktopSessionNames.${cfg.primary};
+
+  # Niri y Hyprland comparten la experiencia Noctalia. Estas aplicaciones
+  # forman parte de esa experiencia y no del catálogo general.
+  noctaliaOnlyApplications = with pkgs; [
+    baobab
+    gnome-characters
+    gnome-clocks
+    gnome-font-viewer
+    gnome-maps
+    gnome-text-editor
+    gnome-weather
+    loupe
+    nautilus
+    papers
+    simple-scan
+    snapshot
+  ];
+
+  # Cinnamon utiliza también estas tres aplicaciones GNOME de forma nativa.
+  noctaliaCinnamonApplications = with pkgs; [
+    gnome-calculator
+    gnome-calendar
+    gnome-disk-utility
+  ];
+
+  noctaliaApplications =
+    noctaliaOnlyApplications
+    ++ noctaliaCinnamonApplications;
+
+  # Aplicaciones y utilidades visibles como parte de Plasma. Kate no se
+  # incluye porque está elegida explícitamente como aplicación general.
+  plasmaMenuApplications =
+    (with pkgs.kdePackages; [
+      ark
+      dolphin
+      elisa
+      gwenview
+      khelpcenter
+      kinfocenter
+      kmenuedit
+      konsole
+      krdp
+      kwalletmanager
+      okular
+      plasma-systemmonitor
+      spectacle
+      systemsettings
+    ])
+    ++ lib.optional
+      config.networking.networkmanager.enable
+      pkgs.kdePackages.qrca
+    ++ lib.optional
+      (config.services.flatpak.enable || config.services.fwupd.enable)
+      pkgs.kdePackages.discover
+    ++ lib.optional
+      config.services.printing.enable
+      pkgs.kdePackages.print-manager
+    ++ lib.optional
+      config.hardware.sane.enable
+      pkgs.kdePackages.skanpage
+    ++ lib.optional
+      config.services.colord.enable
+      pkgs.kdePackages.colord-kde
+    ++ lib.optional
+      config.services.hardware.bolt.enable
+      pkgs.kdePackages.plasma-thunderbolt
+    ++ lib.optional
+      config.services.flatpak.enable
+      pkgs.kdePackages.flatpak-kcm;
+
+  # Suite nativa de Cinnamon. Las tres aplicaciones compartidas con Noctalia
+  # se administran en noctaliaCinnamonApplications para no duplicar reglas.
+  cinnamonMenuApplications = with pkgs; [
+    bulky
+    warpinator
+    xviewer
+    xreader
+    xed-editor
+    pix
+    celluloid
+    gnome-screenshot
+    file-roller
+    gucharmap
+    gnome-terminal
+    nemo-with-extensions
+    cinnamon-control-center
+    cinnamon-screensaver
+    gnome-online-accounts-gtk
+    onboard
+  ];
+
+  # Algunos módulos enlazan también sus sesiones originales dentro del perfil
+  # general de NixOS. Estas máscaras XDG impiden que GDM vuelva a descubrir las
+  # variantes que Korunix no ofrece, sin modificar ni recortar los paquetes.
+  hiddenUnselectedSessions =
+    pkgs.runCommand "korunix-hidden-unselected-sessions" {} ''
+      set -eu
+
+      mask_session() {
+        directory="$1"
+        filename="$2"
+
+        mkdir -p "$out/share/$directory"
+
+        {
+          echo "[Desktop Entry]"
+          echo "Type=Application"
+          echo "Name=Hidden by Korunix"
+          echo "Exec=/run/current-system/sw/bin/false"
+          echo "Hidden=true"
+          echo "NoDisplay=true"
+        } > "$out/share/$directory/$filename"
+      }
+
+      # Hyprland se ofrece únicamente mediante UWSM.
+      mask_session "wayland-sessions" "hyprland.desktop"
+
+      # Cinnamon se ofrece únicamente mediante su sesión Wayland.
+      mask_session "xsessions" "cinnamon.desktop"
+      mask_session "xsessions" "cinnamon2d.desktop"
+
+      # Plasma se ofrece únicamente mediante Wayland.
+      mask_session "xsessions" "plasmax11.desktop"
+    '';
+
+  # Genera copias de los lanzadores con OnlyShowIn. Los ejecutables siguen
+  # instalados: únicamente se separa lo que muestra cada menú/launcher.
+  desktopVisibilityOverlay =
+    pkgs.runCommand "korunix-desktop-visibility" {} ''
+      set -eu
+
+      mkdir -p "$out/share/applications" "$out/etc/xdg/autostart"
+
+      patch_desktop_file() {
+        source="$1"
+        target="$2"
+        desktops="$3"
+
+        mkdir -p "$(dirname "$target")"
+
+        ${pkgs.gawk}/bin/awk \
+          -v desktops="$desktops" \
+          '
+            /^\[Desktop Entry\]$/ {
+              print
+              print "OnlyShowIn=" desktops ";"
+              in_desktop = 1
+              next
+            }
+
+            in_desktop && /^(OnlyShowIn|NotShowIn)=/ {
+              next
+            }
+
+            /^\[/ {
+              in_desktop = 0
+            }
+
+            {
+              print
+            }
+          ' \
+          "$source" > "$target"
+      }
+
+      patch_package() {
+        package="$1"
+        desktops="$2"
+        directory="$package/share/applications"
+
+        [ -d "$directory" ] || return 0
+
+        for source in "$directory"/*.desktop; do
+          [ -f "$source" ] || continue
+
+          target="$out/share/applications/$(basename "$source")"
+          patch_desktop_file "$source" "$target" "$desktops"
+        done
+      }
+
+      for package in ${lib.escapeShellArgs (
+        map toString (
+          lib.optionals noctaliaEnabled noctaliaOnlyApplications
+        )
+      )}; do
+        patch_package "$package" "niri;Hyprland"
+      done
+
+      for package in ${lib.escapeShellArgs (
+        map toString (
+          lib.optionals
+            (noctaliaEnabled || cinnamonEnabled)
+            noctaliaCinnamonApplications
+        )
+      )}; do
+        patch_package "$package" "niri;Hyprland;X-Cinnamon"
+      done
+
+      for package in ${lib.escapeShellArgs (
+        map toString (
+          lib.optionals plasmaEnabled plasmaMenuApplications
+        )
+      )}; do
+        patch_package "$package" "KDE"
+      done
+
+      for package in ${lib.escapeShellArgs (
+        map toString (
+          lib.optionals cinnamonEnabled cinnamonMenuApplications
+        )
+      )}; do
+        patch_package "$package" "X-Cinnamon"
+      done
+
+      # Valent solo pertenece a Niri, Hyprland y Cinnamon.
+      for package in ${lib.escapeShellArgs (
+        map toString (
+          lib.optionals valentDesktopEnabled [pkgs.valent]
+        )
+      )}; do
+        patch_package "$package" "niri;Hyprland;X-Cinnamon"
+
+        patch_desktop_file \
+          "$package/etc/xdg/autostart/ca.andyholmes.Valent-autostart.desktop" \
+          "$out/etc/xdg/autostart/ca.andyholmes.Valent-autostart.desktop" \
+          "niri;Hyprland;X-Cinnamon"
+      done
+
+      # Plasma utiliza KDE Connect y no arranca Valent.
+      for package in ${lib.escapeShellArgs (
+        map toString (
+          lib.optionals kdeConnectDesktopEnabled [
+            pkgs.kdePackages.kdeconnect-kde
+          ]
+        )
+      )}; do
+        patch_package "$package" "KDE"
+
+        patch_desktop_file \
+          "$package/etc/xdg/autostart/org.kde.kdeconnect.daemon.desktop" \
+          "$out/etc/xdg/autostart/org.kde.kdeconnect.daemon.desktop" \
+          "KDE"
+
+        # El indicador non-Plasma no se utiliza: fuera de KDE usamos Valent.
+        printf '%s\n' \
+          '[Desktop Entry]' \
+          'Type=Application' \
+          'Name=KDE Connect Indicator' \
+          'Exec=/run/current-system/sw/bin/false' \
+          'Hidden=true' \
+          'NoDisplay=true' \
+          > "$out/share/applications/org.kde.kdeconnect.nonplasma.desktop"
+      done
+    '';
+
+  # El servicio de Noctalia existe porque Niri/Hyprland están instalados,
+  # pero solo arranca cuando systemd pertenece realmente a una de esas sesiones.
+  # Usamos el entorno importado de la sesión y no buscamos procesos: así se evita
+  # una carrera durante el inicio de Hyprland.
+  noctaliaSessionCheck =
+    pkgs.writeShellScript "korunix-noctalia-session-check" ''
+      case "''${XDG_CURRENT_DESKTOP:-}" in
+        niri|Hyprland)
+          exit 0
+          ;;
+      esac
+
+      case "''${XDG_SESSION_DESKTOP:-}" in
+        niri|Hyprland)
+          exit 0
+          ;;
+      esac
+
+      case "''${DESKTOP_SESSION:-}" in
+        niri|hyprland-uwsm)
+          exit 0
+          ;;
+      esac
+
+      exit 1
+    '';
+
+  # Los módulos pueden traer varias sesiones, pero Korunix publica una sola
+  # sesión Wayland por escritorio. El propio paquete declara exactamente esos
+  # nombres a services.displayManager.
+  waylandSessions = pkgs.runCommand "korunix-wayland-sessions" {
+    passthru.providedSessions = waylandSessionNames;
+  } ''
+    set -eu
+
+    mkdir -p "$out/share/wayland-sessions"
+    mkdir -p "$out/share/xsessions"
+
+    ${lib.optionalString niriEnabled ''
+      cp \
+        ${config.programs.niri.package}/share/wayland-sessions/niri.desktop \
+        "$out/share/wayland-sessions/niri.desktop"
+    ''}
+
+    ${lib.optionalString hyprlandEnabled ''
+      # No reutilizamos hyprland-uwsm.desktop del paquete porque esa entrada
+      # vuelve a resolver hyprland.desktop. Korunix oculta esa sesión directa
+      # en GDM, por lo que la sesión UWSM debe ser autosuficiente.
+      cat > "$out/share/wayland-sessions/hyprland-uwsm.desktop" <<EOF
+[Desktop Entry]
+Name=Hyprland (uwsm-managed)
+Comment=Hyprland Wayland administrado por UWSM
+Exec=${lib.getExe config.programs.uwsm.package} start -- ${config.programs.hyprland.package}/share/wayland-sessions/hyprland.desktop
+Type=Application
+DesktopNames=Hyprland
+EOF
+    ''}
+
+    ${lib.optionalString plasmaEnabled ''
+      cp \
+        ${pkgs.kdePackages.plasma-workspace.sessions}/share/wayland-sessions/plasma.desktop \
+        "$out/share/wayland-sessions/plasma.desktop"
+    ''}
+
+    ${lib.optionalString cinnamonEnabled ''
+      cp \
+        ${pkgs.cinnamon}/share/wayland-sessions/cinnamon-wayland.desktop \
+        "$out/share/wayland-sessions/cinnamon-wayland.desktop"
+
+      # Cinnamon no declara DesktopNames upstream. Korunix lo hace explícito
+      # para poder separar después sus aplicaciones mediante OnlyShowIn.
+      if ${pkgs.gnugrep}/bin/grep -q '^DesktopNames=' \
+        "$out/share/wayland-sessions/cinnamon-wayland.desktop"
+      then
+        ${pkgs.gnused}/bin/sed -i \
+          's/^DesktopNames=.*/DesktopNames=X-Cinnamon/' \
+          "$out/share/wayland-sessions/cinnamon-wayland.desktop"
+      else
+        ${pkgs.gnused}/bin/sed -i \
+          '/^\[Desktop Entry\]$/a DesktopNames=X-Cinnamon' \
+          "$out/share/wayland-sessions/cinnamon-wayland.desktop"
+      fi
+    ''}
+  '';
 
   # El autostart genérico de IBus no debe competir con las sesiones que
   # Korunix administra directamente mediante su modelo XKB.
@@ -130,17 +503,28 @@
       (ibusPanel != null)
       "--panel=${toString ibusPanel}";
 
+  hyprlandMonitorRule =
+    lib.optionalString monitorConfigured ''
+      hl.monitor({
+          output = ${builtins.toJSON cfg.monitor.output},
+          mode = ${builtins.toJSON monitorMode},
+      })
+
+    '';
+
   # Hyprland 0.55+ usa Lua. El archivo humano permanece en config/ y estos
-  # marcadores reciben la misma fuente de verdad de teclado que Niri.
+  # marcadores reciben las decisiones específicas del equipo.
   hyprlandConfig =
     pkgs.writeText "korunix-hyprland.lua" (
       builtins.replaceStrings
         [
+          "@KORUNIX_MONITOR_RULE@"
           "@KORUNIX_KEYBOARD_LAYOUTS@"
           "@KORUNIX_KEYBOARD_VARIANTS@"
           "@KORUNIX_KEYBOARD_OPTIONS@"
         ]
         [
+          hyprlandMonitorRule
           (lib.concatStringsSep "," keyboardLayouts)
           (lib.concatStringsSep "," keyboardVariants)
           localization.keyboard.switchOption
@@ -160,10 +544,42 @@ in {
       default = [];
       description = "Otros escritorios disponibles para elegir al iniciar sesión.";
     };
+
+    monitor = {
+      output = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "DP-1";
+        description = "Salida de vídeo que Korunix configura explícitamente.";
+      };
+
+      mode = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "1920x1080";
+        description = "Resolución explícita del monitor, sin frecuencia.";
+      };
+
+      refreshRate = lib.mkOption {
+        type = lib.types.int;
+        default = 60;
+        description = "Frecuencia del monitor en Hz; Korunix usa 60 Hz por defecto.";
+      };
+    };
   };
 
   config = lib.mkIf config.korunix.enable {
     assertions = [
+      {
+        assertion =
+          (cfg.monitor.output == null)
+          == (cfg.monitor.mode == null);
+        message = "korunix.desktop.monitor.output y mode deben declararse juntos.";
+      }
+      {
+        assertion = cfg.monitor.refreshRate > 0;
+        message = "korunix.desktop.monitor.refreshRate debe ser mayor que cero.";
+      }
       {
         assertion = !(lib.elem cfg.primary cfg.additional);
         message = "El escritorio principal no puede repetirse como escritorio adicional.";
@@ -182,7 +598,13 @@ in {
 
     services.displayManager = {
       gdm.enable = true;
-      defaultSession = cfg.primary;
+      defaultSession = primarySession;
+
+      # Las sesiones aportadas por los módulos se sustituyen por el catálogo
+      # Wayland curado de Korunix.
+      sessionPackages = lib.mkForce [
+        waylandSessions
+      ];
     };
 
     programs.niri.enable = niriEnabled;
@@ -193,6 +615,23 @@ in {
       enable = true;
       withUWSM = true;
       xwayland.enable = true;
+    };
+
+    # Cinnamon conserva tanto el escritorio como su conjunto nativo de
+    # aplicaciones. Cada escritorio completo mantiene su propia experiencia.
+    services.xserver.desktopManager.cinnamon.enable = cinnamonEnabled;
+
+    # Plasma conserva igualmente su escritorio y su conjunto nativo completo.
+    # GDM continúa siendo el gestor de inicio común de Korunix.
+    services.desktopManager.plasma6.enable = plasmaEnabled;
+
+    # Plasma usa kcminputrc para decidir el estado inicial del teclado numérico.
+    # NumLock=0 significa «encendido al iniciar Plasma».
+    environment.etc."xdg/kcminputrc" = lib.mkIf plasmaEnabled {
+      text = ''
+        [Keyboard]
+        NumLock=0
+      '';
     };
 
     # La copia en /etc/xdg tiene prioridad sobre el autostart aportado por el
@@ -211,17 +650,37 @@ in {
         '';
       };
 
-    # Xwayland Satellite pertenece exclusivamente a Niri. Las aplicaciones
-    # gráficas se eligen independientemente del escritorio en modules/apps.nix.
+    # El overlay tiene prioridad sobre los .desktop originales y separa los
+    # menús sin desinstalar componentes que cada escritorio necesite.
     environment.systemPackages =
-      lib.optionals niriEnabled [
+      [
+        (lib.hiPrio desktopVisibilityOverlay)
+        (lib.hiPrio hiddenUnselectedSessions)
+      ]
+      ++ lib.optionals niriEnabled [
         pkgs.xwayland-satellite
+      ]
+      ++ lib.optionals noctaliaEnabled noctaliaApplications
+      # Si Plasma también está instalado, programs.kdeconnect aporta KDE Connect;
+      # Valent se añade aparte para Niri, Hyprland y Cinnamon.
+      ++ lib.optionals (plasmaEnabled && valentDesktopEnabled) [
+        pkgs.valent
       ];
 
-    # «Abrir en terminal» usa Alacritty en Nautilus, sin depender del escritorio
-    # desde el que se haya abierto el gestor de archivos.
+    # Ambos implementan el mismo protocolo y comparten los puertos 1714-1764.
+    # Plasma fija KDE Connect; sin Plasma, Valent es la implementación por defecto.
+    programs.kdeconnect = {
+      enable = deviceConnectEnabled;
+      package = lib.mkDefault (
+        if plasmaEnabled
+        then pkgs.kdePackages.kdeconnect-kde
+        else pkgs.valent
+      );
+    };
+
+    # Nautilus pertenece a la experiencia Noctalia.
     programs.nautilus-open-any-terminal =
-      lib.mkIf (lib.elem "nautilus" config.korunix.applications) {
+      lib.mkIf noctaliaEnabled {
         enable = true;
         terminal = "alacritty";
       };
@@ -246,6 +705,19 @@ in {
       '';
     };
 
+    # La salida específica del equipo vive separada de la experiencia común.
+    environment.etc."korunix/niri-output.kdl" =
+      lib.mkIf (niriEnabled && monitorConfigured) {
+        text = ''
+          // Archivo generado por Korunix.
+          // Edita korunix.desktop.monitor, no este archivo.
+
+          output ${builtins.toJSON cfg.monitor.output} {
+            mode ${builtins.toJSON monitorMode}
+          }
+        '';
+      };
+
     # La experiencia común de Niri permanece como archivo humano del repositorio.
     environment.etc."niri/config.kdl" = lib.mkIf niriEnabled {
       source = ../config/niri.kdl;
@@ -267,6 +739,26 @@ in {
       source = hyprlandConfig;
     };
 
+    # Noctalia usa un perfil dconf propio para resolver Hatter sin alterar
+    # las preferencias de iconos de Plasma, Cinnamon ni del usuario.
+    programs.dconf.profiles.noctalia = lib.mkIf noctaliaEnabled {
+      enableUserDb = true;
+
+      databases = [
+        {
+          settings = {
+            "org/gnome/desktop/interface" = {
+              icon-theme = "Hatter";
+            };
+          };
+
+          locks = [
+            "/org/gnome/desktop/interface/icon-theme"
+          ];
+        }
+      ];
+    };
+
     # Noctalia utiliza su módulo NixOS oficial. Su servicio de usuario arranca
     # después de que Korunix haya preparado la configuración de esa persona.
     programs.noctalia = lib.mkIf noctaliaEnabled {
@@ -286,6 +778,7 @@ in {
 
         serviceConfig = {
           Type = "oneshot";
+          ExecCondition = noctaliaSessionCheck;
           ExecStart = prepareKeyboardLabels;
         };
       };
@@ -300,6 +793,10 @@ in {
         "korunix-user-prepare.service"
         "korunix-noctalia-keyboard-labels.service"
       ];
+
+      environment.DCONF_PROFILE = "noctalia";
+
+      serviceConfig.ExecCondition = noctaliaSessionCheck;
     };
 
     # El TOML contiene valores comunes. El servicio korunix-user-prepare sustituye

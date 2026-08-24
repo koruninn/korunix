@@ -6,7 +6,8 @@
 // Nautilus el gestor de archivos acordado para este escritorio.
 // Super+Espacio queda reservado al launcher de Noctalia.
 
-// El teclado del equipo se genera desde korunix.localization.
+// Las decisiones específicas del monitor y teclado se generan desde Nix.
+include optional=true "/etc/korunix/niri-output.kdl"
 include optional=true "/etc/korunix/niri-input.kdl"
 
 // Entrada: ratón y touchpad.

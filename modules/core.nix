@@ -9,7 +9,7 @@
 
   # Hatter llega como un repositorio de iconos, no como un paquete de Nix. Este
   # pequeño envoltorio lo instala en una ubicación estándar para todo el sistema.
-  hatterIcons = pkgs.runCommandNoCC "korunix-hatter-icons" {} ''
+  hatterIcons = pkgs.runCommand "korunix-hatter-icons" {} ''
     mkdir -p "$out/share/icons"
     cp -R ${inputs.hatter}/Hatter "$out/share/icons/Hatter"
     cp -R ${inputs.hatter}/Hatter-Green "$out/share/icons/Hatter-Green"

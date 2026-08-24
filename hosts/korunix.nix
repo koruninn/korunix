@@ -57,17 +57,24 @@
     desktop = {
       primary = "niri";
 
+      monitor = {
+        output = "DP-1";
+        mode = "1920x1080";
+        refreshRate = 120;
+      };
+
       additional = [
         "hyprland"
+        "plasma"
+        "cinnamon"
       ];
     };
 
-    # Estas son aplicaciones elegidas para este equipo. Alacritty, Fish y Fetch
-    # forman parte de la base de Korunix; las aplicaciones gráficas permanecen
-    # desacopladas del escritorio y se declaran explícitamente aquí.
+    # Aquí viven las aplicaciones generales elegidas para este equipo.
+    # Las suites propias de Noctalia, Plasma y Cinnamon pertenecen a sus
+    # respectivos escritorios y no se duplican en este catálogo.
     applications = [
       "android-tools"
-      "baobab"
       "birdfont"
       "cohesion"
       "darktable"
@@ -77,15 +84,6 @@
       "genshin-impact"
       "gimp"
       "git"
-      "gnome-calculator"
-      "gnome-calendar"
-      "gnome-characters"
-      "gnome-clocks"
-      "gnome-disk-utility"
-      "gnome-font-viewer"
-      "gnome-maps"
-      "gnome-text-editor"
-      "gnome-weather"
       "google-chrome"
       "heroic"
       "honkai-star-rail"
@@ -95,13 +93,10 @@
       "kdenlive"
       "krita"
       "localsend"
-      "loupe"
       "lutris"
-      "nautilus"
       "obs-studio"
       "obsidian"
       "onlyoffice-desktopeditors"
-      "papers"
       "peazip"
       "polyglot"
       "prismlauncher"
@@ -110,15 +105,12 @@
       "rapidraw"
       "rar"
       "scrcpy"
-      "simple-scan"
-      "snapshot"
       "spotdl"
       "spotify"
       "steam"
       "thunderbird"
       "tree"
       "unrar"
-      "valent"
       "vesktop"
       "vlc"
       "vscode"

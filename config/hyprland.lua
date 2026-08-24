@@ -6,6 +6,7 @@
 --
 -- Noctalia NO se inicia aquí: Korunix ya lo administra mediante systemd.
 
+@KORUNIX_MONITOR_RULE@
 -- Cualquier monitor no declarado específicamente utiliza su modo preferido.
 hl.monitor({
     output = "",
