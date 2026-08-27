@@ -2136,30 +2136,30 @@ Por ello son nombres válidos impuestos externamente, entre otros:
 - `Cargo.lock`;
 - `justfile`, mientras Just siga formando parte del flujo.
 
-La estructura objetivo de las piezas duraderas es:
+La estructura activa de las piezas duraderas es:
 
 ```text
 korunix/
+├── configuracion/
+│   ├── equipos/
+│   └── personas/
+├── sistema/
+│   ├── programa/
+│   └── interfaz/
+├── generado/
+│   └── equipos/
 ├── flake.nix
 ├── flake.lock
-├── spec.md
-├── canales.nix
-├── predeterminados.nix
-├── nvidia-open-pci-ids.txt
-├── sistema/
-├── equipos/
-├── personas/
-└── programa/
+├── Cargo.toml
+├── Cargo.lock
+└── spec.md
 ```
 
-`equipos/<id>.nix` contiene decisiones del equipo y
-`equipos/<id>-detectado.nix` contiene hechos físicos adoptados de esa máquina.
-
-Durante la transición de D pueden permanecer `scripts/`, `app/` y `config/`.
-No forman parte de la estructura objetivo: D.2 sustituye la lógica de scripts
-por el motor Rust compatible y D.3 absorbe la aplicación Python al integrar la
-GUI definitiva. `config/` solo se moverá cuando hacerlo no rompa rutas activas
-del escritorio actual.
+`configuracion/` contiene decisiones humanas, `sistema/` contiene la
+implementación interna y `generado/` contiene hechos que Korunix crea o detecta.
+`scripts/` permanece únicamente como acceso de compatibilidad al motor y
+`config/` se retirará cuando sus rutas activas puedan migrarse sin romper el
+escritorio actual. `app/` dejó de existir al cerrar D.3.
 
 **Regla de nombres:** si el nombre lo decide Korunix, debe entenderlo una
 persona; si el nombre lo impone una herramienta externa, se conserva el nombre
@@ -2188,7 +2188,7 @@ un final reconocible.
 | **A · Estabilización** | Consolidar la base declarativa, eliminar interferencias entre escritorios, estabilizar Noctalia/Niri y cerrar regresiones heredadas. |
 | **B · Modelo funcional** | Definir las fuentes de verdad y el modelo común de canales, hardware, producto, personas, localización y primera adopción. |
 | **C · Operaciones del sistema** | ✅ Cerrada |
-| **D · GUI completa** | ▶ Activa · implementación parcial existente |
+| **D · GUI completa** | ▶ Activa · D.3 cerrada, D.4 activa |
 | **E · Robustez** | Probar interrupciones, rollback, idempotencia, instalación limpia, hardware diverso, arquitecturas soportadas, trabajo offline y degradación segura. |
 | **F · Producto** | Completar distribución, bootstrap remoto, empaquetado, onboarding, documentación, traducciones y criterios de lanzamiento. |
 
@@ -2208,9 +2208,10 @@ un final reconocible.
   - C.1-C.6 conservan contratos estructurados comunes para CLI y GUI.
   - D debe presentar esos motores sin duplicar su lógica.
 - **D · GUI completa:** activa.
-  - El trabajo actual adopta una arquitectura Nix-first antes de ampliar la GUI.
-  - La implementación Python y los scripts existentes son transitorios mientras
-    el motor único se migra de forma compatible.
+  - D.1 está cerrada: Nix-first y estructura humana están fijados.
+  - D.2 está cerrada: Rust es el único motor operativo público.
+  - D.3 está cerrada: la interfaz GTK/libadwaita también está escrita en Rust.
+  - D.4 está activa: resta completar la experiencia final y su validación visual.
 - **E · Robustez:** pendiente como fase principal, aunque fases anteriores pueden
   adelantar pruebas de robustez cuando sean necesarias para cerrar correctamente
   un contrato.
@@ -2422,13 +2423,10 @@ Fijar la frontera Nix ↔ runtime, trasladar a Nix las fuentes declarativas que
 todavía dependan de parsers auxiliares, aplanar las piezas duraderas del
 repositorio y convertir la nomenclatura humana en una regla permanente.
 
-**Estado: cerrado.** Las fuentes de canales y predeterminados son Nix,
-`flake.nix` expone `korunix.canales`, `korunix.predeterminados` y
-`korunix.equipos`, y las piezas declarativas duraderas se agrupan como
-`sistema/`, `equipos/` y `personas/`. `catalog/`, `modules/`, `hosts/`,
-`hardware/` y `users/` quedan retirados. La lógica procedural de `scripts/` y
-la GUI Python de `app/` permanecen únicamente como transición explícita hacia
-D.2 y D.3; no se multiplicarán durante esa transición.
+**Estado: cerrado.** Las fuentes de canales y predeterminados son Nix y las
+piezas declarativas duraderas se agrupan como `configuracion/`, `sistema/` y
+`generado/`. `catalog/`, `modules/`, `hosts/`, `hardware/` y `users/` quedaron
+retirados. D.2 retiró el dominio operativo de Bash y D.3 retiró la GUI Python.
 
 **Estructura maestra activa:** `configuracion/` contiene decisiones humanas, `sistema/` contiene el funcionamiento interno y `generado/` contiene hechos que Korunix escribe o detecta automáticamente.
 
@@ -2447,12 +2445,25 @@ fabrican pseudo-TTY ni automatizan contraseñas.
 
 **Estado: cerrado.** No existe dispatcher operativo Rust → Bash.
 
-#### D.3 · GTK/libadwaita sobre el motor — activa
+#### D.3 · GTK/libadwaita sobre el motor — cerrada
 
-Migrar la aplicación Python actual a la interfaz definitiva sobre el mismo
-motor Rust. No debe existir un backend paralelo de administración.
+La interfaz gráfica ya está escrita en Rust y vive en `sistema/interfaz/`.
+Utiliza GTK 4 y libadwaita, pero no implementa una segunda administración del
+sistema: consulta y solicita acciones al ejecutable público `korunix` mediante
+`KORUNIX_MOTOR_BIN`.
 
-#### D.4 · Cierre de experiencia
+Las dependencias gráficas son opcionales en Cargo. El motor CLI conserva su
+compilación independiente de GTK; la interfaz se construye con la característica
+`interfaz`. La aplicación Python anterior y su backend fueron retirados.
+
+Los textos visibles ya conservan las tres localizaciones que tenía la GUI
+transitoria: español, inglés y húngaro. D.4 completa la experiencia, la
+adaptación visual, progreso, confirmaciones, detalles humanos y localización
+final sin volver a introducir un backend paralelo.
+
+**Estado: cerrado.**
+
+#### D.4 · Cierre de experiencia — activa
 
 Completar navegación adaptable, progreso, confirmaciones, errores humanos,
 detalles técnicos opcionales, internacionalización y validación visual.

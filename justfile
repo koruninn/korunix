@@ -1,6 +1,5 @@
-# just ofrece nombres cortos para las operaciones frecuentes de Korunix.
-# No contiene lógica propia: scripts/korunix sigue siendo la fuente real del
-# comportamiento para que terminal e interfaz gráfica compartan el mismo modelo.
+# just ofrece nombres cortos para operaciones frecuentes de desarrollo.
+# No contiene lógica del producto: scripts/korunix solo reenvía al motor Rust.
 
 # Muestra las acciones disponibles.
 default:
@@ -98,14 +97,14 @@ structure:
 fmt:
     ./scripts/korunix format
 
-# Abre el punto de entrada humano actual de Korunix.
+# Abre Korunix como aplicación gráfica desde el checkout de desarrollo.
 korunix:
-    ./scripts/korunix status
+    nix run .#korunix
 
-# Abre la primera interfaz gráfica sin instalarla ni aplicar NixOS.
+# Alias conservado para quien ya utilizaba `just gui`.
 gui:
     nix run .#korunix
 
-# Comprueba el motor de presentación y los archivos de la interfaz.
+# Comprueba la estructura de la interfaz Rust sin abrir una ventana.
 gui-check:
-    python3 scripts/validate-gui.py
+    ./scripts/validar-interfaz.sh

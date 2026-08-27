@@ -113,24 +113,23 @@
         };
       };
 
-    # La aplicación gráfica consume el checkout humano mediante KORUNIX_ROOT o
-    # ~/.korunix. Todavía no sustituye el motor ni instala una configuración.
+    # La interfaz es Rust + GTK/libadwaita y únicamente presenta el motor
+    # público. Las dependencias gráficas son opcionales en Cargo para que el
+    # motor de terminal siga siendo una pieza pequeña e independiente.
     korunixGuiFor = system: let
       pkgs = pkgsFor system;
-      python = pkgs.python3.withPackages (pythonPackages: [
-        pythonPackages.babel
-        pythonPackages.pygobject3
-      ]);
     in
-      pkgs.stdenvNoCC.mkDerivation {
-        pname = "korunix";
+      pkgs.rustPlatform.buildRustPackage {
+        pname = "korunix-interfaz";
         version = "0.1.0";
-        src = ./app;
+        src = ./.;
+
+        cargoLock.lockFile = ./Cargo.lock;
 
         nativeBuildInputs = [
           pkgs.desktop-file-utils
-          pkgs.gobject-introspection
           pkgs.makeWrapper
+          pkgs.pkg-config
           pkgs.wrapGAppsHook4
         ];
 
@@ -139,34 +138,28 @@
           pkgs.libadwaita
         ];
 
-        dontBuild = true;
-        doCheck = true;
+        cargoBuildFlags = [
+          "--features"
+          "interfaz"
+          "--bin"
+          "korunix-interfaz"
+        ];
 
-        checkPhase = ''
-          runHook preCheck
-          ${python}/bin/python3 -m compileall -q .
-          runHook postCheck
-        '';
+        cargoInstallFlags = [
+          "--features"
+          "interfaz"
+          "--bin"
+          "korunix-interfaz"
+        ];
 
-        installPhase = ''
-          runHook preInstall
+        postInstall = ''
+          install -Dm644             sistema/interfaz/io.github.koruninn.Korunix.desktop             "$out/share/applications/io.github.koruninn.Korunix.desktop"
 
-          install -Dm755 korunix.py "$out/share/korunix/korunix.py"
-          install -Dm644 korunix_backend.py "$out/share/korunix/korunix_backend.py"
-          install -Dm644 korunix_i18n.py "$out/share/korunix/korunix_i18n.py"
-          install -Dm644 style.css "$out/share/korunix/style.css"
-          install -Dm644 io.github.koruninn.Korunix.desktop \
-            "$out/share/applications/io.github.koruninn.Korunix.desktop"
-
-          makeWrapper ${python}/bin/python3 "$out/bin/korunix" \
-            --add-flags "$out/share/korunix/korunix.py" \
-            --set KORUNIX_MOTOR_BIN ${korunixMotorFor system}/bin/korunix
-
-          runHook postInstall
+          makeWrapper             "$out/bin/korunix-interfaz"             "$out/bin/korunix"             --set KORUNIX_MOTOR_BIN ${korunixMotorFor system}/bin/korunix
         '';
 
         meta = {
-          description = "Centro de control gráfico de Korunix";
+          description = "Centro de control GTK/libadwaita de Korunix";
           mainProgram = "korunix";
           platforms = lib.platforms.linux;
         };
