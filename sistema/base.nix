@@ -61,7 +61,7 @@ in {
       description = "Personas que tienen una cuenta en este equipo.";
     };
 
-    # La identidad portable vive en personas/<id>.nix. Estos valores pertenecen a
+    # La identidad portable vive en configuracion/personas/<id>.nix. Estos valores pertenecen a
     # la relación entre esa persona y este host concreto.
     userSettings = lib.mkOption {
       type = lib.types.attrsOf (lib.types.submodule {

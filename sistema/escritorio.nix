@@ -5,7 +5,7 @@
   pkgs,
   ...
 }: let
-  productDefaults = import ../predeterminados.nix;
+  productDefaults = import ./predeterminados.nix;
   cfg = config.korunix.desktop;
   localization = config.korunix.localization;
 

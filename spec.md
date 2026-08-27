@@ -2437,6 +2437,43 @@ Sustituir progresivamente `scripts/korunix`, `scripts/users` y
 semánticas y contratos estructurados cerrados en C mientras usa Nix como fuente
 del modelo declarativo.
 
+**Estado actual de D.2:** el ejecutable Rust ya existe como
+`sistema/programa/principal.rs`, con `Cargo.toml` y `Cargo.lock` en sus nombres
+oficiales. El motor puede leer directamente el modelo Nix mediante `korunix
+modelo ...` y conserva la interfaz existente delegando temporalmente las
+operaciones que todavía viven en `scripts/korunix`.
+
+La salida Nix `packages.<sistema>.motor` permite construir el motor sin
+reemplazar todavía el paquete gráfico predeterminado. Esta compatibilidad es
+transitoria: D.2 solo podrá cerrarse cuando las operaciones públicas de
+`scripts/korunix`, `scripts/users` y `scripts/localization` hayan sido absorbidas
+por Rust o retiradas porque Nix las resuelve declarativamente.
+
+**Avance de D.2 — canales y permisos:** las consultas `channel --json` y
+`privileges --json` ya nacen en Rust. Las definiciones de canales y valores
+iniciales viven dentro de `sistema/`, porque son reglas internas del producto y
+no preferencias de una persona. La salida flake temporal `korunix` fue retirada:
+el motor lee las fuentes Nix directamente. La implementación Bash de canales queda como compatibilidad transitoria; el
+motor Rust ya posee la consulta, el plan, la escritura y la recuperación.
+
+**Avance de D.2 — dominio de canales completo:** el motor Rust ya consulta,
+planifica y cambia el canal. El plan evalúa una copia temporal del checkout para
+no modificar la configuración real ni siquiera durante la previsualización. La
+escritura real cambia exactamente una declaración, crea un respaldo persistente
+y revierte el archivo si la nueva declaración no evalúa. `channel` nunca cambia
+`system.stateVersion`, nunca construye una generación y nunca la aplica. La
+implementación Bash permanece únicamente como compatibilidad transitoria mientras
+D.2 retira el resto del motor antiguo.
+
+**Avance de D.2 — estructura maestra aplicada:** la raíz humana ya se separa
+en `configuracion/`, `sistema/` y `generado/`. `configuracion/equipos/` y
+`configuracion/personas/` contienen decisiones que una persona puede cambiar;
+`generado/equipos/` contiene hechos detectados automáticamente; `sistema/`
+contiene la implementación interna. Las rutas antiguas `equipos/` y `personas/`
+ya no forman parte de la estructura activa. El sufijo `-detectado` puede
+permanecer temporalmente durante D.2 por compatibilidad, aunque la carpeta
+`generado/` ya define su naturaleza.
+
 #### D.3 · GTK/libadwaita sobre el motor
 
 Migrar la aplicación Python actual a la interfaz definitiva sobre el mismo
@@ -2493,3 +2530,334 @@ especificación del producto deja de tener utilidad.
 La historia del desarrollo seguirá perteneciendo a Git y a la documentación
 histórica correspondiente; `spec.md` debe volver a contener únicamente
 requisitos y decisiones relevantes para Korunix como producto terminado.<!-- KORUNIX-ROADMAP-TEMP:END -->
+
+<!-- KORUNIX-CLARIDAD-PRODUCTO:BEGIN -->
+
+## Claridad de producto y separación entre lo editable, lo interno y lo generado
+
+Esta política es obligatoria para todo Korunix. No existe una parte del proyecto
+que quede excluida por ser antigua, transitoria, técnica o difícil. Las piezas
+existentes se migrarán de forma progresiva, pero toda pieza nueva o modificada
+debe cumplir esta política desde el momento en que se toque.
+
+### 1. La raíz debe explicar primero qué puede tocar una persona
+
+La estructura final debe agrupar los archivos por su relación con la persona,
+no por la tecnología con la que están escritos.
+
+```text
+configuracion/
+  equipos/
+  personas/
+
+sistema/
+  ...
+
+generado/
+  ...
+```
+
+- `configuracion/` contiene decisiones pensadas para ser leídas y cambiadas por
+  una persona.
+- `sistema/` contiene las reglas y el código que hacen funcionar Korunix. Una
+  persona no necesita entrar aquí para cambiar sus preferencias normales.
+- `generado/` contiene información creada o detectada automáticamente. No debe
+  editarse manualmente.
+
+Los nombres técnicos que una herramienta obliga a conservar, como `flake.nix`,
+`flake.lock`, `Cargo.toml` y `Cargo.lock`, pueden permanecer donde la herramienta
+los necesite. Korunix debe explicar claramente qué son y cuáles son generados.
+No se deben modificar archivos generados solo para añadir comentarios humanos.
+
+Mientras continúe la transición de D, `scripts/`, `app/` y `config/` pueden
+existir por compatibilidad. No forman parte de la estructura final y también
+deben respetar esta política cada vez que se modifiquen.
+
+### 2. Prueba de claridad
+
+Una explicación no cumple solo por ser técnicamente correcta.
+
+Debe poder entenderla una persona que no conozca Nix, Rust, Git, Linux, Bash,
+Python ni la arquitectura interna de Korunix. El objetivo de claridad es que la
+idea principal pueda entenderla incluso un niño pequeño.
+
+Si una palabra técnica es inevitable:
+
+1. primero se explica la idea con palabras comunes;
+2. después se menciona el nombre técnico;
+3. se explica para qué sirve en ese lugar concreto;
+4. se indica si una persona debe tocarlo o no.
+
+Frases como "contexto estructural", "backend", "dispatcher", "payload",
+"atributo", "derivación", "closure", "specialArgs", "mkIf" o "mkMerge" no pueden
+darse por entendidas.
+
+### 3. Encabezado obligatorio según el tipo de archivo
+
+Todo archivo permanente cuyo nombre y formato controle Korunix debe dejar claro,
+desde el principio, a qué clase pertenece.
+
+Un archivo de `configuracion/` debe comenzar explicando:
+
+- que se puede cambiar;
+- qué decisiones guarda;
+- qué cosas importantes pueden cambiarse ahí;
+- dónde están las cosas que NO pertenecen a ese archivo.
+
+Un archivo de `sistema/` debe comenzar explicando:
+
+- que es una parte interna de Korunix;
+- qué problema resuelve;
+- qué recibe;
+- qué produce o modifica;
+- qué opción de `configuracion/` debe tocar una persona en vez de editar esa
+  implementación interna.
+
+Un archivo de `generado/` debe dejar claro, cuando el formato permita un
+encabezado:
+
+- que Korunix lo creó automáticamente;
+- qué información contiene;
+- que un cambio manual puede perderse;
+- qué operación de Korunix debe utilizarse para volver a generarlo o corregirlo.
+
+Cuando el formato generado no admita comentarios seguros, esta explicación debe
+vivir en el archivo humano más cercano, en la interfaz y en la documentación.
+
+### 4. Controles principales
+
+Korunix llama **control principal** a una decisión que puede cambiar varias cosas
+relacionadas al mismo tiempo.
+
+Ejemplos posibles son:
+
+- activar o desactivar virtualización;
+- elegir un escritorio;
+- elegir una aplicación que activa servicios o complementos;
+- elegir un canal de actualizaciones;
+- activar Korunix completo;
+- cualquier opción que haga aparecer, desaparecer o cambiar varias piezas.
+
+Todo control principal editable debe explicar, antes de su valor:
+
+1. **Qué es.**
+2. **Para qué sirve.**
+3. **Qué valores puede usar la persona.**
+4. **Qué cambia directamente.**
+5. **Qué cambia también de forma indirecta.**
+6. **Qué NO cambia.**
+7. **Qué valor usa Korunix de forma predeterminada.**
+8. **Qué elección suele ser recomendable y en qué caso.**
+9. **Qué puede requerir reinicio, cierre de sesión, reconstrucción u otra acción.**
+10. **Un ejemplo sencillo de un cambio seguro cuando ayude a entenderlo.**
+
+Una opción editable nunca puede esconder efectos secundarios. Si activar una
+opción también activa cinco componentes, Korunix debe decir cuáles son y por qué
+se administran juntos.
+
+### 5. Elecciones, listas y reglas automáticas
+
+Además de los controles principales, Korunix debe reconocer y explicar:
+
+- **Elección:** escoge una opción entre varias.
+- **Lista de elecciones:** permite escoger varias cosas a la vez.
+- **Regla automática:** Korunix calcula un resultado a partir de otras
+  decisiones.
+- **Regla condicional:** una parte se usa solamente cuando se cumple una
+  condición.
+- **Combinador:** junta varias reglas en una configuración final.
+- **Conexión interna:** lleva información de una parte de Korunix a otra.
+
+La persona no debe tener que deducir estas relaciones leyendo código.
+
+### 6. Construcciones técnicas con alcance amplio
+
+Toda construcción técnica capaz de afectar varias partes debe tener una
+explicación humana junto a su definición o en el punto más cercano donde una
+persona pueda entender su función.
+
+Esto incluye, sin limitarse a:
+
+- `specialArgs`;
+- `mkEnableOption`;
+- `mkIf`;
+- `mkMerge`;
+- `optional`, `optionals` y equivalentes;
+- variables calculadas del tipo `...Enabled`;
+- funciones que transforman una elección humana en varias opciones de NixOS;
+- funciones que crean, quitan o modifican varios archivos o servicios;
+- tablas que convierten nombres humanos en paquetes o servicios;
+- valores que se heredan o propagan a varios módulos;
+- rutas de privilegios;
+- funciones de actualización, recuperación, limpieza, hardware y multimedia con
+  efectos múltiples.
+
+No basta con describir la sintaxis. Hay que explicar el efecto real dentro de
+Korunix.
+
+### 7. `specialArgs`
+
+`specialArgs` es una **conexión interna**, no una zona de configuración.
+
+Su propósito es entregar a los módulos información estructural que necesitan
+para trabajar, por ejemplo:
+
+- qué equipo se está preparando;
+- dónde están ciertos archivos;
+- qué conjunto de paquetes corresponde al canal elegido;
+- qué entradas externas ya seleccionó Korunix.
+
+No debe utilizarse como almacén universal de preferencias editables.
+
+Si una persona debe poder elegir un valor, esa elección pertenece a
+`configuracion/` y las partes internas deben recibir el resultado sin duplicar la
+decisión.
+
+### 8. Interruptores y valores calculados
+
+Un interruptor interno como `niriEnabled`, `hyprlandEnabled` o cualquier valor
+equivalente no debe convertirse en otra opción que la persona tenga que
+sincronizar manualmente.
+
+La persona elige una vez. Korunix calcula el resto.
+
+Por ejemplo, elegir un escritorio puede activar automáticamente:
+
+- el paquete del escritorio;
+- sus servicios;
+- sus portales;
+- sus archivos de configuración;
+- sus variables de sesión;
+- las integraciones que ese escritorio necesita.
+
+La explicación de la elección humana debe resumir esos efectos. Los valores
+calculados internos deben explicar de qué elección nacen y qué controlan.
+
+### 9. Sugerencias de cambio
+
+Toda opción editable debe ayudar a decidir, no limitarse a enumerar valores.
+
+Cuando sea posible debe incluir:
+
+- el valor predeterminado;
+- la opción más sencilla o segura para una persona que no tiene una preferencia;
+- cuándo conviene usar una alternativa;
+- consecuencias importantes;
+- incompatibilidades conocidas;
+- qué hace Korunix automáticamente para acompañar esa elección.
+
+Una sugerencia nunca debe presentarse como obligación cuando existen varias
+elecciones igualmente válidas.
+
+Las piezas internas no deben sugerir que la persona las edite. Deben señalar la
+opción humana que gobierna su comportamiento.
+
+### 10. Interfaz gráfica
+
+La GUI debe mostrar el mismo modelo mental que los archivos humanos.
+
+Un control de gran alcance debe poder mostrar, cuando sea útil:
+
+- qué cambiará;
+- qué otras piezas cambiarán junto con él;
+- por qué están relacionadas;
+- si el cambio es inmediato;
+- si requiere reconstrucción, cierre de sesión o reinicio;
+- qué valor se recomienda para un caso común.
+
+La GUI no debe obligar a conocer nombres internos como `mkIf`, `specialArgs` o
+`pkgsUnstable`.
+
+### 11. Localización
+
+La explicación humana es parte del producto, no un comentario decorativo.
+
+El español estándar es la fuente canónica de significado del proyecto. Toda
+explicación visible para la persona debe llegar a todas las localizaciones
+soportadas por Korunix.
+
+Una función, opción o control nuevo no está completamente terminado si su
+explicación existe solo en un idioma cuando esa explicación aparece en la GUI,
+documentación distribuida, mensajes o ayudas públicas.
+
+Los comentarios internos del código pueden conservar el español como idioma
+canónico para evitar duplicar bloques dentro del mismo archivo. El contenido
+equivalente que vea la persona debe existir en el sistema de localización.
+
+Las traducciones deben conservar:
+
+- el significado;
+- los efectos directos;
+- los efectos indirectos;
+- las advertencias;
+- las recomendaciones;
+- los ejemplos importantes.
+
+No se debe reducir una traducción hasta perder información útil.
+
+### 12. Aplicación obligatoria a todo el proyecto
+
+Esta política se aplica a:
+
+- Nix;
+- Rust;
+- Bash mientras siga existiendo;
+- Python mientras siga existiendo;
+- configuración de escritorios;
+- plantillas;
+- validadores;
+- archivos de personas y equipos;
+- hardware detectado;
+- opciones de aplicaciones;
+- servicios;
+- arranque;
+- actualizaciones;
+- recuperación;
+- almacenamiento;
+- firmware;
+- multimedia;
+- privilegios;
+- GUI;
+- documentación;
+- ayudas de terminal;
+- mensajes de error;
+- futuras tecnologías que Korunix incorpore.
+
+No existe una excepción por tratarse de código avanzado.
+
+### 13. Migración del contenido existente
+
+No se exige reescribir todo el repositorio en una sola operación arriesgada.
+
+La migración será progresiva:
+
+1. toda pieza nueva cumple esta política desde su creación;
+2. toda pieza existente que se modifique debe actualizar también sus
+   explicaciones;
+3. cada frente de D, E y F debe retirar deuda de claridad relacionada con lo que
+   toca;
+4. antes de considerar Korunix producto final, se hará una comprobación global
+   para verificar que no queden controles principales, reglas automáticas,
+   conexiones internas o efectos masivos sin explicación humana.
+
+No se permiten excepciones permanentes por antigüedad.
+
+### 14. Criterio de aceptación
+
+Una pieza de Korunix con capacidad de modificar varias cosas no se considera
+terminada hasta que pueda responder claramente:
+
+- ¿Qué es?
+- ¿Para qué sirve?
+- ¿Debo cambiarlo?
+- Si debo cambiarlo, ¿qué valores puedo usar?
+- ¿Qué otras cosas cambiarán también?
+- ¿Qué no cambiará?
+- ¿Qué me recomienda Korunix y por qué?
+- ¿Necesitaré reiniciar, cerrar sesión o hacer otra acción?
+- Si no debo tocarlo, ¿qué opción humana debo cambiar en su lugar?
+
+Si esas respuestas requieren leer la implementación para descubrirlas, la pieza
+todavía no cumple la calidad de producto de Korunix.
+
+<!-- KORUNIX-CLARIDAD-PRODUCTO:END -->

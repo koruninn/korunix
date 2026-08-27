@@ -1,3 +1,16 @@
+# ARCHIVO INTERNO DE KORUNIX.
+#
+# ¿Qué es?
+# Guarda las elecciones iniciales que Korunix propone para una instalación nueva.
+#
+# ¿Para qué sirve?
+# Evita que el motor, Nix y la interfaz inventen valores iniciales distintos.
+# Todos parten de la misma lista y una persona puede cambiarlos después desde
+# la configuración de su computadora.
+#
+# ¿Debes editarlo para personalizar tu equipo?
+# No. Este archivo define el punto de partida del producto, no tus preferencias.
+#
 # Valores iniciales de producto para una instalación nueva de Korunix.
 #
 # Este archivo contiene únicamente decisiones de producto que deben compartir

@@ -14,7 +14,7 @@
   in
     if builtins.pathExists path
     then import path
-    else throw "El host ${cfg.hostId} utiliza ${userId}, pero falta personas/${userId}.nix.";
+    else throw "El host ${cfg.hostId} utiliza ${userId}, pero falta configuracion/personas/${userId}.nix.";
 
   profiles = lib.genAttrs cfg.users loadUser;
 

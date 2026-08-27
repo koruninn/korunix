@@ -1,14 +1,31 @@
+# ESTE ARCHIVO SE PUEDE CAMBIAR.
+#
+# ¿Qué es?
+# Aquí guardas cómo quieres que funcione esta computadora.
+#
+# ¿Qué puedes elegir aquí?
+# Entre otras cosas: idioma, teclado, escritorio, programas, servicios y canal
+# de actualizaciones. Algunas elecciones son controles principales y pueden
+# preparar varias piezas relacionadas al mismo tiempo.
+#
+# ¿Qué NO vive aquí?
+# El hardware que Korunix descubre por sí solo está en generado/equipos/.
+# Las reglas internas que hacen funcionar esas elecciones están en sistema/.
+#
+# Si una opción cambia varias cosas, el comentario cercano debe decir qué
+# cambia, qué no cambia y qué elección suele convenir.
+#
 {
   # Este archivo contiene decisiones humanas y el contexto estructural mínimo que
-  # flake necesita antes de evaluar NixOS. Los hechos físicos viven en equipos/.
+  # flake necesita antes de evaluar NixOS. Los hechos físicos viven en generado/equipos/.
   # La plataforma se detecta al adoptar el equipo, pero flake la necesita antes
   # de evaluar los módulos; por eso permanece como contexto estructural.
   system = "x86_64-linux";
 
   # Un host puede tener varias personas y una misma persona puede aparecer en
-  # varios hosts. Cada identificador apunta a personas/<identificador>.nix.
+  # varios hosts. Cada identificador apunta a configuracion/personas/<identificador>.nix.
   # El host es dueño de la pertenencia y de las decisiones locales. La identidad,
-  # preferencias y capacidades portables siguen viviendo en personas/koru.nix.
+  # preferencias y capacidades portables siguen viviendo en configuracion/personas/koru.nix.
   users = {
     koru = {
       homeDirectory = "/home/koru";
@@ -38,7 +55,7 @@
 
     localization = {
       # El idioma del sistema, los formatos y la región son estado de este host.
-      # La preferencia de idioma de cada persona sigue viviendo en personas/.
+      # La preferencia de idioma de cada persona sigue viviendo en configuracion/personas/.
       systemLanguage = "es";
       region = "PE";
 

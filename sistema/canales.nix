@@ -1,7 +1,23 @@
-# Canales de actualización disponibles para Korunix.
+# ARCHIVO INTERNO DE KORUNIX.
 #
-# Esta es una fuente declarativa de Nix. La elección concreta sigue viviendo
-# en cada equipo y system.stateVersion permanece independiente.
+# ¿Qué es?
+# Aquí Korunix aprende qué significa cada canal de actualizaciones.
+#
+# ¿Para qué sirve?
+# Un equipo solo guarda una elección sencilla: "stable" o "unstable".
+# Este archivo explica qué fuentes corresponden a cada elección y qué texto
+# debe mostrarse a una persona.
+#
+# ¿Debes cambiarlo para elegir un canal?
+# No. La elección de cada computadora vive en su archivo dentro de configuracion/equipos/.
+# Este archivo solo cambia cuando Korunix cambia la definición del producto.
+#
+# Partes importantes:
+# - default: canal que recibe una instalación nueva si todavía no eligió otro.
+# - channels.stable: definición del canal Estable.
+# - channels.unstable: definición del canal Inestable.
+# - label/description: nombre y explicación que ve una persona.
+# - nixpkgs_ref/aagl_ref: fuentes técnicas que Korunix usa por debajo.
 {
   schemaVersion = 1;
   default = "stable";

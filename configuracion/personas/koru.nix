@@ -1,3 +1,14 @@
+# ESTE ARCHIVO SE PUEDE CAMBIAR.
+#
+# ¿Qué es?
+# Aquí viven las preferencias que pertenecen a una persona y pueden acompañarla
+# entre computadoras.
+#
+# Puede guardar, por ejemplo, su nombre visible, idioma, métodos de entrada,
+# capacidades y avatar. No guarda contraseñas ni hashes de contraseñas.
+#
+# Las decisiones exclusivas de una computadora viven en configuracion/equipos/.
+#
 {
   # Identidad portable. accountName es la cuenta UNIX preferida, pero un host
   # puede definir una excepción local si ese nombre ya está ocupado.

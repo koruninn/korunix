@@ -9,7 +9,7 @@
 
   # Una instalación nueva y el bootstrap consumen la misma fuente de decisiones
   # de producto. La arquitectura solo selecciona la suite ofimática apropiada.
-  productDefaults = import ../predeterminados.nix;
+  productDefaults = import ./predeterminados.nix;
   hostSystem = pkgs.stdenv.hostPlatform.system;
 
   defaultApplications =

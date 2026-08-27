@@ -5,7 +5,7 @@
   ...
 }: let
   cfg = config.korunix.services;
-  productDefaults = import ../predeterminados.nix;
+  productDefaults = import ./predeterminados.nix;
 
   serviceOption = name: description:
     lib.mkOption {

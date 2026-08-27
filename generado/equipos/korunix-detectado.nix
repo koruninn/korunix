@@ -1,3 +1,12 @@
+# NO CAMBIES ESTE ARCHIVO A MANO.
+#
+# Korunix creó este archivo después de mirar esta computadora.
+# Aquí recuerda hechos detectados automáticamente.
+#
+# Un cambio manual puede desaparecer la próxima vez que Korunix vuelva a
+# detectar el equipo. Si algo está mal, debe corregirse mediante la detección o
+# una opción humana explícita; no ocultando el problema con una edición manual.
+#
 # Hardware detectado por NixOS y adoptado por Korunix.
 # Este archivo describe dispositivos, discos y módulos detectados para este equipo.
 # Korunix no lo regenera silenciosamente y una actualización nunca cambia su

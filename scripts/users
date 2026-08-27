@@ -28,8 +28,8 @@ resolver_host() {
   local archivo
 
   if [[ -n "$solicitado" ]]; then
-    [[ -f "equipos/${solicitado}.nix" ]] \
-      || error "No existe equipos/${solicitado}.nix."
+    [[ -f "configuracion/equipos/${solicitado}.nix" ]] \
+      || error "No existe configuracion/equipos/${solicitado}.nix."
 
     printf '%s\n' "$solicitado"
     return
@@ -37,12 +37,12 @@ resolver_host() {
 
   actual="$(hostname 2>/dev/null || true)"
 
-  if [[ -n "$actual" && -f "equipos/${actual}.nix" ]]; then
+  if [[ -n "$actual" && -f "configuracion/equipos/${actual}.nix" ]]; then
     printf '%s\n' "$actual"
     return
   fi
 
-  for archivo in equipos/*.nix; do
+  for archivo in configuracion/equipos/*.nix; do
     [[ -e "$archivo" ]] || continue
     [[ "$archivo" == *-detectado.nix ]] && continue
     hosts+=("$(basename "$archivo" .nix)")
@@ -57,7 +57,7 @@ resolver_host() {
 }
 
 # La planificación interna del bootstrap debe poder inspeccionar las cuentas
-# antes de que exista equipos/<id>.nix. El resto de operaciones conserva la
+# antes de que exista configuracion/equipos/<id>.nix. El resto de operaciones conserva la
 # resolución estricta del host.
 if [[ "${1:-}" == "__bootstrap-plan" ]]; then
   HOST=""
@@ -182,7 +182,7 @@ perfil_asignado_al_host() {
 
 perfil_portable_json() {
   local id_usuario="$1"
-  local perfil="personas/${id_usuario}.nix"
+  local perfil="configuracion/personas/${id_usuario}.nix"
 
   [[ -f "$perfil" ]] \
     || error "No existe $perfil."
@@ -223,7 +223,7 @@ perfil_por_cuenta() {
   settings="$(host_settings_json)"
 
   shopt -s nullglob
-  perfiles=(personas/*.nix)
+  perfiles=(configuracion/personas/*.nix)
 
   for perfil in "${perfiles[@]}"; do
     id_usuario="$(basename "$perfil" .nix)"
@@ -553,7 +553,7 @@ usuarios_detectados_json() {
   )"
 
   shopt -s nullglob
-  local archivos=(personas/*.nix)
+  local archivos=(configuracion/personas/*.nix)
 
   for perfil in "${archivos[@]}"; do
     id_usuario="$(basename "$perfil" .nix)"
@@ -1024,7 +1024,7 @@ copiar_avatar_usuario() {
   extension="$(extension_avatar "$origen")" \
     || error "El avatar debe ser JPG, JPEG, PNG o WebP."
 
-  destino="personas/${id_usuario}.${extension}"
+  destino="configuracion/personas/${id_usuario}.${extension}"
 
   [[ ! -e "$destino" ]] \
     || error "$destino ya existe."
@@ -1042,7 +1042,7 @@ agregar_usuario_al_host() {
   local deferred_json="$5"
   local preserved_json="$6"
   local deferred_input_methods_json="$7"
-  local archivo="equipos/${HOST}.nix"
+  local archivo="configuracion/equipos/${HOST}.nix"
   local entry
   local tmp
 
@@ -1220,7 +1220,7 @@ adoptar_usuario() {
 
   if [[ -z "$perfil_id" ]]; then
     perfil_id="$cuenta"
-    perfil="personas/${perfil_id}.nix"
+    perfil="configuracion/personas/${perfil_id}.nix"
 
     [[ ! -e "$perfil" ]] \
       || error "$perfil ya existe."
@@ -1250,7 +1250,7 @@ adoptar_usuario() {
     perfil_creado=true
     portable_account="$cuenta"
   else
-    perfil="personas/${perfil_id}.nix"
+    perfil="configuracion/personas/${perfil_id}.nix"
     requested="$(perfil_portable_json "$perfil_id" | jq -c '.capabilities')"
     requested_input_methods="$(
       perfil_portable_json "$perfil_id" | jq -c '.inputMethods'
@@ -1303,7 +1303,7 @@ adoptar_usuario() {
 
   confirmar "¿Preparar la adopción de $cuenta?" || return 0
 
-  host_file="equipos/${HOST}.nix"
+  host_file="configuracion/equipos/${HOST}.nix"
   backup_host="$(mktemp)"
   cp -a "$host_file" "$backup_host"
 
@@ -1370,7 +1370,7 @@ crear_usuario() {
     error "$cuenta ya existe. Usa: scripts/korunix users adopt $cuenta"
   fi
 
-  perfil="personas/${cuenta}.nix"
+  perfil="configuracion/personas/${cuenta}.nix"
 
   [[ ! -e "$perfil" ]] \
     || error "$perfil ya existe."
@@ -1423,7 +1423,7 @@ crear_usuario() {
 
   confirmar "¿Preparar esta persona?" || return 0
 
-  host_file="equipos/${HOST}.nix"
+  host_file="configuracion/equipos/${HOST}.nix"
   backup_host="$(mktemp)"
   cp -a "$host_file" "$backup_host"
 
@@ -1946,7 +1946,7 @@ plan_import_perfil_json() {
 
   id_usuario="$(jq -r '.profile.id' "$manifest")"
   cuenta="$(jq -r '.profile.accountName' "$manifest")"
-  if [[ -f "personas/${id_usuario}.nix" ]]; then
+  if [[ -f "configuracion/personas/${id_usuario}.nix" ]]; then
     profile_exists=true
     local_profile="$(perfil_portable_json "$id_usuario")"
 
@@ -2297,14 +2297,14 @@ importar_perfil() {
   extraer_bundle_seguro "$bundle" "$tmpdir"
   manifest="$tmpdir/manifest.json"
 
-  perfil="personas/${id_usuario}.nix"
+  perfil="configuracion/personas/${id_usuario}.nix"
 
   if [[ "$profile_exists" != true ]]; then
     avatar_file="$(jq -r '.profile.avatar.file // empty' "$manifest")"
 
     if [[ -n "$avatar_file" ]]; then
       extension="${avatar_file##*.}"
-      avatar_creado="personas/${id_usuario}.${extension}"
+      avatar_creado="configuracion/personas/${id_usuario}.${extension}"
 
       [[ ! -e "$avatar_creado" ]] \
         || error "$avatar_creado ya existe."
@@ -2334,7 +2334,7 @@ importar_perfil() {
 
   portable_account="$(perfil_portable_json "$id_usuario" | jq -r '.accountName')"
 
-  host_file="equipos/${HOST}.nix"
+  host_file="configuracion/equipos/${HOST}.nix"
   backup_host="$(mktemp)"
   cp -a "$host_file" "$backup_host"
 
@@ -2470,7 +2470,7 @@ bootstrap_users_plan_json() {
 
     perfil_existe=false
 
-    if [[ -e "personas/${cuenta}.nix" ]]; then
+    if [[ -e "configuracion/personas/${cuenta}.nix" ]]; then
       perfil_existe=true
     fi
 
@@ -2506,7 +2506,7 @@ bootstrap_users_plan_json() {
     perfil_json="$(
       "$jq_bin" -cn \
         --arg id "$cuenta" \
-        --arg profilePath "personas/${cuenta}.nix" \
+        --arg profilePath "configuracion/personas/${cuenta}.nix" \
         --arg accountName "$cuenta" \
         --arg fullName "$nombre" \
         --arg homeDirectory "$home" \

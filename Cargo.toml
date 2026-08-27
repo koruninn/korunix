@@ -1,0 +1,10 @@
+[package]
+name = "korunix"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Motor operativo de Korunix"
+
+[[bin]]
+name = "korunix"
+path = "sistema/programa/principal.rs"

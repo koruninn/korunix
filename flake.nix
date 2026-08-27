@@ -56,9 +56,9 @@
   }: let
     lib = nixpkgs.lib;
 
-    # Los hosts se descubren por nombre de archivo. Añadir equipos/portatil.nix y
-    # equipos/portatil-detectado.nix basta para que aparezca nixosConfigurations.portatil.
-    hostEntries = builtins.readDir ./equipos;
+    # Los hosts se descubren por nombre de archivo. Añadir configuracion/equipos/portatil.nix y
+    # generado/equipos/portatil-detectado.nix basta para que aparezca nixosConfigurations.portatil.
+    hostEntries = builtins.readDir ./configuracion/equipos;
 
     hostFiles =
       lib.filterAttrs (
@@ -74,8 +74,8 @@
       name: lib.removeSuffix ".nix" name
     ) (builtins.attrNames hostFiles);
 
-    hostFileFor = hostId: ./equipos + "/${hostId}.nix";
-    hardwareFileFor = hostId: ./equipos + "/${hostId}-detectado.nix";
+    hostFileFor = hostId: ./configuracion/equipos + "/${hostId}.nix";
+    hardwareFileFor = hostId: ./generado/equipos + "/${hostId}-detectado.nix";
 
     hostDataFor = hostId: import (hostFileFor hostId);
 
@@ -87,6 +87,30 @@
     pkgsFor = system:
       import nixpkgs {
         inherit system;
+      };
+
+    # Motor Rust de D.2. El binario ya se llama korunix; durante la transición
+    # las operaciones aún no migradas se delegan al script histórico.
+    korunixMotorFor = system: let
+      pkgs = pkgsFor system;
+    in
+      pkgs.rustPlatform.buildRustPackage {
+        pname = "korunix";
+        version = "0.1.0";
+        src = ./.;
+
+        cargoLock.lockFile = ./Cargo.lock;
+
+        cargoBuildFlags = [
+          "--bin"
+          "korunix"
+        ];
+
+        meta = {
+          description = "Motor operativo de Korunix";
+          mainProgram = "korunix";
+          platforms = lib.platforms.linux;
+        };
       };
 
     # La aplicación gráfica consume el checkout humano mediante KORUNIX_ROOT o
@@ -153,7 +177,7 @@
       hardwareFile =
         if builtins.pathExists hardwareCandidate
         then hardwareCandidate
-        else throw "Falta equipos/${hostId}-detectado.nix para el host ${hostId}.";
+        else throw "Falta generado/equipos/${hostId}-detectado.nix para el host ${hostId}.";
       host = hostDataFor hostId;
 
       # El canal es estado del host, no del repositorio completo.
@@ -209,7 +233,7 @@
 
           korunixContext = {
             inherit hostId hostFile hardwareFile;
-            personasPath = ./personas;
+            personasPath = ./configuracion/personas;
             configPath = ./config;
           };
         };
@@ -257,6 +281,7 @@
     packages = lib.genAttrs systems (system: {
       default = korunixGuiFor system;
       korunix = korunixGuiFor system;
+      motor = korunixMotorFor system;
     });
 
     apps = lib.genAttrs systems (system: {
@@ -271,21 +296,22 @@
         program = "${korunixGuiFor system}/bin/korunix";
         meta.description = "Abrir el centro de control de Korunix";
       };
+
+      motor = {
+        type = "app";
+        program = "${korunixMotorFor system}/bin/korunix";
+        meta.description = "Ejecutar el motor Rust de Korunix";
+      };
     });
 
     checks = lib.genAttrs systems (system: {
       korunix-gui = korunixGuiFor system;
+      korunix-motor = korunixMotorFor system;
     });
 
     # API declarativa que puede consumir el motor sin reimplementar el modelo.
     # Los nombres son conceptos del producto; las salidas impuestas por Nix,
     # como nixosConfigurations, conservan su nombre oficial.
-    korunix = {
-      esquema = 1;
-      canales = import ./canales.nix;
-      predeterminados = import ./predeterminados.nix;
-      equipos = lib.genAttrs hostIds hostDataFor;
-    };
 
     nixosConfigurations = lib.genAttrs hostIds makeHost;
   };

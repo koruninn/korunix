@@ -26,7 +26,7 @@ aviso() {
 hosts_disponibles() {
   local archivo
 
-  for archivo in equipos/*.nix; do
+  for archivo in configuracion/equipos/*.nix; do
     [[ -e "$archivo" ]] || continue
     [[ "$archivo" == *-detectado.nix ]] && continue
     basename "$archivo" .nix
@@ -39,8 +39,8 @@ resolver_host() {
   local hosts=()
 
   if [[ -n "$solicitado" ]]; then
-    [[ -f "equipos/${solicitado}.nix" ]] \
-      || error "No existe equipos/${solicitado}.nix."
+    [[ -f "configuracion/equipos/${solicitado}.nix" ]] \
+      || error "No existe configuracion/equipos/${solicitado}.nix."
 
     printf "%s\n" "$solicitado"
     return
@@ -48,7 +48,7 @@ resolver_host() {
 
   actual="$(hostname 2>/dev/null || true)"
 
-  if [[ -n "$actual" && -f "equipos/${actual}.nix" ]]; then
+  if [[ -n "$actual" && -f "configuracion/equipos/${actual}.nix" ]]; then
     printf "%s\n" "$actual"
     return
   fi
@@ -63,7 +63,7 @@ resolver_host() {
   error "No pude decidir qué host usar. Define KORUNIX_HOST. Disponibles: ${hosts[*]:-ninguno}."
 }
 
-# Bootstrap debe funcionar antes de que exista equipos/<id>.nix.
+# Bootstrap debe funcionar antes de que exista configuracion/equipos/<id>.nix.
 # Todos los demás comandos conservan la resolución estricta del host.
 if [[ "${1:-}" == "bootstrap" ]]; then
   HOST=""
@@ -142,15 +142,15 @@ validar_estructura() {
   local host_id
 
   while IFS= read -r host_id; do
-    [[ -f "equipos/${host_id}-detectado.nix" ]] \
-      || error "Falta equipos/${host_id}-detectado.nix."
+    [[ -f "generado/equipos/${host_id}-detectado.nix" ]] \
+      || error "Falta generado/equipos/${host_id}-detectado.nix."
 
-    grep -Eq '^[[:space:]]+channel = "(stable|unstable)";$' "equipos/${host_id}.nix" \
+    grep -Eq '^[[:space:]]+channel = "(stable|unstable)";$' "configuracion/equipos/${host_id}.nix" \
       || error "El host ${host_id} debe declarar channel = \"stable\" o \"unstable\"."
   done < <(hosts_disponibles)
 
-  [[ -f nvidia-open-pci-ids.txt ]] \
-    || error "Falta nvidia-open-pci-ids.txt."
+  [[ -f sistema/nvidia-open-pci-ids.txt ]] \
+    || error "Falta sistema/nvidia-open-pci-ids.txt."
 
   grep -Fq 'graphics = lib.mkOption {' sistema/equipo.nix \
     || error "Falta el modelo declarativo de adaptadores gráficos."
@@ -161,20 +161,20 @@ validar_estructura() {
   grep -Fq "graphicsDevices: \$graphicsDevices" scripts/korunix \
     || error "El detector no expone las GPU como datos estructurados."
 
-  [[ -f canales.nix ]] \
-    || error "Falta canales.nix."
+  [[ -f sistema/canales.nix ]] \
+    || error "Falta sistema/canales.nix."
 
-  [[ -f predeterminados.nix ]] \
-    || error "Falta predeterminados.nix."
+  [[ -f sistema/predeterminados.nix ]] \
+    || error "Falta sistema/predeterminados.nix."
 
-  grep -Fq 'productDefaults = import ../predeterminados.nix;' sistema/aplicaciones.nix \
-    || error "Aplicaciones no consumen predeterminados.nix."
+  grep -Fq 'productDefaults = import ./predeterminados.nix;' sistema/aplicaciones.nix \
+    || error "Aplicaciones no consumen sistema/predeterminados.nix."
 
-  grep -Fq 'productDefaults = import ../predeterminados.nix;' sistema/servicios.nix \
-    || error "Servicios no consumen predeterminados.nix."
+  grep -Fq 'productDefaults = import ./predeterminados.nix;' sistema/servicios.nix \
+    || error "Servicios no consumen sistema/predeterminados.nix."
 
-  grep -Fq 'productDefaults = import ../predeterminados.nix;' sistema/escritorio.nix \
-    || error "Escritorio no consume predeterminados.nix."
+  grep -Fq 'productDefaults = import ./predeterminados.nix;' sistema/escritorio.nix \
+    || error "Escritorio no consume sistema/predeterminados.nix."
 
   grep -Eq '^bootstrap_localization_json\(\)[[:space:]]*\{' scripts/korunix \
     || error "Falta el lector declarativo de localización del bootstrap."
@@ -192,7 +192,7 @@ validar_estructura() {
     sed -n \
       '/^bootstrap_plan_json() {/,/^bootstrap_adopt_preflight_json() {/p' \
       scripts/korunix
-  ) || error "El plan de bootstrap no congela canales.nix."
+  ) || error "El plan de bootstrap no congela sistema/canales.nix."
 
   grep -Eq '^bootstrap_adopt_preflight_json\(\)[[:space:]]*\{' scripts/korunix \
     || error "Falta el preflight interno de bootstrap --adopt."
@@ -667,8 +667,8 @@ validar_actualizaciones() {
     scripts/korunix \
     || error "Falta C.1 para calcular el impacto posterior."
 
-  [[ -r canales.nix ]] \
-    || error "Falta canales.nix."
+  [[ -r sistema/canales.nix ]] \
+    || error "Falta sistema/canales.nix."
 }
 
 validar_recuperacion() {
@@ -3372,7 +3372,7 @@ hardware_detectado_json() {
         nvidia_open=false
 
         if [[ "$vendor" == "nvidia" \
-          && -r "$ROOT/nvidia-open-pci-ids.txt" ]]
+          && -r "$ROOT/sistema/nvidia-open-pci-ids.txt" ]]
         then
           while IFS=$'\t' read -r \
             catalog_device \
@@ -3401,7 +3401,7 @@ hardware_detectado_json() {
               nvidia_open=true
               break
             fi
-          done <"$ROOT/nvidia-open-pci-ids.txt"
+          done <"$ROOT/sistema/nvidia-open-pci-ids.txt"
         fi
 
         # Estas variables pertenecen a jq, no a Bash.
@@ -3573,7 +3573,7 @@ bootstrap_host_id() {
 canales_json() {
   nix eval \
     --json \
-    --file "$ROOT/canales.nix"
+    --file "$ROOT/sistema/canales.nix"
 }
 
 bootstrap_product_defaults_json() {
@@ -3586,15 +3586,15 @@ bootstrap_product_defaults_json() {
   [[ -n "$jq_bin" ]] \
     || error "jq no está disponible."
 
-  [[ -r "$ROOT/predeterminados.nix" ]] \
-    || error "Falta predeterminados.nix."
+  [[ -r "$ROOT/sistema/predeterminados.nix" ]] \
+    || error "Falta sistema/predeterminados.nix."
 
   # Nix interpreta directamente la fuente declarativa. Bash no mantiene una
   # segunda copia de aplicaciones, servicios ni escritorio iniciales.
   catalog="$(
     nix eval \
       --json \
-      --file "$ROOT/predeterminados.nix"
+      --file "$ROOT/sistema/predeterminados.nix"
   )"
 
   # $system pertenece a jq. Se escapa para que Bash no intente expandirlo.
@@ -4049,14 +4049,14 @@ bootstrap_plan_json() {
       sha256sum "$hardware_source" |
         cut -d' ' -f1
     )" \
-    --arg defaultsSource "predeterminados.nix" \
+    --arg defaultsSource "sistema/predeterminados.nix" \
     --arg defaultsSha256 "$(
-      sha256sum "$ROOT/predeterminados.nix" |
+      sha256sum "$ROOT/sistema/predeterminados.nix" |
         cut -d' ' -f1
     )" \
-    --arg channelsSource "canales.nix" \
+    --arg channelsSource "sistema/canales.nix" \
     --arg channelsSha256 "$(
-      sha256sum "$ROOT/canales.nix" |
+      sha256sum "$ROOT/sistema/canales.nix" |
         cut -d' ' -f1
     )" \
     --argjson hardware "$hardware" \
@@ -4253,10 +4253,10 @@ bootstrap_adopt_preflight_json() {
   [[ "$hardware_source" == "/etc/nixos/hardware-configuration.nix" ]] \
     || error "La fuente de hardware instalada no es la esperada."
 
-  [[ "$defaults_source" == "predeterminados.nix" ]] \
+  [[ "$defaults_source" == "sistema/predeterminados.nix" ]] \
     || error "La fuente de defaults no es la esperada."
 
-  [[ "$channels_source" == "canales.nix" ]] \
+  [[ "$channels_source" == "sistema/canales.nix" ]] \
     || error "La fuente de canales no es la esperada."
 
   [[ -r "$config_source" ]] \
@@ -4311,7 +4311,7 @@ bootstrap_adopt_preflight_json() {
   )"
 
   [[ -n "$expected" && "$actual" == "$expected" ]] \
-    || error "predeterminados.nix cambió después de calcular el plan."
+    || error "sistema/predeterminados.nix cambió después de calcular el plan."
 
   expected="$(
     "$jq_bin" -r \
@@ -4325,11 +4325,11 @@ bootstrap_adopt_preflight_json() {
   )"
 
   [[ -n "$expected" && "$actual" == "$expected" ]] \
-    || error "canales.nix cambió después de calcular el plan."
+    || error "sistema/canales.nix cambió después de calcular el plan."
 
   targets+=(
-    "equipos/${host_id}.nix"
-    "equipos/${host_id}-detectado.nix"
+    "configuracion/equipos/${host_id}.nix"
+    "generado/equipos/${host_id}-detectado.nix"
   )
 
   while IFS=$'\t' read -r \
@@ -4342,7 +4342,7 @@ bootstrap_adopt_preflight_json() {
     [[ "$profile_id" =~ ^[a-z_][a-z0-9_-]*$ ]] \
       || error "El plan contiene un ID de persona no válido."
 
-    [[ "$profile_path" == "personas/${profile_id}.nix" ]] \
+    [[ "$profile_path" == "configuracion/personas/${profile_id}.nix" ]] \
       || error "El destino de perfil no coincide con su ID."
 
     targets+=("$profile_path")
@@ -4552,8 +4552,8 @@ bootstrap_adopt_stage_json() {
 
   mkdir -p \
     "$stage/hosts" \
-    "$stage/equipos" \
-    "$stage/personas"
+    "$stage/configuracion/equipos" \
+    "$stage/configuracion/personas"
 
   printf '%s\n' \
     "$plan" \
@@ -4718,7 +4718,7 @@ for profile in profiles:
             f"ERROR: id de persona no válido: {profile_id!r}"
         )
 
-    expected_path = f"personas/{profile_id}.nix"
+    expected_path = f"configuracion/personas/{profile_id}.nix"
 
     if target["profilePath"] != expected_path:
         raise SystemExit(
@@ -4828,7 +4828,7 @@ host_path = root / "equipos" / f"{host_id}.nix"
 
 if host_path.exists() or host_path.is_symlink():
     raise SystemExit(
-        f"ERROR: equipos/{host_id}.nix ya existe en staging."
+        f"ERROR: configuracion/equipos/{host_id}.nix ya existe en staging."
     )
 
 host_path.write_text(
@@ -4899,7 +4899,7 @@ hardware_path = root / "equipos" / f"{host_id}-detectado.nix"
 
 if hardware_path.exists() or hardware_path.is_symlink():
     raise SystemExit(
-        f"ERROR: equipos/{host_id}-detectado.nix ya existe en staging."
+        f"ERROR: generado/equipos/{host_id}-detectado.nix ya existe en staging."
     )
 
 hardware_path.write_text(
@@ -4913,8 +4913,8 @@ PY_STAGE
   fi
 
   generated+=(
-    "equipos/${host_id}.nix"
-    "equipos/${host_id}-detectado.nix"
+    "configuracion/equipos/${host_id}.nix"
+    "generado/equipos/${host_id}-detectado.nix"
   )
 
   while IFS= read -r target; do
@@ -4945,8 +4945,8 @@ PY_STAGE
 
   if grep -ERq \
       '^[[:space:]]*"?(password|hashedPassword|hashedPasswordFile|initialPassword)"?[[:space:]]*=' \
-      "$stage/equipos/${host_id}.nix" \
-      "$stage/personas"
+      "$stage/configuracion/equipos/${host_id}.nix" \
+      "$stage/configuracion/personas"
   then
     rm -rf -- "$stage"
     error "El staging contiene una credencial declarativa."
@@ -5532,10 +5532,10 @@ bootstrap_adopt_finalize_json() (
   # el preflight duplique esa lista en su JSON.
   expected_targets="$(
     {
-      printf 'equipos/%s.nix\n' \
+      printf 'configuracion/equipos/%s.nix\n' \
         "$host_id"
 
-      printf 'equipos/%s.nix\n' \
+      printf 'configuracion/equipos/%s.nix\n' \
         "$host_id"
 
       "$jq_bin" -r \
@@ -5603,7 +5603,7 @@ bootstrap_adopt_finalize_json() (
     >/dev/null
 
   # -----------------------------------------------------------------------
-  # Registro persistente antes de tocar equipos/, equipos/ o personas/.
+  # Registro persistente antes de tocar configuracion/equipos/, configuracion/equipos/ o configuracion/personas/.
   # -----------------------------------------------------------------------
 
   checkpoint="creando-transaccion"
@@ -6034,10 +6034,10 @@ bootstrap_adopt_publico() {
   echo
   echo "Korunix preparará:"
 
-  printf '  • equipos/%s.nix\n' \
+  printf '  • configuracion/equipos/%s.nix\n' \
     "$host_id"
 
-  printf '  • equipos/%s.nix\n' \
+  printf '  • configuracion/equipos/%s.nix\n' \
     "$host_id"
 
   "$jq_bin" -r \
@@ -9629,7 +9629,7 @@ canal_humano() {
 }
 
 archivo_host_canal() {
-  printf '%s/equipos/%s.nix\n' "$ROOT" "$HOST"
+  printf '%s/configuracion/equipos/%s.nix\n' "$ROOT" "$HOST"
 }
 
 canal_declarado() {
@@ -9639,7 +9639,7 @@ canal_declarado() {
   archivo="$(archivo_host_canal)"
 
   [[ -f "$archivo" ]] \
-    || error "No existe equipos/${HOST}.nix."
+    || error "No existe configuracion/equipos/${HOST}.nix."
 
   canal="$(
     sed -n -E \
@@ -9648,7 +9648,7 @@ canal_declarado() {
   )"
 
   [[ "$(printf '%s\n' "$canal" | grep -c .)" -eq 1 ]] \
-    || error "equipos/${HOST}.nix debe declarar exactamente un canal."
+    || error "configuracion/equipos/${HOST}.nix debe declarar exactamente un canal."
 
   printf '%s\n' "$canal"
 }
@@ -9899,7 +9899,7 @@ mostrar_plan_canal() {
     echo "No hay cambio: ese canal ya está declarado."
   else
     echo
-    echo "Este plan no modificó equipos/${HOST}.nix."
+    echo "Este plan no modificó configuracion/equipos/${HOST}.nix."
     echo "No se construyó ni aplicó ninguna generación."
   fi
 }
@@ -9949,7 +9949,7 @@ cambiar_canal() {
   respaldo="${XDG_STATE_HOME:-$HOME/.local/state}/korunix/backups/canal-${HOST}-${actual}-a-${objetivo}-${marca}"
 
   mkdir -p "$respaldo/hosts"
-  cp -p -- "$(archivo_host_canal)" "$respaldo/equipos/${HOST}.nix"
+  cp -p -- "$(archivo_host_canal)" "$respaldo/configuracion/equipos/${HOST}.nix"
 
   escribir_canal_host "$objetivo"
 
@@ -9983,7 +9983,7 @@ cambiar_canal() {
   echo "Restaurando el canal anterior..." >&2
 
   cp -p -- \
-    "$respaldo/equipos/${HOST}.nix" \
+    "$respaldo/configuracion/equipos/${HOST}.nix" \
     "$(archivo_host_canal)"
 
   echo "✓ Canal anterior restaurado" >&2
