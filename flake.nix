@@ -89,8 +89,8 @@
         inherit system;
       };
 
-    # Motor Rust de D.2. El binario ya se llama korunix; durante la transición
-    # las operaciones aún no migradas se delegan al script histórico.
+    # Motor Rust único. Nix empaqueta el ejecutable; las operaciones del
+    # sistema vivo ya no dependen del dominio Bash histórico.
     korunixMotorFor = system: let
       pkgs = pkgsFor system;
     in
@@ -159,7 +159,8 @@
             "$out/share/applications/io.github.koruninn.Korunix.desktop"
 
           makeWrapper ${python}/bin/python3 "$out/bin/korunix" \
-            --add-flags "$out/share/korunix/korunix.py"
+            --add-flags "$out/share/korunix/korunix.py" \
+            --set KORUNIX_MOTOR_BIN ${korunixMotorFor system}/bin/korunix
 
           runHook postInstall
         '';

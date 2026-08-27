@@ -2430,60 +2430,24 @@ repositorio y convertir la nomenclatura humana en una regla permanente.
 la GUI Python de `app/` permanecen únicamente como transición explícita hacia
 D.2 y D.3; no se multiplicarán durante esa transición.
 
-#### D.2 · Motor Rust único — activa
+**Estructura maestra activa:** `configuracion/` contiene decisiones humanas, `sistema/` contiene el funcionamiento interno y `generado/` contiene hechos que Korunix escribe o detecta automáticamente.
 
-Sustituir progresivamente `scripts/korunix`, `scripts/users` y
-`scripts/localization` por un único ejecutable Rust. Debe conservar las
-semánticas y contratos estructurados cerrados en C mientras usa Nix como fuente
-del modelo declarativo.
+#### D.2 · Motor Rust único — cerrada
 
-**Estado actual de D.2:** el ejecutable Rust ya existe como
-`sistema/programa/principal.rs`, con `Cargo.toml` y `Cargo.lock` en sus nombres
-oficiales. El motor puede leer directamente el modelo Nix mediante `korunix
-modelo ...` y conserva la interfaz existente delegando temporalmente las
-operaciones que todavía viven en `scripts/korunix`.
+Rust es el único motor operativo público de Korunix. Las consultas y
+operaciones del sistema vivo entran por el ejecutable `korunix`; los archivos
+`scripts/korunix`, `scripts/users` y `scripts/localization` son únicamente
+accesos de compatibilidad y no contienen dominio operativo.
 
-La salida Nix `packages.<sistema>.motor` permite construir el motor sin
-reemplazar todavía el paquete gráfico predeterminado. Esta compatibilidad es
-transitoria: D.2 solo podrá cerrarse cuando las operaciones públicas de
-`scripts/korunix`, `scripts/users` y `scripts/localization` hayan sido absorbidas
-por Rust o retiradas porque Nix las resuelve declarativamente.
+La GUI Python transitoria también consume el ejecutable Rust mediante
+`KORUNIX_MOTOR_BIN`. Las operaciones administrativas cruzan una frontera Rust
+única: Polkit es la vía normal y sudo solo puede actuar desde una terminal
+realmente interactiva. Las pruebas sustituyen esa frontera explícitamente; no
+fabrican pseudo-TTY ni automatizan contraseñas.
 
-**Avance de D.2 — canales y permisos:** las consultas `channel --json` y
-`privileges --json` ya nacen en Rust. Las definiciones de canales y valores
-iniciales viven dentro de `sistema/`, porque son reglas internas del producto y
-no preferencias de una persona. La salida flake temporal `korunix` fue retirada:
-el motor lee las fuentes Nix directamente. La implementación Bash de canales queda como compatibilidad transitoria; el
-motor Rust ya posee la consulta, el plan, la escritura y la recuperación.
+**Estado: cerrado.** No existe dispatcher operativo Rust → Bash.
 
-**Avance de D.2 — dominio de canales completo:** el motor Rust ya consulta,
-planifica y cambia el canal. El plan evalúa una copia temporal del checkout para
-no modificar la configuración real ni siquiera durante la previsualización. La
-escritura real cambia exactamente una declaración, crea un respaldo persistente
-y revierte el archivo si la nueva declaración no evalúa. `channel` nunca cambia
-`system.stateVersion`, nunca construye una generación y nunca la aplica. La
-implementación Bash permanece únicamente como compatibilidad transitoria mientras
-D.2 retira el resto del motor antiguo.
-
-**Avance de D.2 — estructura maestra aplicada:** la raíz humana ya se separa
-en `configuracion/`, `sistema/` y `generado/`. `configuracion/equipos/` y
-`configuracion/personas/` contienen decisiones que una persona puede cambiar;
-`generado/equipos/` contiene hechos detectados automáticamente; `sistema/`
-contiene la implementación interna. Las rutas antiguas `equipos/` y `personas/`
-ya no forman parte de la estructura activa. El sufijo `-detectado` puede
-permanecer temporalmente durante D.2 por compatibilidad, aunque la carpeta
-`generado/` ya define su naturaleza.
-
-**Avance de D.2 — lecturas del equipo en Rust:** `hardware --json`,
-`localization --json` y `users --json` ya nacen en el motor Rust. Las tres
-combinan el modelo declarativo de Nix con el estado vivo del sistema sin pasar
-por los backends Bash. Sus contratos JSON se mantienen idénticos a los contratos
-heredados; `detectedAt` sigue siendo una marca temporal y no participa en las
-comparaciones de identidad. `jq` permanece temporalmente como herramienta de
-composición JSON, pero ya no contiene el dominio operativo ni actúa como punto
-de entrada.
-
-#### D.3 · GTK/libadwaita sobre el motor
+#### D.3 · GTK/libadwaita sobre el motor — activa
 
 Migrar la aplicación Python actual a la interfaz definitiva sobre el mismo
 motor Rust. No debe existir un backend paralelo de administración.

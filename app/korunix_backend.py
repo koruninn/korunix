@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -52,7 +53,8 @@ class Snapshot:
 def _is_project_root(path: Path) -> bool:
     return (
         (path / "flake.nix").is_file()
-        and (path / "scripts" / "korunix").is_file()
+        and (path / "Cargo.toml").is_file()
+        and (path / "sistema" / "programa" / "principal.rs").is_file()
         and (path / "spec.md").is_file()
     )
 
@@ -85,11 +87,36 @@ def find_project_root() -> Path:
     )
 
 
+def _engine_command(root: Path, *arguments: str) -> list[str]:
+    configured = os.environ.get("KORUNIX_MOTOR_BIN")
+    if configured:
+        return [configured, *arguments]
+
+    built = root / "target" / "debug" / "korunix"
+    if built.is_file() and os.access(built, os.X_OK):
+        return [str(built), *arguments]
+
+    cargo = shutil.which("cargo")
+    if cargo:
+        return [
+            cargo,
+            "run",
+            "--quiet",
+            "--locked",
+            "--bin",
+            "korunix",
+            "--",
+            *arguments,
+        ]
+
+    raise BackendError("No encontramos el motor Rust de Korunix.")
+
+
 def _run_json(root: Path, area: str, timeout: int = 180) -> dict[str, Any]:
     if area not in AREAS:
         raise ValueError(f"Área desconocida: {area}")
 
-    command = [str(root / "scripts" / "korunix"), area, "--json"]
+    command = _engine_command(root, area, "--json")
     environment = os.environ.copy()
     environment.setdefault("KORUNIX_ROOT", str(root))
 
@@ -108,7 +135,9 @@ def _run_json(root: Path, area: str, timeout: int = 180) -> dict[str, Any]:
             f"La consulta de {area} tardó demasiado y fue detenida."
         ) from error
     except OSError as error:
-        raise BackendError(f"No pudimos iniciar la consulta de {area}.") from error
+        raise BackendError(
+            f"No pudimos iniciar la consulta de {area}."
+        ) from error
 
     if result.returncode != 0:
         detail = result.stderr.strip().splitlines()
@@ -118,31 +147,26 @@ def _run_json(root: Path, area: str, timeout: int = 180) -> dict[str, Any]:
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as error:
-        raise BackendError(f"{area} devolvió datos que Korunix no reconoce.") from error
+        raise BackendError(
+            f"{area} devolvió datos que Korunix no reconoce."
+        ) from error
 
     if not isinstance(payload, dict):
-        raise BackendError(f"{area} no devolvió un objeto de estado válido.")
+        raise BackendError(
+            f"{area} no devolvió un objeto de estado válido."
+        )
 
     return payload
-
 
 def prepare_channel(
     root: Path,
     target: str,
     timeout: int = 600,
 ) -> dict[str, Any]:
-    """Prepara y valida el canal, pero nunca aplica una generación."""
-
     if target not in {"stable", "unstable"}:
         raise ValueError(f"Canal desconocido: {target}")
 
-    command = [
-        str(root / "scripts" / "korunix"),
-        "channel",
-        target,
-        "--yes",
-    ]
-
+    command = _engine_command(root, "channel", target, "--yes")
     environment = os.environ.copy()
     environment.setdefault("KORUNIX_ROOT", str(root))
 
@@ -170,13 +194,16 @@ def prepare_channel(
             *result.stderr.strip().splitlines(),
             *result.stdout.strip().splitlines(),
         ]
-        last_line = detail[-1] if detail else "La operación no devolvió detalles."
+        last_line = (
+            detail[-1]
+            if detail
+            else "La operación no devolvió detalles."
+        )
         raise BackendError(
             f"No pudimos preparar {target}: {last_line}"
         )
 
     return _run_json(root, "channel")
-
 
 def load_snapshot(root: Path | None = None) -> Snapshot:
     """Carga las áreas en paralelo para no congelar la ventana."""

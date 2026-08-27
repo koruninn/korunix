@@ -337,20 +337,17 @@ def validate_structure() -> None:
         if required not in style:
             raise SystemExit(f"El sistema visual no contiene {required}.")
 
-    localization = (ROOT / "scripts" / "localization").read_text(encoding="utf-8")
-    optional_functions = {
-        "tipo": localization.split("backend_input_tipo()", 1)[1].split(
-            "backend_input_paquete()", 1
-        )[0],
-        "paquete": localization.split("backend_input_paquete()", 1)[1].split(
-            "noctalia_source()", 1
-        )[0],
-    }
-    for name, function in optional_functions.items():
-        if "--raw" in function or "--json" not in function:
-            raise SystemExit(
-                f"El {name} opcional del método de entrada no admite el valor nulo."
-            )
+    backend = (APP / "korunix_backend.py").read_text(
+        encoding="utf-8"
+    )
+    if "def _engine_command" not in backend:
+        raise SystemExit("La GUI no conoce el motor Rust.")
+    if 'root / "scripts" / "korunix"' in backend:
+        raise SystemExit("La GUI volvió a invocar Bash.")
+    if "KORUNIX_MOTOR_BIN" not in backend:
+        raise SystemExit(
+            "La GUI no acepta el ejecutable Rust empaquetado."
+        )
 
 
 def main() -> None:

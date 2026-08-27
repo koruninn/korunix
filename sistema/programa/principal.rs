@@ -6,10 +6,11 @@
 //! humanas viven en los archivos de configuración. Este programa toma esas
 //! decisiones y realiza las consultas u operaciones necesarias.
 //!
-//! Durante D.2 todavía existen operaciones antiguas en `scripts/korunix`.
-//! Cuando una operación aún no vive aquí, Korunix la entrega temporalmente a ese
-//! archivo. La meta de D.2 es ir quitando esas entregas hasta que Rust sea el
-//! único motor.
+//! Rust es el único motor operativo público de Korunix.
+//! Los archivos que permanecen en scripts/ son accesos de compatibilidad y no
+//! contienen dominio operativo.
+
+mod operaciones;
 
 use std::env;
 use std::ffi::OsString;
@@ -23,45 +24,40 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const AYUDA: &str = r#"Korunix
 
 Uso:
-  korunix modelo
-  korunix modelo canales
-  korunix modelo predeterminados
-  korunix modelo equipos
-  korunix modelo equipos <id>
-  korunix channel
-  korunix channel --json
-  korunix channel stable --plan
-  korunix channel unstable --plan
-  korunix channel stable --plan --json
-  korunix channel unstable --plan --json
-  korunix channel stable
-  korunix channel unstable
-  korunix channel stable --yes
-  korunix channel unstable --yes
-  korunix hardware --json
-  korunix localization --json
-  korunix users --json
-  korunix privileges --json
-  korunix <operación todavía en transición>
+  korunix modelo [canales|predeterminados|equipos [id]]
+  korunix bootstrap --plan [--json]
+  korunix bootstrap --adopt [--yes]
+  korunix users [operación]
+  korunix hardware [--json]
+  korunix localization [--json]
+  korunix channel [opciones]
+  korunix status
+  korunix structure
+  korunix validate
+  korunix format
+  korunix preview [--json]
+  korunix build [--json]
+  korunix apply [--yes] [--json]
+  korunix update [entradas...] [--plan] [--json]
+  korunix rollback --list [--json]
+  korunix rollback <id> [--plan] [--yes] [--json]
+  korunix clean-preview [--json]
+  korunix clean [--yes] [--json]
+  korunix clean-all-preview [--json]
+  korunix clean-all [--yes] [--json]
+  korunix storage ...
+  korunix firmware ...
+  korunix media ...
+  korunix privileges [--json]
 
-"modelo" lee las fuentes declarativas de Nix.
-
-"channel" administra el canal completo:
-- consultar no cambia nada;
-- --plan evalúa una copia temporal y no toca tu configuración;
-- cambiar el canal modifica una sola declaración;
-- --yes indica que una interfaz superior ya confirmó el cambio;
-- nunca aplica una generación y nunca cambia system.stateVersion.
-
-"privileges --json" explica cómo Korunix podría pedir permisos sin pedirlos.
-Las operaciones todavía no migradas se entregan temporalmente a scripts/korunix.
+Nix contiene las decisiones declarativas. Rust realiza las operaciones del
+sistema vivo. Korunix no automatiza contraseñas ni fabrica pseudo-TTY.
 "#;
-
 fn es_raiz_korunix(ruta: &Path) -> bool {
     ruta.join("flake.nix").is_file()
         && ruta.join("sistema/canales.nix").is_file()
         && ruta.join("sistema/predeterminados.nix").is_file()
-        && ruta.join("scripts/korunix").is_file()
+        && ruta.join("sistema/programa/principal.rs").is_file()
 }
 
 fn raiz_repositorio() -> Result<PathBuf, String> {
@@ -2602,29 +2598,6 @@ fn ejecutar_modelo(raiz: &Path, argumentos: &[OsString]) -> Result<ExitCode, Str
     Ok(ExitCode::SUCCESS)
 }
 
-fn ejecutar_compatibilidad(raiz: &Path, argumentos: &[OsString]) -> Result<ExitCode, String> {
-    let heredado = raiz.join("scripts/korunix");
-
-    let estado = Command::new(&heredado)
-        .args(argumentos)
-        .current_dir(raiz)
-        .env("KORUNIX_MOTOR", "rust")
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .map_err(|error| {
-            format!(
-                "No pude entregar la operación temporal a {}: {error}",
-                heredado.display()
-            )
-        })?;
-
-    Ok(ExitCode::from(
-        estado.code().unwrap_or(1).clamp(0, u8::MAX as i32) as u8,
-    ))
-}
-
 fn ejecutar() -> Result<ExitCode, String> {
     let raiz = raiz_repositorio()?;
     let mut argumentos: Vec<OsString> = env::args_os().skip(1).collect();
@@ -2665,11 +2638,7 @@ fn ejecutar() -> Result<ExitCode, String> {
             Ok(ExitCode::SUCCESS)
         }
         "privileges" => Err("Uso: korunix privileges [--json].".to_string()),
-        _ => {
-            let mut delegados = vec![comando];
-            delegados.extend(argumentos);
-            ejecutar_compatibilidad(&raiz, &delegados)
-        }
+        _ => operaciones::ejecutar_operacion(&raiz, comando_texto.as_ref(), &argumentos),
     }
 }
 
