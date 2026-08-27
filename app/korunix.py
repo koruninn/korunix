@@ -21,6 +21,8 @@ from korunix_backend import (  # noqa: E402
     find_project_root,
     human_language,
     load_snapshot,
+    prepare_channel,
+    present_channel,
     present_hardware,
     present_localization,
     present_users,
@@ -40,8 +42,10 @@ class KorunixWindow(Adw.ApplicationWindow):
         self.text = self.translator.text
         self.project_root: Path | None = None
         self.loading = False
+        self.channel_busy = False
         self.rows: dict[str, Adw.ActionRow] = {}
         self.pages_by_row: dict[Adw.ActionRow, str] = {}
+        self.search_terms_by_row: dict[Adw.ActionRow, str] = {}
 
         self.set_title(self.text("app.name"))
         self.set_default_size(1080, 720)
@@ -80,10 +84,22 @@ class KorunixWindow(Adw.ApplicationWindow):
 
         sidebar_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         sidebar_box.add_css_class("korunix-sidebar")
+
+        self.search_entry = Gtk.SearchEntry(
+            placeholder_text=self.text("search.placeholder")
+        )
+        self.search_entry.add_css_class("korunix-search")
+        self.search_entry.set_tooltip_text(self.text("search.accessible"))
+        self.search_entry.set_margin_top(12)
+        self.search_entry.set_margin_start(12)
+        self.search_entry.set_margin_end(12)
+        self.search_entry.connect("search-changed", self._on_search_changed)
+        sidebar_box.append(self.search_entry)
+
         self.navigation = Gtk.ListBox()
         self.navigation.set_selection_mode(Gtk.SelectionMode.SINGLE)
         self.navigation.add_css_class("navigation-sidebar")
-        self.navigation.set_margin_top(12)
+        self.navigation.set_margin_top(8)
         self.navigation.set_margin_bottom(12)
         self.navigation.set_margin_start(12)
         self.navigation.set_margin_end(12)
@@ -95,28 +111,39 @@ class KorunixWindow(Adw.ApplicationWindow):
                 "view-grid-symbolic",
                 "nav.summary",
                 "nav.summary.note",
+                "search.terms.summary",
+            ),
+            (
+                "updates",
+                "view-refresh-symbolic",
+                "nav.updates",
+                "nav.updates.note",
+                "search.terms.updates",
             ),
             (
                 "localization",
                 "preferences-desktop-locale-symbolic",
                 "nav.localization",
                 "nav.localization.note",
+                "search.terms.localization",
             ),
             (
                 "hardware",
                 "computer-symbolic",
                 "nav.hardware",
                 "nav.hardware.note",
+                "search.terms.hardware",
             ),
             (
                 "people",
                 "system-users-symbolic",
                 "nav.people",
                 "nav.people.note",
+                "search.terms.people",
             ),
         )
 
-        for name, icon_name, title_key, note_key in navigation_items:
+        for name, icon_name, title_key, note_key, search_key in navigation_items:
             row = Adw.ActionRow(
                 title=self.text(title_key),
                 subtitle=self.text(note_key),
@@ -128,8 +155,24 @@ class KorunixWindow(Adw.ApplicationWindow):
             self.navigation.append(row)
             self.rows[name] = row
             self.pages_by_row[row] = name
+            self.search_terms_by_row[row] = " ".join(
+                (
+                    self.text(title_key),
+                    self.text(note_key),
+                    self.text(search_key),
+                )
+            ).casefold()
 
         sidebar_box.append(self.navigation)
+        self.search_empty = Gtk.Label(
+            label=self.text("search.empty"),
+            wrap=True,
+            justify=Gtk.Justification.CENTER,
+        )
+        self.search_empty.add_css_class("dim-label")
+        self.search_empty.add_css_class("korunix-search-empty")
+        self.search_empty.set_visible(False)
+        sidebar_box.append(self.search_empty)
         sidebar_toolbar.set_content(sidebar_box)
         sidebar_page = Adw.NavigationPage(
             child=sidebar_toolbar,
@@ -171,6 +214,22 @@ class KorunixWindow(Adw.ApplicationWindow):
 
         first_row = self.rows["summary"]
         self.navigation.select_row(first_row)
+
+    def _on_search_changed(self, entry: Gtk.SearchEntry) -> None:
+        query = entry.get_text().strip().casefold()
+        visible_rows: list[Adw.ActionRow] = []
+
+        for row, terms in self.search_terms_by_row.items():
+            visible = not query or query in terms
+            row.set_visible(visible)
+            if visible:
+                visible_rows.append(row)
+
+        self.search_empty.set_visible(not visible_rows)
+
+        selected = self.navigation.get_selected_row()
+        if visible_rows and (selected is None or not selected.get_visible()):
+            self.navigation.select_row(visible_rows[0])
 
     def _on_navigation_selected(
         self,
@@ -276,10 +335,25 @@ class KorunixWindow(Adw.ApplicationWindow):
             if "users" in snapshot.data
             else None
         )
+        channel = (
+            present_channel(
+                snapshot.data["channel"],
+                self.translator.language,
+            )
+            if "channel" in snapshot.data
+            else None
+        )
 
         self._replace_stack_page(
             "summary",
             self._build_summary_page(localization, hardware, people, snapshot),
+        )
+        self._replace_stack_page(
+            "updates",
+            self._build_updates_page(
+                channel,
+                snapshot.errors.get("channel"),
+            ),
         )
         self._replace_stack_page(
             "localization",
@@ -297,6 +371,234 @@ class KorunixWindow(Adw.ApplicationWindow):
             self._build_people_page(people, snapshot.errors.get("users")),
         )
         return GLib.SOURCE_REMOVE
+
+    def _channel_target(self, selector: Adw.ComboRow) -> str:
+        return "stable" if selector.get_selected() == 0 else "unstable"
+
+    def _on_channel_selection_changed(
+        self,
+        selector: Adw.ComboRow,
+        _parameter: object,
+        button: Gtk.Button,
+        current: str,
+        action_row: Adw.ActionRow,
+        descriptions: dict[str, str],
+    ) -> None:
+        target = self._channel_target(selector)
+
+        selector.set_subtitle(
+            descriptions.get(
+                target,
+                self.text("channels.choice.note"),
+            )
+        )
+
+        if target == current:
+            action_row.set_title(self.text("channels.selected"))
+            action_row.set_subtitle(self.text("channels.selected.note"))
+            button.set_visible(False)
+            button.set_sensitive(False)
+            return
+
+        action_row.set_title(self.text("channels.prepare"))
+        action_row.set_subtitle(self.text("channels.action.note"))
+        button.set_visible(True)
+        button.set_label(self.text("channels.prepare"))
+        button.set_sensitive(not self.channel_busy)
+
+    def _on_prepare_channel_clicked(
+        self,
+        _button: Gtk.Button,
+        selector: Adw.ComboRow,
+        current: str,
+        action_row: Adw.ActionRow,
+        button: Gtk.Button,
+    ) -> None:
+        if self.channel_busy:
+            return
+
+        target = self._channel_target(selector)
+
+        if target == current:
+            return
+
+        self.channel_busy = True
+        selector.set_sensitive(False)
+        button.set_sensitive(False)
+        button.set_label(self.text("channels.preparing"))
+        self.refresh_button.set_sensitive(False)
+
+        worker = threading.Thread(
+            target=self._prepare_channel_worker,
+            args=(target, selector, current, action_row, button),
+            daemon=True,
+        )
+        worker.start()
+
+    def _prepare_channel_worker(
+        self,
+        target: str,
+        selector: Adw.ComboRow,
+        current: str,
+        action_row: Adw.ActionRow,
+        button: Gtk.Button,
+    ) -> None:
+        try:
+            root = self.project_root or find_project_root()
+            prepare_channel(root, target)
+        except BackendError as error:
+            GLib.idle_add(
+                self._finish_channel_change,
+                target,
+                selector,
+                current,
+                action_row,
+                button,
+                str(error),
+            )
+            return
+
+        GLib.idle_add(
+            self._finish_channel_change,
+            target,
+            selector,
+            current,
+            action_row,
+            button,
+            None,
+        )
+
+    def _finish_channel_change(
+        self,
+        target: str,
+        selector: Adw.ComboRow,
+        current: str,
+        action_row: Adw.ActionRow,
+        button: Gtk.Button,
+        error: str | None,
+    ) -> bool:
+        self.channel_busy = False
+
+        if error is not None:
+            selector.set_sensitive(True)
+            button.set_visible(target != current)
+            button.set_label(self.text("channels.prepare"))
+            button.set_sensitive(target != current)
+            self.refresh_button.set_sensitive(True)
+            action_row.set_subtitle(
+                f"{self.text('channels.error')}: {error}"
+            )
+            return GLib.SOURCE_REMOVE
+
+        self._load_state()
+        return GLib.SOURCE_REMOVE
+
+    def _build_updates_page(
+        self,
+        channel: dict[str, Any] | None,
+        error: str | None,
+    ) -> Adw.PreferencesPage:
+        page = self._preferences_page(
+            self.text("channels.title"),
+            self.text("channels.description"),
+        )
+
+        if channel is None:
+            page.add(self._partial_error_group())
+            return page
+
+        current = str(channel.get("id") or "")
+        descriptions = {
+            str(option.get("id") or ""): str(option.get("description") or "")
+            for option in channel.get("options", [])
+        }
+
+        current_group = Adw.PreferencesGroup(
+            title=self.text("channels.current.group")
+        )
+        current_group.add(
+            self._value_row(
+                self.text("channels.current"),
+                channel.get("label"),
+            )
+        )
+        current_group.add(
+            self._value_row(
+                self.text("channels.nixos"),
+                channel.get("nixosVersionShort"),
+            )
+        )
+        page.add(current_group)
+
+        choice_group = Adw.PreferencesGroup(
+            title=self.text("channels.choice.group")
+        )
+
+        model = Gtk.StringList.new(
+            [
+                self.text("channels.stable"),
+                self.text("channels.unstable"),
+            ]
+        )
+
+        selector = Adw.ComboRow(
+            title=self.text("channels.choice"),
+            subtitle=descriptions.get(
+                current,
+                self.text("channels.choice.note"),
+            ),
+        )
+        selector.set_model(model)
+        selector.set_selected(0 if current == "stable" else 1)
+        choice_group.add(selector)
+
+        action_row = Adw.ActionRow(
+            title=self.text("channels.prepare"),
+            subtitle=self.text("channels.action.note"),
+        )
+
+        button = Gtk.Button(
+            label=self.text("channels.prepare")
+        )
+        button.add_css_class("suggested-action")
+        button.set_valign(Gtk.Align.CENTER)
+        action_row.add_suffix(button)
+        choice_group.add(action_row)
+
+        selector.connect(
+            "notify::selected",
+            self._on_channel_selection_changed,
+            button,
+            current,
+            action_row,
+            descriptions,
+        )
+
+        button.connect(
+            "clicked",
+            self._on_prepare_channel_clicked,
+            selector,
+            current,
+            action_row,
+            button,
+        )
+
+        self._on_channel_selection_changed(
+            selector,
+            None,
+            button,
+            current,
+            action_row,
+            descriptions,
+        )
+
+        if error:
+            action_row.set_subtitle(
+                f"{self.text('channels.error')}: {error}"
+            )
+
+        page.add(choice_group)
+        return page
 
     def _preferences_page(self, title: str, description: str) -> Adw.PreferencesPage:
         page = Adw.PreferencesPage(title=title, description=description)
@@ -341,6 +643,49 @@ class KorunixWindow(Adw.ApplicationWindow):
         page = self._preferences_page(
             self.text("summary.title"), self.text("summary.description")
         )
+
+        contradictions = len(localization["contradictions"]) if localization else 0
+        ready = snapshot.complete and contradictions == 0
+        if snapshot.errors:
+            state_key = "incomplete"
+        elif contradictions:
+            state_key = "warning"
+        else:
+            state_key = "ready"
+
+        state_text = {
+            "ready": (
+                self.text("summary.hero.ready"),
+                self.text("summary.hero.ready.body"),
+            ),
+            "warning": (
+                self.text("summary.hero.warning"),
+                self.text("summary.hero.warning.body"),
+            ),
+            "incomplete": (
+                self.text("summary.hero.incomplete"),
+                self.text("summary.hero.incomplete.body"),
+            ),
+        }
+        state_title, state_body = state_text[state_key]
+
+        status_group = Adw.PreferencesGroup()
+        status_row = Adw.ActionRow(
+            title=state_title,
+            subtitle=state_body,
+        )
+        status_row.set_title_lines(2)
+        status_row.set_subtitle_lines(3)
+        status_row.add_css_class("korunix-status-row")
+        status_icon = Gtk.Image.new_from_icon_name(
+            "emblem-ok-symbolic" if ready else "dialog-warning-symbolic"
+        )
+        status_icon.set_pixel_size(32)
+        status_icon.add_css_class("korunix-status-icon")
+        status_row.add_prefix(status_icon)
+        status_group.add(status_row)
+        page.add(status_group)
+
         group = Adw.PreferencesGroup(title=self.text("summary.current"))
         group.add(
             self._value_row(
@@ -384,24 +729,6 @@ class KorunixWindow(Adw.ApplicationWindow):
                 )
             )
         page.add(group)
-
-        contradictions = len(localization["contradictions"]) if localization else 0
-        consistency = Adw.PreferencesGroup(title=self.text("summary.state"))
-        ready = snapshot.complete and contradictions == 0
-        if snapshot.errors:
-            consistency_key = "summary.state.incomplete"
-        elif contradictions:
-            consistency_key = "summary.state.warning"
-        else:
-            consistency_key = "summary.state.ready"
-        consistency.add(
-            self._value_row(
-                self.text("summary.state"),
-                self.text(consistency_key),
-                "emblem-ok-symbolic" if ready else "dialog-warning-symbolic",
-            )
-        )
-        page.add(consistency)
 
         if snapshot.errors:
             page.add(self._partial_error_group())

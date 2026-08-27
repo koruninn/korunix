@@ -21,6 +21,7 @@ from korunix_backend import (  # noqa: E402
     find_project_root,
     human_architecture,
     normalize_language,
+    present_channel,
     present_hardware,
     present_localization,
     present_users,
@@ -95,7 +96,7 @@ def validate_partial_degradation() -> None:
     with patch("korunix_backend._run_json", side_effect=fake_query):
         snapshot = load_snapshot(ROOT)
 
-    if set(snapshot.available) != {"localization", "users"}:
+    if set(snapshot.available) != {"localization", "users", "channel"}:
         raise SystemExit("Un fallo parcial ocultó áreas que seguían disponibles.")
     if "hardware" not in snapshot.errors:
         raise SystemExit("El fallo parcial de hardware no quedó registrado.")
@@ -145,6 +146,47 @@ def validate_human_presentation() -> None:
             "Ethernet controller [0200]: Realtek Semiconductor Co., Ltd. "
             "RTL8111/8168/8211/8411 PCI Express Gigabit Ethernet Controller "
             "[10ec:8168] (rev 15)"
+        ],
+    }
+
+    channel = {
+        "schemaVersion": 1,
+        "hostId": "prueba",
+        "declared": "stable",
+        "effective": "stable",
+        "nixosVersion": "26.05",
+        "stateVersion": "26.05",
+        "sources": {
+            "nixpkgs": "nixos-26.05",
+            "aagl": "release-26.05",
+        },
+        "options": [
+            {
+                "id": "stable",
+                "labels": {
+                    "es": "Estable",
+                    "en": "Stable",
+                    "hu": "Stabil",
+                },
+                "descriptions": {
+                    "es": "Prioriza estabilidad.",
+                    "en": "Prioritizes stability.",
+                    "hu": "A stabilitást részesíti előnyben.",
+                },
+            },
+            {
+                "id": "unstable",
+                "labels": {
+                    "es": "Inestable",
+                    "en": "Unstable",
+                    "hu": "Instabil",
+                },
+                "descriptions": {
+                    "es": "Prioriza software reciente.",
+                    "en": "Prioritizes newer software.",
+                    "hu": "Az újabb szoftvereket részesíti előnyben.",
+                },
+            },
         ],
     }
 
@@ -206,6 +248,36 @@ def validate_human_presentation() -> None:
         if hardware_view["network"] != ["Ethernet Realtek"]:
             raise SystemExit("La red no se presenta mediante su capacidad y fabricante.")
 
+        channel_view = present_channel(channel, language)
+        if channel_view["id"] != "stable":
+            raise SystemExit("La presentación del canal perdió su identificador.")
+
+        if channel_view["label"] == "stable":
+            raise SystemExit(
+                f"El canal no se presenta en lenguaje humano para {language}."
+            )
+
+        if not channel_view["effectiveMatches"]:
+            raise SystemExit("El canal declarado y el efectivo deberían coincidir.")
+
+        if channel_view["nixosVersionShort"] != "26.05":
+            raise SystemExit(
+                "La versión humana de NixOS conserva la revisión técnica."
+            )
+
+        if len(channel_view["options"]) != 2:
+            raise SystemExit(
+                "La GUI no recibió las dos opciones de canal."
+            )
+
+        if not all(
+            option["description"]
+            for option in channel_view["options"]
+        ):
+            raise SystemExit(
+                f"Falta la descripción humana de un canal para {language}."
+            )
+
     people = present_users(users)
     if people["accounts"][0]["name"] != "Persona de prueba":
         raise SystemExit("La presentación de personas perdió el nombre humano.")
@@ -239,9 +311,31 @@ def validate_structure() -> None:
         "Adw.BreakpointCondition.parse",
         'breakpoint.add_setter(self.split_view, "collapsed", True)',
         "self.add_breakpoint(breakpoint)",
+        "Gtk.SearchEntry",
+        "Adw.ComboRow",
+        "def _on_search_changed",
+        "def _build_updates_page",
+        "prepare_channel(root, target)",
+        '"updates"',
+        "korunix-status-row",
     ):
         if required not in interface:
             raise SystemExit(f"La ventana adaptable no contiene {required}.")
+
+    if 'self.text("channels.nixpkgs")' in interface:
+        raise SystemExit(
+            "La vista normal vuelve a mostrar la referencia de Nixpkgs."
+        )
+
+    if 'self.text("channels.aagl")' in interface:
+        raise SystemExit(
+            "La vista normal vuelve a mostrar la referencia de AAGL."
+        )
+
+    style = (APP / "style.css").read_text(encoding="utf-8")
+    for required in (".korunix-search", ".korunix-status-row"):
+        if required not in style:
+            raise SystemExit(f"El sistema visual no contiene {required}.")
 
     localization = (ROOT / "scripts" / "localization").read_text(encoding="utf-8")
     optional_functions = {

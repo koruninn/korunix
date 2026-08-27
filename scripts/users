@@ -28,8 +28,8 @@ resolver_host() {
   local archivo
 
   if [[ -n "$solicitado" ]]; then
-    [[ -f "hosts/${solicitado}.nix" ]] \
-      || error "No existe hosts/${solicitado}.nix."
+    [[ -f "equipos/${solicitado}.nix" ]] \
+      || error "No existe equipos/${solicitado}.nix."
 
     printf '%s\n' "$solicitado"
     return
@@ -37,13 +37,14 @@ resolver_host() {
 
   actual="$(hostname 2>/dev/null || true)"
 
-  if [[ -n "$actual" && -f "hosts/${actual}.nix" ]]; then
+  if [[ -n "$actual" && -f "equipos/${actual}.nix" ]]; then
     printf '%s\n' "$actual"
     return
   fi
 
-  for archivo in hosts/*.nix; do
+  for archivo in equipos/*.nix; do
     [[ -e "$archivo" ]] || continue
+    [[ "$archivo" == *-detectado.nix ]] && continue
     hosts+=("$(basename "$archivo" .nix)")
   done
 
@@ -55,7 +56,14 @@ resolver_host() {
   error "No pude decidir qué host usar. Define KORUNIX_HOST."
 }
 
-HOST="$(resolver_host)"
+# La planificación interna del bootstrap debe poder inspeccionar las cuentas
+# antes de que exista equipos/<id>.nix. El resto de operaciones conserva la
+# resolución estricta del host.
+if [[ "${1:-}" == "__bootstrap-plan" ]]; then
+  HOST=""
+else
+  HOST="$(resolver_host)"
+fi
 
 confirmar() {
   local mensaje="$1"
@@ -174,7 +182,7 @@ perfil_asignado_al_host() {
 
 perfil_portable_json() {
   local id_usuario="$1"
-  local perfil="users/${id_usuario}.nix"
+  local perfil="personas/${id_usuario}.nix"
 
   [[ -f "$perfil" ]] \
     || error "No existe $perfil."
@@ -215,7 +223,7 @@ perfil_por_cuenta() {
   settings="$(host_settings_json)"
 
   shopt -s nullglob
-  perfiles=(users/*.nix)
+  perfiles=(personas/*.nix)
 
   for perfil in "${perfiles[@]}"; do
     id_usuario="$(basename "$perfil" .nix)"
@@ -545,7 +553,7 @@ usuarios_detectados_json() {
   )"
 
   shopt -s nullglob
-  local archivos=(users/*.nix)
+  local archivos=(personas/*.nix)
 
   for perfil in "${archivos[@]}"; do
     id_usuario="$(basename "$perfil" .nix)"
@@ -1016,7 +1024,7 @@ copiar_avatar_usuario() {
   extension="$(extension_avatar "$origen")" \
     || error "El avatar debe ser JPG, JPEG, PNG o WebP."
 
-  destino="users/${id_usuario}.${extension}"
+  destino="personas/${id_usuario}.${extension}"
 
   [[ ! -e "$destino" ]] \
     || error "$destino ya existe."
@@ -1034,7 +1042,7 @@ agregar_usuario_al_host() {
   local deferred_json="$5"
   local preserved_json="$6"
   local deferred_input_methods_json="$7"
-  local archivo="hosts/${HOST}.nix"
+  local archivo="equipos/${HOST}.nix"
   local entry
   local tmp
 
@@ -1212,7 +1220,7 @@ adoptar_usuario() {
 
   if [[ -z "$perfil_id" ]]; then
     perfil_id="$cuenta"
-    perfil="users/${perfil_id}.nix"
+    perfil="personas/${perfil_id}.nix"
 
     [[ ! -e "$perfil" ]] \
       || error "$perfil ya existe."
@@ -1242,7 +1250,7 @@ adoptar_usuario() {
     perfil_creado=true
     portable_account="$cuenta"
   else
-    perfil="users/${perfil_id}.nix"
+    perfil="personas/${perfil_id}.nix"
     requested="$(perfil_portable_json "$perfil_id" | jq -c '.capabilities')"
     requested_input_methods="$(
       perfil_portable_json "$perfil_id" | jq -c '.inputMethods'
@@ -1295,7 +1303,7 @@ adoptar_usuario() {
 
   confirmar "¿Preparar la adopción de $cuenta?" || return 0
 
-  host_file="hosts/${HOST}.nix"
+  host_file="equipos/${HOST}.nix"
   backup_host="$(mktemp)"
   cp -a "$host_file" "$backup_host"
 
@@ -1362,7 +1370,7 @@ crear_usuario() {
     error "$cuenta ya existe. Usa: scripts/korunix users adopt $cuenta"
   fi
 
-  perfil="users/${cuenta}.nix"
+  perfil="personas/${cuenta}.nix"
 
   [[ ! -e "$perfil" ]] \
     || error "$perfil ya existe."
@@ -1415,7 +1423,7 @@ crear_usuario() {
 
   confirmar "¿Preparar esta persona?" || return 0
 
-  host_file="hosts/${HOST}.nix"
+  host_file="equipos/${HOST}.nix"
   backup_host="$(mktemp)"
   cp -a "$host_file" "$backup_host"
 
@@ -1938,7 +1946,7 @@ plan_import_perfil_json() {
 
   id_usuario="$(jq -r '.profile.id' "$manifest")"
   cuenta="$(jq -r '.profile.accountName' "$manifest")"
-  if [[ -f "users/${id_usuario}.nix" ]]; then
+  if [[ -f "personas/${id_usuario}.nix" ]]; then
     profile_exists=true
     local_profile="$(perfil_portable_json "$id_usuario")"
 
@@ -2289,14 +2297,14 @@ importar_perfil() {
   extraer_bundle_seguro "$bundle" "$tmpdir"
   manifest="$tmpdir/manifest.json"
 
-  perfil="users/${id_usuario}.nix"
+  perfil="personas/${id_usuario}.nix"
 
   if [[ "$profile_exists" != true ]]; then
     avatar_file="$(jq -r '.profile.avatar.file // empty' "$manifest")"
 
     if [[ -n "$avatar_file" ]]; then
       extension="${avatar_file##*.}"
-      avatar_creado="users/${id_usuario}.${extension}"
+      avatar_creado="personas/${id_usuario}.${extension}"
 
       [[ ! -e "$avatar_creado" ]] \
         || error "$avatar_creado ya existe."
@@ -2326,7 +2334,7 @@ importar_perfil() {
 
   portable_account="$(perfil_portable_json "$id_usuario" | jq -r '.accountName')"
 
-  host_file="hosts/${HOST}.nix"
+  host_file="equipos/${HOST}.nix"
   backup_host="$(mktemp)"
   cp -a "$host_file" "$backup_host"
 
@@ -2379,6 +2387,242 @@ importar_perfil() {
   git status --short
 }
 
+bootstrap_users_plan_json() {
+  local jq_bin
+  local minimo
+  local bootstrap_accounts_json='[]'
+  local bootstrap_profiles_json='[]'
+  local cuenta
+  local passwd_field
+  local uid
+  local gid
+  local gecos
+  local home
+  local shell
+  local nombre
+  local grupos_texto
+  local grupos_json
+  local preservados
+  local administrador
+  local perfil_existe
+  local cuenta_json
+  local perfil_json
+  local cantidad
+  local administradores
+
+  jq_bin="$(command -v jq 2>/dev/null || true)"
+
+  [[ -n "$jq_bin" ]] \
+    || error "jq no está disponible."
+
+  minimo="$(uid_minimo)"
+
+  while IFS=: read -r \
+    cuenta \
+    passwd_field \
+    uid \
+    gid \
+    gecos \
+    home \
+    shell
+  do
+    [[ "$uid" =~ ^[0-9]+$ ]] || continue
+    (( uid >= minimo && uid < 65534 )) || continue
+
+    es_cuenta_tecnica "$home" "$shell" \
+      && continue
+
+    validar_nombre_cuenta "$cuenta"
+
+    nombre="${gecos%%,*}"
+    [[ -n "$nombre" ]] || nombre="$cuenta"
+
+    grupos_texto="$(
+      id -nG "$cuenta" 2>/dev/null \
+        || true
+    )"
+
+    # $groups pertenece a jq, no a Bash.
+    grupos_json="$(
+      "$jq_bin" -Rn \
+        --arg groups "$grupos_texto" \
+        "\$groups
+         | split(\" \")
+         | map(select(length > 0))
+         | unique"
+    )"
+
+    administrador=false
+
+    if "$jq_bin" -e \
+        'index("wheel") != null' \
+        <<<"$grupos_json" \
+        >/dev/null
+    then
+      administrador=true
+    fi
+
+    # La política de grupos preservados sigue teniendo una sola implementación
+    # dentro del motor de usuarios.
+    preservados="$(
+      grupos_preservados_json "$cuenta"
+    )"
+
+    perfil_existe=false
+
+    if [[ -e "personas/${cuenta}.nix" ]]; then
+      perfil_existe=true
+    fi
+
+    # shellcheck disable=SC2016
+    cuenta_json="$(
+      "$jq_bin" -cn \
+        --arg accountName "$cuenta" \
+        --arg displayName "$nombre" \
+        --argjson uid "$uid" \
+        --argjson gid "$gid" \
+        --arg homeDirectory "$home" \
+        --arg shell "$shell" \
+        --argjson administrator "$administrador" \
+        --argjson groups "$grupos_json" \
+        '{
+          accountName: $accountName,
+          displayName: $displayName,
+          uid: $uid,
+          gid: $gid,
+          homeDirectory: $homeDirectory,
+          shell: $shell,
+          administrator: $administrator,
+          groups: $groups
+        }'
+    )"
+
+    # El bootstrap describe únicamente información que puede conocer.
+    # No inventa preferencias personales.
+    #
+    # language = null hace que el perfil pueda usar inicialmente el idioma del
+    # host sin convertirlo en una preferencia portable inventada.
+    # shellcheck disable=SC2016
+    perfil_json="$(
+      "$jq_bin" -cn \
+        --arg id "$cuenta" \
+        --arg profilePath "personas/${cuenta}.nix" \
+        --arg accountName "$cuenta" \
+        --arg fullName "$nombre" \
+        --arg homeDirectory "$home" \
+        --arg shell "$shell" \
+        --argjson uid "$uid" \
+        --argjson gid "$gid" \
+        --argjson administrator "$administrador" \
+        --argjson groups "$grupos_json" \
+        --argjson preservedGroups "$preservados" \
+        --argjson profileExists "$perfil_existe" \
+        '{
+          id: $id,
+
+          target: {
+            profilePath: $profilePath,
+            profileExists: $profileExists,
+            overwriteAllowed: false
+          },
+
+          portable: {
+            accountName: $accountName,
+            fullName: $fullName,
+            language: null,
+            inputMethods: [],
+            capabilities: [],
+            avatar: null
+          },
+
+          local: {
+            homeDirectory: $homeDirectory,
+            administrator: $administrator,
+            deferredCapabilities: [],
+            deferredInputMethods: [],
+            preservedGroups: $preservedGroups,
+            githubSshIdentityFile: null
+          },
+
+          credentials: {
+            action: "preserve-existing",
+            importedSecret: false
+          },
+
+          observed: {
+            uid: $uid,
+            gid: $gid,
+            shell: $shell,
+            groups: $groups
+          }
+        }'
+    )"
+
+    # shellcheck disable=SC2016
+    bootstrap_accounts_json="$(
+      "$jq_bin" -c \
+        --argjson item "$cuenta_json" \
+        '. + [$item]' \
+        <<<"$bootstrap_accounts_json"
+    )"
+
+    # shellcheck disable=SC2016
+    bootstrap_profiles_json="$(
+      "$jq_bin" -c \
+        --argjson item "$perfil_json" \
+        '. + [$item]' \
+        <<<"$bootstrap_profiles_json"
+    )"
+
+    : "$passwd_field"
+  done < <(getent passwd)
+
+  cantidad="$(
+    "$jq_bin" \
+      'length' \
+      <<<"$bootstrap_accounts_json"
+  )"
+
+  administradores="$(
+    "$jq_bin" \
+      '[.[] | select(.administrator)] | length' \
+      <<<"$bootstrap_accounts_json"
+  )"
+
+  (( cantidad >= 1 )) \
+    || error "Korunix no detectó ninguna cuenta humana para adoptar."
+
+  (( administradores >= 1 )) \
+    || error "Korunix no puede adoptar un equipo sin un administrador existente."
+
+  # shellcheck disable=SC2016
+  "$jq_bin" -n \
+    --argjson accounts "$bootstrap_accounts_json" \
+    --argjson profiles "$bootstrap_profiles_json" \
+    --argjson administrators "$administradores" \
+    '{
+      schemaVersion: 1,
+      kind: "korunix-bootstrap-users-plan",
+
+      accounts: $accounts,
+      profiles: $profiles,
+
+      summary: {
+        humanAccounts: ($accounts | length),
+        administrators: $administrators
+      },
+
+      policy: {
+        source: "existing-unix-accounts",
+        portableProfileSchemaVersion: 2,
+        preservesExistingPasswords: true,
+        storesPasswords: false,
+        inventsPortablePreferences: false,
+        overwritesExistingProfiles: false
+      }
+    }'
+}
+
 operacion_usuarios() {
   local accion="${1:-}"
   local argumento="${2:-}"
@@ -2390,6 +2634,12 @@ operacion_usuarios() {
 
     --json)
       usuarios_detectados_json
+      ;;
+
+    # Operación interna del bootstrap. No forma parte de la interfaz pública de
+    # usuarios y no escribe ningún archivo.
+    __bootstrap-plan)
+      bootstrap_users_plan_json
       ;;
 
     adopt)

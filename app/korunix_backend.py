@@ -25,7 +25,7 @@ except ImportError:  # Las validaciones estructurales no necesitan Babel.
     get_timezone_name = None
 
 
-AREAS = ("localization", "hardware", "users")
+AREAS = ("localization", "hardware", "users", "channel")
 
 
 class BackendError(RuntimeError):
@@ -124,6 +124,58 @@ def _run_json(root: Path, area: str, timeout: int = 180) -> dict[str, Any]:
         raise BackendError(f"{area} no devolvió un objeto de estado válido.")
 
     return payload
+
+
+def prepare_channel(
+    root: Path,
+    target: str,
+    timeout: int = 600,
+) -> dict[str, Any]:
+    """Prepara y valida el canal, pero nunca aplica una generación."""
+
+    if target not in {"stable", "unstable"}:
+        raise ValueError(f"Canal desconocido: {target}")
+
+    command = [
+        str(root / "scripts" / "korunix"),
+        "channel",
+        target,
+        "--yes",
+    ]
+
+    environment = os.environ.copy()
+    environment.setdefault("KORUNIX_ROOT", str(root))
+
+    try:
+        result = subprocess.run(
+            command,
+            cwd=root,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise BackendError(
+            "La preparación del canal tardó demasiado y fue detenida."
+        ) from error
+    except OSError as error:
+        raise BackendError(
+            "No pudimos iniciar la preparación del canal."
+        ) from error
+
+    if result.returncode != 0:
+        detail = [
+            *result.stderr.strip().splitlines(),
+            *result.stdout.strip().splitlines(),
+        ]
+        last_line = detail[-1] if detail else "La operación no devolvió detalles."
+        raise BackendError(
+            f"No pudimos preparar {target}: {last_line}"
+        )
+
+    return _run_json(root, "channel")
 
 
 def load_snapshot(root: Path | None = None) -> Snapshot:
@@ -566,6 +618,91 @@ def present_hardware(data: dict[str, Any], language: str) -> dict[str, Any]:
         ],
     }
 
+
+def present_channel(
+    data: dict[str, Any],
+    language: str,
+) -> dict[str, Any]:
+    """Presenta el canal en lenguaje humano y conserva los detalles técnicos."""
+
+    channel_id = str(data.get("declared") or "")
+    effective = str(data.get("effective") or "")
+    sources = data.get("sources", {})
+
+    options: list[dict[str, Any]] = []
+
+    for option in data.get("options", []):
+        if not isinstance(option, dict):
+            continue
+
+        option_id = str(option.get("id") or "")
+        labels = option.get("labels", {})
+        descriptions = option.get("descriptions", {})
+
+        if not isinstance(labels, dict) or not isinstance(descriptions, dict):
+            continue
+
+        label = (
+            labels.get(language)
+            or labels.get("es")
+            or option_id
+            or "—"
+        )
+        description = (
+            descriptions.get(language)
+            or descriptions.get("es")
+            or ""
+        )
+
+        options.append(
+            {
+                "id": option_id,
+                "label": label,
+                "description": description,
+            }
+        )
+
+    current_option = next(
+        (
+            option
+            for option in options
+            if option.get("id") == channel_id
+        ),
+        None,
+    )
+
+    raw_version = str(data.get("nixosVersion") or "—")
+    version_parts = raw_version.split(".")
+
+    if (
+        len(version_parts) >= 2
+        and version_parts[0].isdigit()
+        and version_parts[1].isdigit()
+    ):
+        short_version = ".".join(version_parts[:2])
+    else:
+        short_version = raw_version
+
+    return {
+        "id": channel_id,
+        "label": (
+            current_option.get("label")
+            if current_option
+            else channel_id or "—"
+        ),
+        "description": (
+            current_option.get("description")
+            if current_option
+            else ""
+        ),
+        "effectiveMatches": effective == channel_id,
+        "nixosVersion": raw_version,
+        "nixosVersionShort": short_version,
+        "stateVersion": data.get("stateVersion") or "—",
+        "nixpkgs": sources.get("nixpkgs") or "—",
+        "aagl": sources.get("aagl") or "—",
+        "options": options,
+    }
 
 def present_users(data: dict[str, Any]) -> dict[str, Any]:
     accounts = []

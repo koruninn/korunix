@@ -1,14 +1,22 @@
 {
   config,
   lib,
+  options,
   pkgs,
   ...
 }: let
   cfg = config.korunix.boot;
   firmware = config.korunix.hardware.firmware;
+
+  # Automatic Boot Assessment apareció después de NixOS 26.05. Consultar el
+  # árbol real de opciones permite usarlo cuando existe sin vincular esta
+  # decisión artificialmente al nombre del canal.
+  systemdBootHasBootCounting =
+    lib.hasAttrByPath
+    ["boot" "loader" "systemd-boot" "bootCounting"]
+    options;
 in {
   options.korunix.boot = {
-
     # /boot es la disposición estándar de Korunix. Se puede conservar otra
     # ubicación cuando un equipo existente ya utiliza una ESP diferente.
     efiMountPoint = lib.mkOption {
@@ -31,7 +39,8 @@ in {
       assertions = [
         {
           assertion =
-            firmware != "bios"
+            firmware
+            != "bios"
             || cfg.biosDevice != null;
 
           message = ''
@@ -40,7 +49,6 @@ in {
           '';
         }
       ];
-
 
       # Estas decisiones ya existían en core.nix. Se conservan aquí para que
       # mover la responsabilidad al módulo de arranque no cambie la experiencia.
@@ -68,25 +76,28 @@ in {
           efiSysMountPoint = cfg.efiMountPoint;
         };
 
-        systemd-boot = {
-          enable = true;
-
-          # El menú de arranque conserva una cantidad pequeña y comprensible de
-          # estados. El historial completo de Nix sigue siendo una cuestión
-          # separada administrada por la política de limpieza de Korunix.
-          configurationLimit = 3;
-
-          # Evita editar parámetros del kernel desde el menú de arranque.
-          editor = false;
-
-          # Una configuración nueva dispone de tres intentos de arranque.
-          # Si nunca alcanza boot-complete.target, systemd-boot puede saltarla
-          # y recurrir a una configuración anterior funcional.
-          bootCounting = {
+        systemd-boot =
+          {
             enable = true;
-            tries = 3;
+
+            # El menú de arranque conserva una cantidad pequeña y comprensible de
+            # estados. El historial completo de Nix sigue siendo una cuestión
+            # separada administrada por la política de limpieza de Korunix.
+            configurationLimit = 3;
+
+            # Evita editar parámetros del kernel desde el menú de arranque.
+            editor = false;
+          }
+          // lib.optionalAttrs systemdBootHasBootCounting {
+            # Cuando la versión de NixOS ofrece Automatic Boot Assessment,
+            # una configuración nueva dispone de tres intentos de arranque.
+            # Si nunca alcanza boot-complete.target, systemd-boot puede saltarla
+            # y recurrir a una configuración anterior funcional.
+            bootCounting = {
+              enable = true;
+              tries = 3;
+            };
           };
-        };
       };
     })
 

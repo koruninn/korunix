@@ -3,11 +3,32 @@
   background-color: alpha(@window_fg_color, 0.035);
 }
 
+.korunix-search {
+  min-height: 38px;
+}
+
+.korunix-search-empty {
+  padding: 28px 18px;
+}
+
 .navigation-sidebar row {
-  min-height: 56px;
+  min-height: 60px;
+  border-radius: 12px;
+}
+
+.korunix-status-row {
+  min-height: 92px;
+}
+
+.korunix-status-icon {
+  min-width: 52px;
+  min-height: 52px;
+  border-radius: 26px;
+  background-color: alpha(@accent_bg_color, 0.14);
+  color: @accent_color;
 }
 
 preferencespage > scrolledwindow > viewport > clamp {
-  padding-top: 12px;
-  padding-bottom: 24px;
+  padding-top: 18px;
+  padding-bottom: 36px;
 }

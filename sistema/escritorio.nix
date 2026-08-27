@@ -5,6 +5,7 @@
   pkgs,
   ...
 }: let
+  productDefaults = import ../predeterminados.nix;
   cfg = config.korunix.desktop;
   localization = config.korunix.localization;
 
@@ -327,6 +328,21 @@
       done
     }
 
+    patch_autostart_package() {
+      package="$1"
+      desktops="$2"
+      directory="$package/etc/xdg/autostart"
+
+      [ -d "$directory" ] || return 0
+
+      for source in "$directory"/*.desktop; do
+        [ -f "$source" ] || continue
+
+        target="$out/etc/xdg/autostart/$(basename "$source")"
+        patch_desktop_file "$source" "$target" "$desktops"
+      done
+    }
+
     for package in ${lib.escapeShellArgs (
       map toString (
         lib.optionals noctaliaEnabled noctaliaOnlyApplications
@@ -359,6 +375,20 @@
       )
     )}; do
       patch_package "$package" "X-Cinnamon"
+    done
+
+    # Cinnamon necesita estos componentes, pero Niri y Hyprland ya ofrecen red
+    # y Bluetooth mediante Noctalia. Se conservan instalados y solo se limita
+    # su autoinicio visual a la sesión Cinnamon.
+    for package in ${lib.escapeShellArgs (
+      map toString (
+        lib.optionals cinnamonEnabled [
+          pkgs.blueman
+          pkgs.networkmanagerapplet
+        ]
+      )
+    )}; do
+      patch_autostart_package "$package" "X-Cinnamon"
     done
 
     # Valent solo pertenece a Niri, Hyprland y Cinnamon.
@@ -641,13 +671,13 @@ in {
   options.korunix.desktop = {
     primary = lib.mkOption {
       type = desktopType;
-      default = "niri";
+      default = productDefaults.desktop.primary;
       description = "Escritorio que Korunix presenta como sesión principal.";
     };
 
     additional = lib.mkOption {
       type = lib.types.listOf desktopType;
-      default = [];
+      default = productDefaults.desktop.additional;
       description = "Otros escritorios disponibles para elegir al iniciar sesión.";
     };
 

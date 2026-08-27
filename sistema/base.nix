@@ -3,6 +3,7 @@
   inputs,
   lib,
   pkgs,
+  pkgsUnstable ? null,
   ...
 }: let
   cfg = config.korunix;
@@ -15,6 +16,16 @@
     cp -R ${inputs.hatter}/Hatter-Green "$out/share/icons/Hatter-Green"
     cp -R ${inputs.hatter}/Hatter-Slate "$out/share/icons/Hatter-Slate"
   '';
+
+  # Algunas aplicaciones pueden llegar a una rama de nixpkgs antes que a la
+  # estable. Solo usamos el conjunto inestable como excepción puntual cuando
+  # el paquete no existe en la base elegida para el sistema.
+  fetchPackage =
+    if pkgs ? fetch
+    then pkgs.fetch
+    else if pkgsUnstable != null && pkgsUnstable ? fetch
+    then pkgsUnstable.fetch
+    else throw "Korunix necesita Fetch, pero ninguna fuente disponible lo contiene.";
 in {
   options.korunix = {
     enable = lib.mkEnableOption "Korunix";
@@ -34,13 +45,23 @@ in {
       description = "Versión de compatibilidad histórica de esta instalación de NixOS.";
     };
 
+    channel = lib.mkOption {
+      type = lib.types.enum ["stable" "unstable"];
+      default = "stable";
+      description = ''
+        Canal de actualizaciones de este equipo. Estable prioriza una base
+        mantenida de NixOS; inestable prioriza versiones más recientes.
+        Esta decisión nunca modifica system.stateVersion.
+      '';
+    };
+
     users = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [];
       description = "Personas que tienen una cuenta en este equipo.";
     };
 
-    # La identidad portable vive en users/<id>.nix. Estos valores pertenecen a
+    # La identidad portable vive en personas/<id>.nix. Estos valores pertenecen a
     # la relación entre esa persona y este host concreto.
     userSettings = lib.mkOption {
       type = lib.types.attrsOf (lib.types.submodule {
@@ -135,12 +156,12 @@ in {
       inputs.millennium.overlays.default
     ];
 
-    # Alacritty y Fish forman parte de la experiencia de terminal de Korunix. El
-    # programa Fetch depende de Fastfetch dentro de su propio paquete de nixpkgs,
-    # por lo que Fastfetch no se instala ni se muestra como elección duplicada.
+    # Alacritty y Fish forman parte de la experiencia de terminal de Korunix.
+    # Fetch lleva Fastfetch como dependencia interna, por lo que Fastfetch no se
+    # instala ni se muestra como elección duplicada.
     environment.systemPackages = [
       pkgs.alacritty
-      pkgs.fetch
+      fetchPackage
       pkgs.bibata-cursors
       hatterIcons
     ];

@@ -170,7 +170,8 @@ in {
       }
       {
         assertion =
-          cfg.keyboard.displayNames == []
+          cfg.keyboard.displayNames
+          == []
           || builtins.length cfg.keyboard.displayNames
           == builtins.length keyboardLayouts;
 

@@ -10,6 +10,10 @@
 include optional=true "/etc/korunix/niri-output.kdl"
 include optional=true "/etc/korunix/niri-input.kdl"
 
+// La ruta de capturas depende del XDG de cada persona. El servicio personal de
+// Korunix genera este archivo y Niri lo vuelve a leer automáticamente.
+include optional=true "~/.config/niri/korunix-screenshots.kdl"
+
 // Entrada: ratón y touchpad.
 
 input {
@@ -114,10 +118,10 @@ binds {
     // Capturas mediante Noctalia: misma función por GUI y teclado.
 
     // Print abre la selección de región.
-    Print { screenshot; }
+    Print { spawn "noctalia" "msg" "screenshot-region"; }
 
     // Ctrl+Print captura únicamente el monitor activo.
-    Ctrl+Print { screenshot-screen; }
+    Ctrl+Print { spawn "noctalia" "msg" "screenshot-fullscreen"; }
 
     // Shift+Print produce una sola imagen con todos los monitores.
     Shift+Print { spawn "noctalia" "msg" "screenshot-fullscreen" "all"; }

@@ -7,10 +7,20 @@
 }: let
   cfg = config.korunix.applications;
 
+  # Una instalación nueva y el bootstrap consumen la misma fuente de decisiones
+  # de producto. La arquitectura solo selecciona la suite ofimática apropiada.
+  productDefaults = import ../predeterminados.nix;
+  hostSystem = pkgs.stdenv.hostPlatform.system;
+
+  defaultApplications =
+    productDefaults.applications.common
+    ++ (productDefaults.applications.bySystem.${hostSystem} or []);
+
   # Esta tabla resuelve elecciones humanas a paquetes. Las piezas que forman
   # parte de un rol fijo de Korunix, como Alacritty o Fetch, no aparecen aquí.
   packageMap = {
     "android-tools" = pkgs.android-tools;
+    "xwayland-satellite" = pkgs.xwayland-satellite;
 
     # Aplicaciones GNOME que Korunix conserva como aplicaciones independientes.
     baobab = pkgs.baobab;
@@ -44,6 +54,7 @@
     lutris = pkgs.lutris;
     obsidian = pkgs.obsidian;
     "onlyoffice-desktopeditors" = pkgs.onlyoffice-desktopeditors;
+    libreoffice = pkgs.libreoffice;
     peazip = pkgs.peazip;
     prismlauncher = pkgs.prismlauncher;
     protonplus = pkgs.protonplus;
@@ -424,8 +435,11 @@ in {
 
   options.korunix.applications = lib.mkOption {
     type = lib.types.listOf lib.types.str;
-    default = [];
-    description = "Aplicaciones que la persona quiere tener disponibles.";
+    default = defaultApplications;
+    description = ''
+      Aplicaciones que la persona quiere tener disponibles. Cuando un host no
+      declara una selección propia, parte del conjunto inicial de Korunix.
+    '';
   };
 
   config = lib.mkIf config.korunix.enable {

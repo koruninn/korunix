@@ -10,11 +10,11 @@
   # Cada usuario es un archivo de datos legible. Si el host menciona un ID que no
   # existe, detener la evaluación es más seguro que crear una cuenta incompleta.
   loadUser = userId: let
-    path = korunixContext.usersPath + "/${userId}.nix";
+    path = korunixContext.personasPath + "/${userId}.nix";
   in
     if builtins.pathExists path
     then import path
-    else throw "El host ${cfg.hostId} utiliza ${userId}, pero falta users/${userId}.nix.";
+    else throw "El host ${cfg.hostId} utiliza ${userId}, pero falta personas/${userId}.nix.";
 
   profiles = lib.genAttrs cfg.users loadUser;
 
@@ -572,22 +572,322 @@
       rm -f "$fcitx_tmp"
     fi
 
-    if [ ! -e /etc/korunix/noctalia/config.toml ]; then
-      exit 0
-    fi
-
     pictures_dir="$(${pkgs.xdg-user-dirs}/bin/xdg-user-dir PICTURES 2>/dev/null || true)"
     if [ -z "$pictures_dir" ]; then
       pictures_dir="$HOME/Pictures"
     fi
 
     case "$KORUNIX_LANGUAGE" in
-      es*) screenshots_name="Capturas de pantalla" ;;
-      *) screenshots_name="Screenshots" ;;
+      be-Latn*)
+        screenshots_name="Zdymki ekrana"
+        screenshot_pattern="Zdymak ekrana ad %Y-%m-%d %H-%M-%S"
+        ;;
+      be*)
+        screenshots_name="Здымкі экрана"
+        screenshot_pattern="Здымак экрана ад %Y-%m-%d %H-%M-%S"
+        ;;
+      ca*)
+        screenshots_name="Captures de pantalla"
+        screenshot_pattern="Captura de pantalla del %Y-%m-%d %H-%M-%S"
+        ;;
+      cs*)
+        screenshots_name="Snímky obrazovky"
+        screenshot_pattern="Snímek obrazovky z %Y-%m-%d %H-%M-%S"
+        ;;
+      de*)
+        screenshots_name="Bildschirmfotos"
+        screenshot_pattern="Bildschirmfoto vom %Y-%m-%d um %H-%M-%S"
+        ;;
+      es*)
+        screenshots_name="Capturas de pantalla"
+        screenshot_pattern="Captura de pantalla del %Y-%m-%d %H-%M-%S"
+        ;;
+      fr*)
+        screenshots_name="Captures d’écran"
+        screenshot_pattern="Capture d’écran du %Y-%m-%d à %H-%M-%S"
+        ;;
+      gl-ES*)
+        screenshots_name="Capturas de pantalla"
+        screenshot_pattern="Captura de pantalla do %Y-%m-%d %H-%M-%S"
+        ;;
+      hu*)
+        screenshots_name="Képernyőképek"
+        screenshot_pattern="Képernyőkép %Y-%m-%d %H-%M-%S"
+        ;;
+      it*)
+        screenshots_name="Schermate"
+        screenshot_pattern="Schermata del %Y-%m-%d alle %H-%M-%S"
+        ;;
+      ko*)
+        screenshots_name="스크린샷"
+        screenshot_pattern="%Y-%m-%d %H-%M-%S 스크린샷"
+        ;;
+      ku*)
+        screenshots_name="Wêneyên dîmenderê"
+        screenshot_pattern="Wêneyê dîmenderê %Y-%m-%d %H-%M-%S"
+        ;;
+      nl*)
+        screenshots_name="Schermafbeeldingen"
+        screenshot_pattern="Schermafbeelding van %Y-%m-%d om %H-%M-%S"
+        ;;
+      nn*)
+        screenshots_name="Skjermbilete"
+        screenshot_pattern="Skjermbilete frå %Y-%m-%d %H-%M-%S"
+        ;;
+      pl*)
+        screenshots_name="Zrzuty ekranu"
+        screenshot_pattern="Zrzut ekranu z %Y-%m-%d %H-%M-%S"
+        ;;
+      pt-BR*)
+        screenshots_name="Capturas de tela"
+        screenshot_pattern="Captura de tela de %Y-%m-%d %H-%M-%S"
+        ;;
+      ru*)
+        screenshots_name="Снимки экрана"
+        screenshot_pattern="Снимок экрана от %Y-%m-%d %H-%M-%S"
+        ;;
+      sv*)
+        screenshots_name="Skärmbilder"
+        screenshot_pattern="Skärmbild från %Y-%m-%d %H-%M-%S"
+        ;;
+      tr*)
+        screenshots_name="Ekran görüntüleri"
+        screenshot_pattern="%Y-%m-%d %H-%M-%S ekran görüntüsü"
+        ;;
+      uk-UA*)
+        screenshots_name="Знімки екрана"
+        screenshot_pattern="Знімок екрана від %Y-%m-%d %H-%M-%S"
+        ;;
+      vi*)
+        screenshots_name="Ảnh chụp màn hình"
+        screenshot_pattern="Ảnh chụp màn hình lúc %Y-%m-%d %H-%M-%S"
+        ;;
+      zh-Hans*)
+        screenshots_name="屏幕截图"
+        screenshot_pattern="%Y-%m-%d %H-%M-%S 的屏幕截图"
+        ;;
+      *)
+        screenshots_name="Screenshots"
+        screenshot_pattern="Screenshot from %Y-%m-%d %H-%M-%S"
+        ;;
     esac
 
     screenshots_dir="$pictures_dir/$screenshots_name"
     mkdir -p "$screenshots_dir"
+
+    # Noctalia tiene una capa declarativa y otra guardada por su interfaz.
+    # Esta función modifica únicamente la política que Korunix administra y
+    # conserva el resto del TOML, incluso cuando sus secciones están sangradas.
+    merge_noctalia_policy() {
+      local target="$1"
+
+      ${pkgs.python3}/bin/python3 - \
+        "$target" \
+        "$screenshots_dir" \
+        "$screenshot_pattern" \
+        <<'PY'
+    from __future__ import annotations
+
+    import json
+    import os
+    import re
+    import sys
+    import tempfile
+    import tomllib
+    from pathlib import Path
+
+
+    link = Path(sys.argv[1])
+    target = link.resolve(strict=True) if link.is_symlink() else link
+    screenshots_dir = sys.argv[2]
+    screenshot_pattern = sys.argv[3]
+    original = target.read_text(encoding="utf-8")
+    source = original
+
+
+    def toml_string(value: str) -> str:
+        return json.dumps(value, ensure_ascii=False)
+
+
+    def section_bounds(text: str, section: str) -> tuple[int, int] | None:
+        header = re.compile(
+            rf"(?m)^[ \t]*\[{re.escape(section)}\][ \t]*(?:#.*)?$"
+        )
+        match = header.search(text)
+        if match is None:
+            return None
+
+        following = re.search(r"(?m)^[ \t]*\[", text[match.end():])
+        end = match.end() + following.start() if following else len(text)
+        return match.start(), end
+
+
+    def replace_key_in_section(
+        text: str,
+        section: str,
+        key: str,
+        value: str,
+    ) -> str:
+        bounds = section_bounds(text, section)
+        line = f"{key} = {toml_string(value)}"
+
+        if bounds is None:
+            return text.rstrip() + f"\n\n[{section}]\n{line}\n"
+
+        start, end = bounds
+        body = text[start:end]
+        key_pattern = re.compile(
+            rf"(?m)^([ \t]*){re.escape(key)}[ \t]*=.*$"
+        )
+
+        if key_pattern.search(body):
+            body = key_pattern.sub(
+                lambda match: f"{match.group(1)}{line}",
+                body,
+                count=1,
+            )
+        else:
+            value_line = re.search(r"(?m)^([ \t]*)[A-Za-z0-9_-]+[ \t]*=", body)
+            indent = value_line.group(1) if value_line else ""
+            body = body.rstrip() + f"\n{indent}{line}\n\n"
+
+        return text[:start] + body + text[end:]
+
+
+    def remove_section(text: str, section: str) -> str:
+        bounds = section_bounds(text, section)
+        if bounds is None:
+            return text
+
+        start, end = bounds
+        return text[:start].rstrip() + "\n\n" + text[end:].lstrip()
+
+
+    source = replace_key_in_section(
+        source,
+        "shell.screenshot",
+        "directory",
+        screenshots_dir,
+    )
+    source = replace_key_in_section(
+        source,
+        "shell.screenshot",
+        "filename_pattern",
+        screenshot_pattern,
+    )
+
+    # Versiones anteriores de Korunix añadían dos filtros para ocultar un
+    # notificador auxiliar de Cinnamon. Ya no forman parte de la política de
+    # Noctalia; solo se eliminan de configuraciones heredadas.
+    legacy_filters = (
+        "korunix-system-failure-en",
+        "korunix-system-failure-es",
+    )
+
+    for name in legacy_filters:
+        source = remove_section(source, f"notification.filter.{name}")
+
+    source = re.sub(
+        r"(?m)^[ \t]*# Filtros administrados por Korunix: "
+        r"ocultan solo el auxiliar gráfico de Cinnamon\.[ \t]*\n?",
+        "",
+        source,
+    )
+    source = source.rstrip() + "\n"
+
+    parsed = tomllib.loads(source)
+    screenshot = parsed["shell"]["screenshot"]
+    if screenshot["directory"] != screenshots_dir:
+        raise SystemExit("Korunix: no se pudo fusionar el directorio de capturas.")
+    if screenshot["filename_pattern"] != screenshot_pattern:
+        raise SystemExit("Korunix: no se pudo fusionar el nombre de las capturas.")
+
+    if source == original:
+        raise SystemExit(0)
+
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{target.name}.korunix-",
+        dir=target.parent,
+        text=True,
+    )
+    temporary = Path(temporary_name)
+
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            output.write(source)
+            output.flush()
+            os.fsync(output.fileno())
+
+        os.chmod(temporary, target.stat().st_mode)
+        temporary.replace(target)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+    PY
+    }
+
+    # Noctalia y el capturador propio de Niri comparten el mismo destino XDG.
+    # Niri admite archivos incluidos desde el home, así que esta ruta puede ser
+    # específica de cada persona sin introducir un /home fijo en la configuración
+    # común del sistema.
+    niri_dir="$config_home/niri"
+    niri_screenshots_target="$niri_dir/korunix-screenshots.kdl"
+    niri_screenshots_hash="$korunix_state/niri-screenshots.sha256"
+    niri_screenshots_tmp="$korunix_state/niri-screenshots.kdl.new"
+    mkdir -p "$niri_dir"
+
+    escape_kdl() {
+      printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+    }
+
+    printf 'screenshot-path "%s/%s.png"\n' \
+      "$(escape_kdl "$screenshots_dir")" \
+      "$(escape_kdl "$screenshot_pattern")" \
+      > "$niri_screenshots_tmp"
+
+    niri_screenshots_new_hash="$(sha256sum "$niri_screenshots_tmp" | cut -d' ' -f1)"
+
+    if [ -L "$niri_screenshots_target" ]; then
+      rm -f "$niri_screenshots_target"
+    fi
+
+    if [ ! -e "$niri_screenshots_target" ]; then
+      mv "$niri_screenshots_tmp" "$niri_screenshots_target"
+      printf '%s\n' "$niri_screenshots_new_hash" > "$niri_screenshots_hash"
+    elif [ -f "$niri_screenshots_hash" ] \
+        && [ -f "$niri_screenshots_target" ]
+    then
+      niri_screenshots_old_hash="$(cat "$niri_screenshots_hash")"
+      niri_screenshots_current_hash="$(sha256sum "$niri_screenshots_target" | cut -d' ' -f1)"
+
+      if [ "$niri_screenshots_current_hash" = "$niri_screenshots_old_hash" ]; then
+        mv "$niri_screenshots_tmp" "$niri_screenshots_target"
+        printf '%s\n' "$niri_screenshots_new_hash" > "$niri_screenshots_hash"
+      fi
+    fi
+
+    if [ -e "$niri_screenshots_tmp" ]; then
+      rm -f "$niri_screenshots_tmp"
+      printf '%s\n' \
+        "Korunix preservó ~/.config/niri/korunix-screenshots.kdl porque contiene cambios manuales." \
+        >&2
+    fi
+
+    # settings.toml se carga después de config.toml. La misma política debe
+    # quedar allí para que una preferencia antigua no anule la ruta XDG.
+    noctalia_state_home="$(printenv XDG_STATE_HOME 2>/dev/null || true)"
+    if [ -z "$noctalia_state_home" ]; then
+      noctalia_state_home="$HOME/.local/state"
+    fi
+
+    noctalia_settings_target="$noctalia_state_home/noctalia/settings.toml"
+    if [ -f "$noctalia_settings_target" ]; then
+      merge_noctalia_policy "$noctalia_settings_target"
+    fi
+
+    if [ ! -e /etc/korunix/noctalia/config.toml ]; then
+      exit 0
+    fi
 
     noctalia_dir="$config_home/noctalia"
     noctalia_target="$noctalia_dir/config.toml"
@@ -609,6 +909,7 @@
     sed \
       -e "s|@KORUNIX_AVATAR@|$(escape_sed "$avatar_value")|g" \
       -e "s|@KORUNIX_SCREENSHOTS@|$(escape_sed "$screenshots_dir")|g" \
+      -e "s|@KORUNIX_SCREENSHOT_PATTERN@|$(escape_sed "$screenshot_pattern")|g" \
       -e "s|@KORUNIX_NOCTALIA@|/etc/korunix/noctalia|g" \
       /etc/korunix/noctalia/config.toml \
       > "$noctalia_tmp"
@@ -650,11 +951,18 @@
       fi
     fi
 
-    # Un archivo normal cuyo hash ya no coincide puede haber sido editado a mano.
-    # Korunix lo preserva en vez de sobrescribirlo silenciosamente.
+    # Un archivo cuyo hash ya no coincide contiene preferencias personales.
+    # Korunix conserva todo ese contenido y fusiona únicamente la política de
+    # capturas. También elimina los dos filtros heredados que versiones anteriores
+    # añadían para un notificador auxiliar de Cinnamon.
+    merge_noctalia_policy "$noctalia_target"
+
+    # El hash anterior se conserva deliberadamente: el archivo continúa siendo
+    # propiedad de la persona y las futuras preparaciones repetirán la fusión
+    # acotada en vez de sustituir sus preferencias.
     rm -f "$noctalia_tmp"
     printf '%s\n' \
-      "Korunix preservó ~/.config/noctalia/config.toml porque contiene cambios manuales." \
+      "Korunix conservó las preferencias de Noctalia y actualizó solo su política administrada." \
       >&2
   '';
 in {

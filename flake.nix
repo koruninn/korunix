@@ -5,7 +5,12 @@
   # el sistema. Las versiones concretas quedan fijadas en flake.lock para que una
   # reconstrucción futura utilice exactamente las mismas revisiones.
   inputs = {
+    # La entrada histórica sigue representando Inestable.
     nixpkgs.url = "nixpkgs/nixos-unstable";
+
+    # Cada host puede utilizar 26.05 como base sin retirar el conjunto inestable
+    # que algunas aplicaciones aisladas pueden necesitar.
+    nixpkgsStable.url = "nixpkgs/nixos-26.05";
 
     hatter = {
       url = "github:Mibea/Hatter";
@@ -14,9 +19,16 @@
 
     millennium.url = "github:SteamClientHomebrew/Millennium?dir=packages/nix";
 
+    # AAGL principal acompaña al canal inestable.
     aagl = {
       url = "github:ezKEa/aagl-gtk-on-nix";
       inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # AAGL publica una rama correspondiente a NixOS 26.05.
+    aaglStable = {
+      url = "github:ezKEa/aagl-gtk-on-nix/release-26.05";
+      inputs.nixpkgs.follows = "nixpkgsStable";
     };
 
     alejandra = {
@@ -44,14 +56,17 @@
   }: let
     lib = nixpkgs.lib;
 
-    # Los hosts se descubren por nombre de archivo. Añadir hosts/portatil.nix y
-    # hardware/portatil.nix basta para que aparezca nixosConfigurations.portatil.
-    hostEntries = builtins.readDir ./hosts;
+    # Los hosts se descubren por nombre de archivo. Añadir equipos/portatil.nix y
+    # equipos/portatil-detectado.nix basta para que aparezca nixosConfigurations.portatil.
+    hostEntries = builtins.readDir ./equipos;
 
     hostFiles =
       lib.filterAttrs (
         name: type:
-          type == "regular" && lib.hasSuffix ".nix" name
+          type
+          == "regular"
+          && lib.hasSuffix ".nix" name
+          && !(lib.hasSuffix "-detectado.nix" name)
       )
       hostEntries;
 
@@ -59,8 +74,8 @@
       name: lib.removeSuffix ".nix" name
     ) (builtins.attrNames hostFiles);
 
-    hostFileFor = hostId: ./hosts + "/${hostId}.nix";
-    hardwareFileFor = hostId: ./hardware + "/${hostId}.nix";
+    hostFileFor = hostId: ./equipos + "/${hostId}.nix";
+    hardwareFileFor = hostId: ./equipos + "/${hostId}-detectado.nix";
 
     hostDataFor = hostId: import (hostFileFor hostId);
 
@@ -138,8 +153,30 @@
       hardwareFile =
         if builtins.pathExists hardwareCandidate
         then hardwareCandidate
-        else throw "Falta hardware/${hostId}.nix para el host ${hostId}.";
+        else throw "Falta equipos/${hostId}-detectado.nix para el host ${hostId}.";
       host = hostDataFor hostId;
+
+      # El canal es estado del host, no del repositorio completo.
+      channel = host.korunix.channel or "stable";
+
+      selectedNixpkgs =
+        if channel == "stable"
+        then inputs.nixpkgsStable
+        else inputs.nixpkgs;
+
+      selectedAagl =
+        if channel == "stable"
+        then inputs.aaglStable
+        else inputs.aagl;
+
+      # Los módulos que consumen `inputs.nixpkgs` o `inputs.aagl` reciben la
+      # familia correspondiente al host que se está evaluando.
+      hostInputs =
+        inputs
+        // {
+          nixpkgs = selectedNixpkgs;
+          aagl = selectedAagl;
+        };
 
       # El formato actual hace que users sea un attrset: las claves son IDs
       # portables y los valores contienen únicamente estado local del host.
@@ -155,18 +192,24 @@
         else hostUsersRaw;
 
       system = host.system;
+
+      # Patrón deliberadamente limitado: la base sigue siendo una sola rama,
+      # pero los módulos pueden solicitar una excepción de paquete concreta.
+      pkgsStable = inputs.nixpkgsStable.legacyPackages.${system};
+      pkgsUnstable = inputs.nixpkgs.legacyPackages.${system};
     in
-      lib.nixosSystem {
+      selectedNixpkgs.lib.nixosSystem {
         inherit system;
 
         # specialArgs solo transporta contexto estructural. Las decisiones que
         # una persona puede editar viven en config.korunix.*.
         specialArgs = {
-          inherit inputs;
+          inputs = hostInputs;
+          inherit pkgsStable pkgsUnstable;
 
           korunixContext = {
             inherit hostId hostFile hardwareFile;
-            usersPath = ./users;
+            personasPath = ./personas;
             configPath = ./config;
           };
         };
@@ -174,16 +217,16 @@
         modules = [
           hardwareFile
 
-          ./modules/core.nix
-          ./modules/hardware.nix
-          ./modules/boot.nix
-          ./modules/localization.nix
-          ./modules/desktop.nix
-          ./modules/apps.nix
-          ./modules/services.nix
-          ./modules/users.nix
+          ./sistema/base.nix
+          ./sistema/equipo.nix
+          ./sistema/arranque.nix
+          ./sistema/idioma.nix
+          ./sistema/escritorio.nix
+          ./sistema/aplicaciones.nix
+          ./sistema/servicios.nix
+          ./sistema/personas.nix
 
-          inputs.aagl.nixosModules.default
+          selectedAagl.nixosModules.default
           inputs.noctalia.nixosModules.default
           inputs.spicetify-nix.nixosModules.default
 
@@ -233,6 +276,16 @@
     checks = lib.genAttrs systems (system: {
       korunix-gui = korunixGuiFor system;
     });
+
+    # API declarativa que puede consumir el motor sin reimplementar el modelo.
+    # Los nombres son conceptos del producto; las salidas impuestas por Nix,
+    # como nixosConfigurations, conservan su nombre oficial.
+    korunix = {
+      esquema = 1;
+      canales = import ./canales.nix;
+      predeterminados = import ./predeterminados.nix;
+      equipos = lib.genAttrs hostIds hostDataFor;
+    };
 
     nixosConfigurations = lib.genAttrs hostIds makeHost;
   };

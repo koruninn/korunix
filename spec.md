@@ -559,7 +559,7 @@ Secure Boot es un problema separado de “dual boot”. Korunix debe detectarlo 
 
 Korunix no debe codificar un único host llamado `korunix` dentro del flake.
 
-Los hosts se descubren a partir de `hosts/*.nix` y se emparejan con su hardware correspondiente en `hardware/<id>.nix`.
+Los hosts se descubren a partir de `equipos/*.nix` y se emparejan con su hardware correspondiente en `equipos/<id>-detectado.nix`.
 
 El flake debe generar dinámicamente `nixosConfigurations.<id>` para los hosts encontrados.
 
@@ -592,7 +592,7 @@ korunixContext = {
   hostId = "...";
   hostFile = ...;
   hardwareFile = ...;
-  usersPath = ./users;
+  personasPath = ./personas;
   configPath = ./config;
 };
 ```
@@ -757,7 +757,7 @@ Korunix es dueño de la identidad y debe encargarse de mantener la fuente correc
 
 `.face` puede mantenerse como compatibilidad cuando resulte útil, pero no es el modelo principal de identidad.
 
-Los recursos de usuario deben mantenerse cerca de su definición mientras sigan siendo una colección simple. Por ejemplo, `users/koru.nix` y `users/koru.jpg` pueden convivir sin crear una carpeta adicional. Si un usuario llega a necesitar una colección real de recursos, entonces se reconsidera la estructura.
+Los recursos de usuario deben mantenerse cerca de su definición mientras sigan siendo una colección simple. Por ejemplo, `personas/koru.nix` y `personas/koru.jpg` pueden convivir sin crear una carpeta adicional. Si un usuario llega a necesitar una colección real de recursos, entonces se reconsidera la estructura.
 
 ## 19. GDM universal
 
@@ -1199,7 +1199,7 @@ El flujo objetivo es:
 
 1. detectar la configuración de origen;
 2. leer hardware, hostname y usuarios existentes;
-3. copiar o incorporar el hardware generado dentro del espacio administrado por Korunix bajo `hardware/<hostId>.nix`;
+3. copiar o incorporar el hardware generado dentro del espacio administrado por Korunix bajo `equipos/<hostId>-detectado.nix`;
 4. conservar una referencia clara al origen y a la fecha de adopción;
 5. validar que el nuevo árbol produce una configuración equivalente antes de considerarlo adoptado;
 6. no borrar el origen hasta que la migración esté verificada y la política de propiedad lo permita.
@@ -1954,3 +1954,542 @@ Esta especificación fija la dirección, pero los siguientes puntos requieren un
 - adaptación exacta de la configuración visual existente de Fastfetch al formato propio de `fetch`.
 
 Estos puntos no invalidan el resto del diseño. Se mantienen explícitos para que Korunix no convierta supuestos técnicos en promesas al usuario.
+
+<!-- KORUNIX-MULTIMEDIA-CENTER:BEGIN -->
+## Centro de prueba y control de dispositivos multimedia
+
+Korunix debe proporcionar un centro común para comprobar y administrar
+dispositivos de sonido y vídeo independientemente del escritorio utilizado.
+
+Esta capacidad forma parte del producto final y no de la hoja de ruta temporal.
+
+### Referencia de interacción
+
+La sección de Sonido de macOS Tahoe sirve como referencia conceptual de
+jerarquía: controles generales separados de los dispositivos, distinción clara
+entre entrada y salida, selección visible del dispositivo activo y acciones de
+prueba accesibles directamente.
+
+Korunix conserva su propia identidad GTK/libadwaita y Everforest; la referencia
+no implica copiar visualmente macOS.
+
+### Salidas de sonido
+
+Korunix debe identificar, cuando la información disponible lo permita:
+
+- parlantes integrados;
+- audífonos;
+- salidas analógicas;
+- dispositivos USB;
+- dispositivos Bluetooth;
+- HDMI y DisplayPort;
+- dispositivos virtuales.
+
+Para una salida debe poder ofrecer, según sus capacidades:
+
+- volumen;
+- silencio;
+- balance;
+- puerto o perfil;
+- selección como dispositivo predeterminado;
+- reproducción de un sonido de prueba;
+- prueba separada de canales izquierdo y derecho cuando corresponda.
+
+### Micrófonos y otras entradas
+
+Korunix debe identificar las entradas disponibles y permitir seleccionar
+explícitamente cuál se está inspeccionando.
+
+Cada micrófono debe ofrecer una acción visible **Probar micrófono**.
+
+La prueba debe incluir:
+
+1. un medidor de señal en vivo para confirmar que está llegando sonido;
+2. una acción **Grabar prueba** iniciada explícitamente por el usuario;
+3. una grabación temporal de corta duración;
+4. una acción **Reproducir prueba**;
+5. una acción **Grabar de nuevo** sin conservar innecesariamente la anterior;
+6. indicación visible mientras el micrófono está siendo utilizado.
+
+La grabación de prueba debe eliminarse al cerrar o finalizar la prueba, salvo
+que el usuario solicite explícitamente conservarla.
+
+Korunix no debe activar la grabación automáticamente al entrar en la página.
+
+Korunix tampoco debe enviar automáticamente la entrada del micrófono en tiempo
+real a los parlantes o audífonos, porque esa monitorización puede producir eco
+o acople.
+
+La acción **Probar micrófono** y la acción **Usar como predeterminado** son
+operaciones distintas. Probar un dispositivo nunca debe modificar
+silenciosamente la configuración permanente.
+
+Cuando el dispositivo exponga varios canales, Korunix podrá mostrar actividad
+por canal si la infraestructura subyacente proporciona esa información.
+
+### Bluetooth
+
+Los perfiles Bluetooth deben expresarse mediante conceptos comprensibles para
+el usuario.
+
+Por ejemplo, la interfaz puede distinguir entre:
+
+- mayor calidad para escuchar audio;
+- uso simultáneo de audífonos y micrófono.
+
+No se debe exigir al usuario conocer términos como A2DP, HFP o HSP para tomar
+esa decisión.
+
+### Cámaras
+
+Korunix debe presentar cámaras integradas, USB y virtuales cuando puedan
+identificarse.
+
+Una prueba de cámara puede mostrar:
+
+- nombre y tipo;
+- disponibilidad;
+- vista previa;
+- resoluciones disponibles;
+- frecuencias de imagen disponibles;
+- combinación usada durante la prueba.
+
+La cámara solo debe activarse como consecuencia de una acción explícita del
+usuario y debe liberarse al abandonar la prueba.
+
+### Prueba frente a preferencia permanente
+
+El centro debe mantener una separación explícita entre acciones equivalentes a:
+
+- **Probar dispositivo**;
+- **Usar como predeterminado**.
+
+Las pruebas son temporales y no deben modificar por sí solas la configuración
+persistente del sistema.
+
+### Motor
+
+Korunix debe utilizar la infraestructura multimedia efectiva del sistema,
+principalmente PipeWire/WirePlumber para audio y las interfaces de vídeo
+disponibles en Linux, sin exponer esos detalles como conocimiento obligatorio
+para el usuario.
+
+La capacidad debe funcionar bajo GNOME, Niri, Hyprland, KDE Plasma y Cinnamon.
+
+### Responsabilidad por fase
+
+- **C · Operaciones del sistema:** inventario, estado, selección, niveles,
+  dispositivos predeterminados y motores de prueba.
+- **D · GUI completa:** presentación de Sonido y Vídeo, medidores, listas,
+  previews, controles y mensajes humanos.
+- **E · Robustez:** hotplug, dispositivo ocupado, pérdida de señal, permisos,
+  Bluetooth, desaparición de cámara o micrófono durante una prueba y limpieza
+  segura de recursos temporales.
+<!-- KORUNIX-MULTIMEDIA-CENTER:END -->
+
+<!-- KORUNIX-NIX-FIRST:BEGIN -->
+## Arquitectura Nix-first y nomenclatura humana
+
+Korunix utiliza **Nix como fuente principal de verdad**. Toda decisión que
+pueda calcularse de forma declarativa durante la evaluación debe expresarse en
+Nix antes de recurrir a lógica procedimental.
+
+La frontera es:
+
+- **Nix:** decisiones, defaults, canales, equipos declarados, personas,
+  aplicaciones, escritorios, servicios, opciones, archivos generables,
+  dependencias, systemd, Polkit y validaciones declarativas;
+- **motor de Korunix:** únicamente interacción con el mundo vivo que Nix no
+  puede representar como evaluación pura, por ejemplo UDisks, fwupd,
+  PipeWire/WirePlumber, V4L2, autorización, progreso, cancelación y eventos de
+  la interfaz;
+- **GTK/libadwaita:** presentación e interacción. La GUI no contiene una
+  segunda implementación de las operaciones.
+
+El motor objetivo de runtime es **Rust**. Rust no debe volver a implementar
+decisiones que ya pertenezcan al modelo Nix. Los contratos funcionales cerrados
+en C se conservan durante la migración.
+
+### Estructura del repositorio
+
+La estructura debe permanecer tan plana como permita el significado de los
+archivos. Una carpeta solo se justifica cuando agrupa una colección real que
+una persona pueda nombrar con claridad.
+
+Reglas:
+
+1. no crear una carpeta para un solo archivo;
+2. no crear `default.nix` únicamente para reexportar otros archivos;
+3. evitar capas como `lib/`, `src/`, `backend/`, `frontend/`, `utils/`,
+   `helpers/`, `common/`, `core/`, `runtime/`, `provider/`, `manager/`,
+   `wrapper/` o `adapter/` cuando el nombre sea una decisión de Korunix;
+4. los nombres propios de Korunix se escriben en español, en minúsculas y con
+   significado humano;
+5. si un nombre pertenece a una herramienta externa, se conserva el nombre
+   oficial que esa herramienta reconoce.
+
+Por ello son nombres válidos impuestos externamente, entre otros:
+
+- `flake.nix`;
+- `flake.lock`;
+- `Cargo.toml`;
+- `Cargo.lock`;
+- `justfile`, mientras Just siga formando parte del flujo.
+
+La estructura objetivo de las piezas duraderas es:
+
+```text
+korunix/
+├── flake.nix
+├── flake.lock
+├── spec.md
+├── canales.nix
+├── predeterminados.nix
+├── nvidia-open-pci-ids.txt
+├── sistema/
+├── equipos/
+├── personas/
+└── programa/
+```
+
+`equipos/<id>.nix` contiene decisiones del equipo y
+`equipos/<id>-detectado.nix` contiene hechos físicos adoptados de esa máquina.
+
+Durante la transición de D pueden permanecer `scripts/`, `app/` y `config/`.
+No forman parte de la estructura objetivo: D.2 sustituye la lógica de scripts
+por el motor Rust compatible y D.3 absorbe la aplicación Python al integrar la
+GUI definitiva. `config/` solo se moverá cuando hacerlo no rompa rutas activas
+del escritorio actual.
+
+**Regla de nombres:** si el nombre lo decide Korunix, debe entenderlo una
+persona; si el nombre lo impone una herramienta externa, se conserva el nombre
+oficial.
+<!-- KORUNIX-NIX-FIRST:END -->
+
+<!-- KORUNIX-ROADMAP-TEMP:BEGIN -->
+## Hoja de ruta temporal de desarrollo
+
+> **Sección temporal.**
+>
+> Esta sección existe únicamente mientras Korunix continúe en desarrollo.
+> Cuando el proyecto alcance su cierre definitivo y todas las macrofases
+> descritas aquí estén completadas, debe retirarse íntegramente de `spec.md`,
+> incluidos los marcadores `KORUNIX-ROADMAP-TEMP`.
+
+La hoja de ruta sirve para mantener visible el contexto global del proyecto y
+evitar que el trabajo sobre una subetapa haga parecer que el resto del proyecto
+ha desaparecido o que el desarrollo es una sucesión indefinida de tareas sin
+un final reconocible.
+
+### Macrofases
+
+| Fase | Objetivo |
+| --- | --- |
+| **A · Estabilización** | Consolidar la base declarativa, eliminar interferencias entre escritorios, estabilizar Noctalia/Niri y cerrar regresiones heredadas. |
+| **B · Modelo funcional** | Definir las fuentes de verdad y el modelo común de canales, hardware, producto, personas, localización y primera adopción. |
+| **C · Operaciones del sistema** | ✅ Cerrada |
+| **D · GUI completa** | ▶ Activa · implementación parcial existente |
+| **E · Robustez** | Probar interrupciones, rollback, idempotencia, instalación limpia, hardware diverso, arquitecturas soportadas, trabajo offline y degradación segura. |
+| **F · Producto** | Completar distribución, bootstrap remoto, empaquetado, onboarding, documentación, traducciones y criterios de lanzamiento. |
+
+### Estado actual
+
+- **A · Estabilización:** cerrada.
+- **B · Modelo funcional:** cerrada.
+  - Canales, hardware, defaults, personas, localización y primera adopción
+    disponen de contratos estructurados.
+  - **B.3.5 · adopción transaccional de una instalación existente** está
+    cerrado.
+  - `bootstrap --adopt` y `bootstrap --adopt --yes` forman parte de la interfaz
+    pública.
+  - La adopción prepara configuración declarativa sin construir ni aplicar una
+    generación.
+- **C · Operaciones del sistema:** cerrada.
+  - C.1-C.6 conservan contratos estructurados comunes para CLI y GUI.
+  - D debe presentar esos motores sin duplicar su lógica.
+- **D · GUI completa:** activa.
+  - El trabajo actual adopta una arquitectura Nix-first antes de ampliar la GUI.
+  - La implementación Python y los scripts existentes son transitorios mientras
+    el motor único se migra de forma compatible.
+- **E · Robustez:** pendiente como fase principal, aunque fases anteriores pueden
+  adelantar pruebas de robustez cuando sean necesarias para cerrar correctamente
+  un contrato.
+- **F · Producto:** pendiente.
+
+<!-- KORUNIX-ROADMAP-C:BEGIN -->
+### Desglose de la fase C
+
+La fase **C · Operaciones del sistema** tiene un alcance finito de seis frentes.
+Este desglose existe para evitar convertir el desarrollo en una cadena
+indefinida de subetapas.
+
+#### C.1 · Ciclo de cambios — cerrada
+
+Consolidar el recorrido normal de una modificación:
+
+`estado → previsualización → construcción → aplicación → verificación`.
+
+Debe reutilizar las operaciones que Korunix ya posee y ofrecer contratos
+estructurados comunes para que CLI y GUI no implementen lógicas distintas.
+
+También debe clasificar el efecto de cada cambio en términos humanos, por
+ejemplo:
+
+- inmediato;
+- requiere cerrar sesión;
+- requiere reiniciar;
+- se aplicará en el próximo arranque.
+
+**Estado: cerrado.** `preview`, `build` y `apply` comparten un único motor.
+`build --json` y `preview --json` se comprobaron contra una generación
+candidata real y produjeron la misma candidata y el mismo impacto sin activar
+el sistema. La cancelación, `--yes` y `--yes --json` de `apply` se comprobaron
+aislando completamente la frontera privilegiada.
+
+**Regla de seguridad de pruebas:** las pruebas automatizadas de Korunix no
+deben fabricar pseudo-TTY ni automatizar prompts de contraseña. Las rutas
+privilegiadas se prueban sustituyendo explícitamente la frontera privilegiada,
+salvo cuando la operación real sea deliberada y visible para la persona.
+
+#### C.2 · Actualizaciones y migraciones — cerrada
+
+Consolidar:
+
+- actualización general;
+- actualización selectiva de inputs;
+- cambios entre canales soportados;
+- explicación previa de los cambios;
+- detección de migraciones;
+- indicación de reinicio o cierre de sesión cuando corresponda;
+- rollback asociado cuando una actualización no resulte utilizable.
+
+`system.stateVersion` permanece independiente del canal de actualizaciones.
+
+**Estado: cerrado.** La actualización total y selectiva comparte planificación
+y resultado estructurados. `flake.lock` se respalda antes de escribir y se
+restaura ante fallo o interrupción. La actualización de fuentes no modifica
+`stateVersion`, no construye ni aplica una generación. El impacto real de
+reinicio o cierre de sesión se delega al ciclo C.1. Los canales estable e
+inestable conservan su planificación, validación y restauración transaccional.
+
+La GUI debe consumir estos contratos y no interpretar la salida humana de
+`nix flake update`.
+
+#### C.3 · Recuperación y rollback — cerrada
+
+Unificar las operaciones de recuperación alrededor de las generaciones de
+NixOS y del gestor de arranque disponible.
+
+Debe contemplar:
+
+- inspección de puntos de recuperación;
+- selección explícita;
+- uso temporal en el siguiente arranque;
+- rollback seguro;
+- verificación posterior;
+- diferencias necesarias entre UEFI/systemd-boot y BIOS/GRUB.
+
+**Estado: cerrado.** Korunix expone las generaciones disponibles y un plan de
+recuperación común para CLI y GUI. La recuperación segura programa una
+generación existente únicamente para el próximo arranque: no sustituye la
+sesión actual ni la generación predeterminada. En UEFI utiliza el arranque
+único de systemd-boot; en BIOS/Legacy utiliza `grub-reboot` y verifica
+`next_entry` mediante `grubenv`. La cancelación, la función privilegiada de
+systemd-boot y la función privilegiada de GRUB se comprobaron con `sudo`
+completamente sustituido por un stub.
+
+La interfaz gráfica debe obtener confirmación antes de utilizar `--yes` y debe
+mostrar explícitamente que el cambio solo afecta al próximo arranque.
+
+#### C.4 · Limpieza y almacenamiento — cerrada
+
+Consolidar:
+
+- previsualización de limpieza normal;
+- limpieza normal;
+- previsualización de limpieza agresiva;
+- limpieza agresiva;
+- protección de generaciones necesarias para recuperación;
+- expulsión segura de almacenamiento extraíble;
+- progreso durante vaciado de escrituras pendientes;
+- tratamiento específico de transferencias pesadas.
+
+La expulsión segura no debe reducirse a ejecutar un `sync` global sin
+información para el usuario.
+
+**Estado: cerrado.** La limpieza normal conserva al menos las tres generaciones
+más recientes y la agresiva conserva únicamente las necesarias. Ambas protegen
+la generación activa, la predeterminada y una recuperación preparada durante
+el arranque actual. Los planes, resultados y etapas de progreso comparten un
+contrato estructurado para CLI y GUI.
+
+Korunix expone además inventario y expulsión segura de almacenamiento
+extraíble. Rechaza unidades que contengan `/`, `/nix`, `/boot` o `/boot/efi`,
+desmonta mediante UDisks y solicita el apagado de la unidad. Para transferencias
+pesadas utiliza `sync -f` por sistema de archivos y nunca `sync` global. Los
+porcentajes representan etapas aproximadas y no bytes pendientes inventados.
+
+#### C.5 · Firmware y frontera de privilegios — cerrada
+
+Completar la integración de actualización de firmware y definir una única
+frontera para las operaciones privilegiadas.
+
+Debe incluir:
+
+- inventario mediante fwupd cuando el hardware lo soporte;
+- búsqueda explícita de metadatos;
+- actualización iniciada por la persona;
+- descripción de los dispositivos afectados;
+- indicación de reinicio cuando sea necesario;
+- uso de Polkit/helper privilegiado en lugar de ejecutar la GUI completa como
+  root.
+
+Las operaciones sin necesidad de privilegios deben permanecer fuera del helper.
+
+**Estado: cerrado.** Korunix expone inventario y actualizaciones de firmware
+mediante fwupd con contratos JSON compartidos por CLI y GUI. El refresco de
+metadatos y la instalación requieren una acción explícita; la instalación se
+realiza por dispositivo y nunca reinicia ni apaga automáticamente el equipo.
+
+La interfaz completa permanece sin privilegios. Las operaciones administrativas
+de los frentes anteriores atraviesan una única frontera que usa Polkit/pkexec
+cuando está disponible y conserva un fallback de sudo únicamente para una
+terminal interactiva sin Polkit. Las pruebas automatizadas sustituyen esa
+frontera: no fabrican pseudo-TTY ni automatizan contraseñas.
+
+#### C.6 · Dispositivos multimedia — cerrada
+
+Implementar el motor operativo del centro de prueba y control multimedia
+definido de forma permanente en esta especificación.
+
+Debe cubrir como mínimo:
+
+- inventario de salidas de sonido;
+- inventario de entradas y micrófonos;
+- selección del dispositivo predeterminado;
+- niveles y silencio;
+- prueba de salida;
+- prueba de canales cuando corresponda;
+- medidor de micrófono en vivo;
+- **Probar micrófono**;
+- **Grabar prueba** temporal;
+- **Reproducir prueba**;
+- **Grabar de nuevo**;
+- eliminación automática de la grabación temporal;
+- inventario de cámaras;
+- prueba y vista previa explícita de cámara;
+- resolución y frecuencia de imagen cuando estén disponibles.
+
+Probar un dispositivo y convertirlo en predeterminado son operaciones
+independientes.
+
+La capa visual completa de estas capacidades corresponde a D y los escenarios
+de desconexión, dispositivos ocupados, pérdida de señal y otros fallos
+corresponden a E.
+
+### Criterio de cierre de C
+
+C podrá marcarse como cerrada cuando los seis frentes anteriores tengan un
+contrato operativo común, sus operaciones reales estén conectadas a la interfaz
+pública de Korunix y ninguna de ellas dependa de una segunda implementación
+paralela exclusiva de la GUI.
+
+Cerrar C no exige que toda la interfaz gráfica esté terminada; esa integración
+visual completa pertenece a D.
+
+**Estado de C.6: cerrado.** El motor multimedia publica un contrato común para
+CLI y GUI sobre PipeWire/WirePlumber y V4L2. Permite inventariar salidas,
+entradas, perfiles y puertos; cambiar predeterminados, volumen y silencio;
+probar una salida sin hacerla predeterminada; medir un micrófono en vivo y
+realizar una grabación temporal reproducible; e inventariar/previsualizar
+cámaras con resolución y FPS. Las pruebas de micrófono no realizan
+monitorización directa y las grabaciones se eliminan salvo petición explícita.
+
+**Fase C cerrada.** C.1-C.6 comparten contratos operativos que puede consumir la
+GUI. La fase D debe presentar estos mismos motores y no crear implementaciones
+paralelas para aplicar, recuperar, limpiar, firmware o multimedia.
+<!-- KORUNIX-ROADMAP-C:END -->
+
+<!-- KORUNIX-ROADMAP-D:BEGIN -->
+### Desglose de la fase activa D
+
+D tiene exactamente cuatro frentes. No se crearán subfases formales dentro de
+ellos.
+
+#### D.1 · Arquitectura Nix-first y estructura humana — cerrada
+
+Fijar la frontera Nix ↔ runtime, trasladar a Nix las fuentes declarativas que
+todavía dependan de parsers auxiliares, aplanar las piezas duraderas del
+repositorio y convertir la nomenclatura humana en una regla permanente.
+
+**Estado: cerrado.** Las fuentes de canales y predeterminados son Nix,
+`flake.nix` expone `korunix.canales`, `korunix.predeterminados` y
+`korunix.equipos`, y las piezas declarativas duraderas se agrupan como
+`sistema/`, `equipos/` y `personas/`. `catalog/`, `modules/`, `hosts/`,
+`hardware/` y `users/` quedan retirados. La lógica procedural de `scripts/` y
+la GUI Python de `app/` permanecen únicamente como transición explícita hacia
+D.2 y D.3; no se multiplicarán durante esa transición.
+
+#### D.2 · Motor Rust único — activa
+
+Sustituir progresivamente `scripts/korunix`, `scripts/users` y
+`scripts/localization` por un único ejecutable Rust. Debe conservar las
+semánticas y contratos estructurados cerrados en C mientras usa Nix como fuente
+del modelo declarativo.
+
+#### D.3 · GTK/libadwaita sobre el motor
+
+Migrar la aplicación Python actual a la interfaz definitiva sobre el mismo
+motor Rust. No debe existir un backend paralelo de administración.
+
+#### D.4 · Cierre de experiencia
+
+Completar navegación adaptable, progreso, confirmaciones, errores humanos,
+detalles técnicos opcionales, internacionalización y validación visual.
+
+**Criterio de cierre de D:** el modelo declarativo se obtiene de Nix; el
+runtime interactivo pasa por un único motor; la GUI no ejecuta como root ni
+duplica operaciones; y las rutas transitorias retiradas durante D ya no forman
+parte de la arquitectura final.
+<!-- KORUNIX-ROADMAP-D:END -->
+
+### Regla obligatoria de seguimiento durante el desarrollo
+
+Mientras esta sección exista:
+
+1. al informar un avance, cierre, bloqueo o cambio de frente, se debe mostrar
+   primero la **hoja de ruta completa A–F**;
+2. después puede ampliarse la fase, frente o subfrente actualmente trabajado;
+3. no se debe mostrar únicamente una cadena local como `B.3.5a → B.3.5e` sin
+   situarla antes dentro de A–F;
+4. debe distinguirse claramente entre:
+   - cerrado;
+   - activo;
+   - parcialmente implementado;
+   - pendiente;
+   - deuda conocida;
+5. los porcentajes solo deben utilizarse cuando exista una base verificable para
+   calcularlos; no deben inventarse porcentajes para transmitir una falsa
+   precisión;
+6. el frente activo y el siguiente objetivo inmediato deben quedar visibles para
+   que sea posible comprender hacia dónde avanza el proyecto;
+7. cerrar una subetapa no implica cerrar automáticamente su macrofase;
+8. si la estructura de la hoja de ruta cambia durante el desarrollo, esta
+   sección debe actualizarse para seguir representando el plan real;
+9. esta hoja de ruta describe el **progreso de desarrollo de Korunix**, no debe
+   convertirse en una pantalla, opción ni concepto visible para el usuario final
+   del producto salvo que exista una decisión independiente que lo justifique.
+
+### Criterio para retirar esta sección
+
+Esta sección debe eliminarse cuando Korunix haya completado las macrofases
+**A, B, C, D, E y F** y se considere alcanzado el cierre del proyecto definido
+para esta hoja de ruta.
+
+La eliminación es intencional: una vez terminado el desarrollo que esta hoja
+pretende seguir, mantener un registro operativo de “qué falta” dentro de la
+especificación del producto deja de tener utilidad.
+
+La historia del desarrollo seguirá perteneciendo a Git y a la documentación
+histórica correspondiente; `spec.md` debe volver a contener únicamente
+requisitos y decisiones relevantes para Korunix como producto terminado.<!-- KORUNIX-ROADMAP-TEMP:END -->

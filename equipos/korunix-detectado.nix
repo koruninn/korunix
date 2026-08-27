@@ -1,5 +1,5 @@
 # Hardware detectado por NixOS y adoptado por Korunix.
-# Este archivo describe dispositivos, discos y módulos necesarios para este host.
+# Este archivo describe dispositivos, discos y módulos detectados para este equipo.
 # Korunix no lo regenera silenciosamente y una actualización nunca cambia su
 # contenido sin mostrar antes qué hardware pretende adoptar.
 {
@@ -16,6 +16,24 @@
   # Tipo de firmware detectado físicamente al adoptar este equipo. El módulo de
   # arranque lo consume para elegir systemd-boot o GRUB sin preguntarlo al usuario.
   korunix.hardware.firmware = "uefi";
+
+  # Adaptador gráfico detectado en este equipo. boot_vga identifica la GPU
+  # primaria, pero no basta para afirmar si es integrada o dedicada.
+  korunix.hardware.graphics = [
+    {
+      pciAddress = "0000:05:00.0";
+      name = "AMD Cezanne [Radeon Vega Series / Radeon Vega Mobile Series]";
+      vendor = "amd";
+      vendorId = "1002";
+      deviceId = "1638";
+      subsystemVendorId = "1458";
+      subsystemDeviceId = "d000";
+      driver = "amdgpu";
+      primary = true;
+      kind = "unknown";
+      nvidiaOpen = false;
+    }
+  ];
 
   boot.initrd.availableKernelModules = ["xhci_pci" "ahci" "nvme" "usbhid" "usb_storage" "sd_mod"];
   boot.initrd.kernelModules = [];

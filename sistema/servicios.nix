@@ -5,20 +5,28 @@
   ...
 }: let
   cfg = config.korunix.services;
+  productDefaults = import ../predeterminados.nix;
+
+  serviceOption = name: description:
+    lib.mkOption {
+      type = lib.types.bool;
+      default = productDefaults.services.${name};
+      inherit description;
+    };
 in {
   options.korunix.services = {
-    avahi = lib.mkEnableOption "descubrimiento de dispositivos en la red local";
-    bluetooth = lib.mkEnableOption "Bluetooth";
-    ssh = lib.mkEnableOption "acceso remoto mediante SSH";
-    sunshine = lib.mkEnableOption "transmisión de juegos y escritorio con Sunshine";
-    printing = lib.mkEnableOption "impresión y escaneo";
-    virtualization = lib.mkEnableOption "máquinas virtuales";
+    avahi = serviceOption "avahi" "Descubrimiento de dispositivos en la red local.";
+    bluetooth = serviceOption "bluetooth" "Bluetooth.";
+    ssh = serviceOption "ssh" "Acceso remoto mediante SSH.";
+    sunshine = serviceOption "sunshine" "Transmisión de juegos y escritorio con Sunshine.";
+    printing = serviceOption "printing" "Impresión y escaneo.";
+    virtualization = serviceOption "virtualization" "Máquinas virtuales.";
 
     printingDriver = lib.mkOption {
       type = lib.types.nullOr (lib.types.enum [
         "epson-201207w"
       ]);
-      default = null;
+      default = productDefaults.services.printingDriver;
       description = "Controlador adicional que necesita la impresora de este equipo.";
     };
   };

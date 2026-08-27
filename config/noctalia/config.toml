@@ -172,6 +172,18 @@ shadow = false
 transparency_mode = "glass"
 wallpaper_placement = "attached"
 
+[shell.screenshot]
+confirm_region = false
+copy_to_clipboard = true
+directory = "@KORUNIX_SCREENSHOTS@"
+filename_pattern = "@KORUNIX_SCREENSHOT_PATTERN@"
+freeze_screen = true
+pipe_command = ""
+pipe_to_command = false
+remember_last_region = false
+save_to_file = true
+show_cursor = false
+
 [shell.shadow]
 alpha = 0.55
 direction = "down"

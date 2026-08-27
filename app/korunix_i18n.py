@@ -15,6 +15,17 @@ CATALOGS: dict[str, dict[str, str]] = {
     "es": {
         "app.name": "Korunix",
         "app.subtitle": "Centro de control del sistema",
+        "search.placeholder": "Buscar en Korunix",
+        "search.accessible": "Buscar ajustes y áreas",
+        "search.empty": "No encontramos un área con ese nombre.",
+        "search.terms.summary": "estado configuración coherencia equipo",
+        "search.terms.localization": (
+            "idioma país región fecha hora teclado método de entrada"
+        ),
+        "search.terms.hardware": (
+            "equipo hardware procesador memoria gráficos red controlador"
+        ),
+        "search.terms.people": "persona usuario cuenta perfil administrador",
         "nav.summary": "Resumen",
         "nav.summary.note": "Estado general del equipo",
         "nav.localization": "Idioma y región",
@@ -24,6 +35,34 @@ CATALOGS: dict[str, dict[str, str]] = {
         "nav.people": "Personas",
         "nav.people.note": "Cuentas y perfiles",
         "action.refresh": "Actualizar estado",
+        "nav.updates": "Actualizaciones",
+        "nav.updates.note": "Canal y ritmo de actualizaciones",
+        "search.terms.updates": (
+            "actualizaciones canal estable inestable nixos paquetes software"
+        ),
+        "channels.title": "Actualizaciones",
+        "channels.description": (
+            "Elige el ritmo de cambios que prefieres para este equipo."
+        ),
+        "channels.current.group": "Canal actual",
+        "channels.current": "Canal",
+        "channels.nixos": "Versión de NixOS",
+        "channels.nixpkgs": "Paquetes base",
+        "channels.aagl": "AAGL",
+        "channels.choice.group": "Cambiar de canal",
+        "channels.choice": "Canal",
+        "channels.choice.note": (
+            "Seleccionar una opción no modifica el sistema."
+        ),
+        "channels.stable": "Estable",
+        "channels.unstable": "Inestable",
+        "channels.prepare": "Preparar cambio",
+        "channels.preparing": "Preparando…",
+        "channels.nochange": "Este canal ya está seleccionado",
+        "channels.action.note": "Valida el cambio sin aplicarlo.",
+        "channels.selected": "Sin cambios pendientes",
+        "channels.selected.note": "Este equipo ya usa el canal seleccionado.",
+        "channels.error": "No pudimos preparar el canal",
         "loading.title": "Leyendo este equipo",
         "loading.body": "Korunix reúne el estado local sin modificar nada.",
         "error.title": "No pudimos leer el estado",
@@ -47,6 +86,21 @@ CATALOGS: dict[str, dict[str, str]] = {
         "summary.state.ready": "La información disponible es coherente",
         "summary.state.warning": "Hay datos que conviene revisar",
         "summary.state.incomplete": "Falta información de una o más áreas",
+        "summary.hero.ready": "Este equipo está listo",
+        "summary.hero.ready.body": (
+            "Korunix pudo leer la configuración disponible y no encontró "
+            "contradicciones."
+        ),
+        "summary.hero.warning": "Hay una decisión que conviene revisar",
+        "summary.hero.warning.body": (
+            "El equipo sigue seguro. Revisa la información señalada antes de "
+            "aplicar cambios."
+        ),
+        "summary.hero.incomplete": "Parte del estado no está disponible",
+        "summary.hero.incomplete.body": (
+            "Puedes seguir consultando las áreas que respondieron; nada fue "
+            "modificado."
+        ),
         "localization.title": "Idioma y región",
         "localization.description": (
             "Estas decisiones permanecen separadas y pueden combinarse libremente."
@@ -98,6 +152,17 @@ CATALOGS: dict[str, dict[str, str]] = {
     "en": {
         "app.name": "Korunix",
         "app.subtitle": "System control center",
+        "search.placeholder": "Search Korunix",
+        "search.accessible": "Search settings and areas",
+        "search.empty": "We could not find an area with that name.",
+        "search.terms.summary": "status configuration consistency computer",
+        "search.terms.localization": (
+            "language country region date time keyboard input method"
+        ),
+        "search.terms.hardware": (
+            "computer hardware processor memory graphics network driver"
+        ),
+        "search.terms.people": "person user account profile administrator",
         "nav.summary": "Overview",
         "nav.summary.note": "General computer status",
         "nav.localization": "Language and region",
@@ -107,6 +172,34 @@ CATALOGS: dict[str, dict[str, str]] = {
         "nav.people": "People",
         "nav.people.note": "Accounts and profiles",
         "action.refresh": "Refresh status",
+        "nav.updates": "Updates",
+        "nav.updates.note": "Update channel and release pace",
+        "search.terms.updates": (
+            "updates channel stable unstable nixos packages software"
+        ),
+        "channels.title": "Updates",
+        "channels.description": (
+            "Choose the pace of changes you prefer for this computer."
+        ),
+        "channels.current.group": "Current channel",
+        "channels.current": "Channel",
+        "channels.nixos": "NixOS version",
+        "channels.nixpkgs": "Base packages",
+        "channels.aagl": "AAGL",
+        "channels.choice.group": "Change channel",
+        "channels.choice": "Channel",
+        "channels.choice.note": (
+            "Selecting an option does not modify the system."
+        ),
+        "channels.stable": "Stable",
+        "channels.unstable": "Unstable",
+        "channels.prepare": "Prepare change",
+        "channels.preparing": "Preparing…",
+        "channels.nochange": "This channel is already selected",
+        "channels.action.note": "Validates the change without applying it.",
+        "channels.selected": "No pending changes",
+        "channels.selected.note": "This computer already uses the selected channel.",
+        "channels.error": "We could not prepare the channel",
         "loading.title": "Reading this computer",
         "loading.body": "Korunix gathers local status without changing anything.",
         "error.title": "We could not read the status",
@@ -130,6 +223,19 @@ CATALOGS: dict[str, dict[str, str]] = {
         "summary.state.ready": "Available information is consistent",
         "summary.state.warning": "Some information should be reviewed",
         "summary.state.incomplete": "Information from one or more areas is missing",
+        "summary.hero.ready": "This computer is ready",
+        "summary.hero.ready.body": (
+            "Korunix read the available configuration and found no contradictions."
+        ),
+        "summary.hero.warning": "A choice should be reviewed",
+        "summary.hero.warning.body": (
+            "The computer remains safe. Review the highlighted information "
+            "before applying changes."
+        ),
+        "summary.hero.incomplete": "Some status is unavailable",
+        "summary.hero.incomplete.body": (
+            "You can keep viewing the areas that responded; nothing was changed."
+        ),
         "localization.title": "Language and region",
         "localization.description": "These choices remain separate and can be combined freely.",
         "localization.language.group": "Language",
@@ -179,6 +285,17 @@ CATALOGS: dict[str, dict[str, str]] = {
     "hu": {
         "app.name": "Korunix",
         "app.subtitle": "Rendszervezérlő központ",
+        "search.placeholder": "Keresés a Korunixban",
+        "search.accessible": "Beállítások és területek keresése",
+        "search.empty": "Nem található ilyen nevű terület.",
+        "search.terms.summary": "állapot beállítás konzisztencia számítógép",
+        "search.terms.localization": (
+            "nyelv ország régió dátum idő billentyűzet beviteli mód"
+        ),
+        "search.terms.hardware": (
+            "számítógép hardver processzor memória grafika hálózat illesztőprogram"
+        ),
+        "search.terms.people": "személy felhasználó fiók profil rendszergazda",
         "nav.summary": "Áttekintés",
         "nav.summary.note": "A számítógép általános állapota",
         "nav.localization": "Nyelv és régió",
@@ -188,6 +305,34 @@ CATALOGS: dict[str, dict[str, str]] = {
         "nav.people": "Felhasználók",
         "nav.people.note": "Fiókok és profilok",
         "action.refresh": "Állapot frissítése",
+        "nav.updates": "Frissítések",
+        "nav.updates.note": "Frissítési csatorna és kiadási ütem",
+        "search.terms.updates": (
+            "frissítés csatorna stabil instabil nixos csomagok szoftver"
+        ),
+        "channels.title": "Frissítések",
+        "channels.description": (
+            "Válaszd ki a számítógéphez kívánt frissítési ütemet."
+        ),
+        "channels.current.group": "Jelenlegi csatorna",
+        "channels.current": "Csatorna",
+        "channels.nixos": "NixOS-verzió",
+        "channels.nixpkgs": "Alapcsomagok",
+        "channels.aagl": "AAGL",
+        "channels.choice.group": "Csatornaváltás",
+        "channels.choice": "Csatorna",
+        "channels.choice.note": (
+            "A kiválasztás önmagában nem módosítja a rendszert."
+        ),
+        "channels.stable": "Stabil",
+        "channels.unstable": "Instabil",
+        "channels.prepare": "Váltás előkészítése",
+        "channels.preparing": "Előkészítés…",
+        "channels.nochange": "Ez a csatorna már ki van választva",
+        "channels.action.note": "Ellenőrzi a váltást annak alkalmazása nélkül.",
+        "channels.selected": "Nincs függőben lévő változás",
+        "channels.selected.note": "A számítógép már ezt a csatornát használja.",
+        "channels.error": "Nem sikerült előkészíteni a csatornát",
         "loading.title": "A számítógép beolvasása",
         "loading.body": "A Korunix változtatás nélkül összegyűjti a helyi állapotot.",
         "error.title": "Nem sikerült beolvasni az állapotot",
@@ -214,6 +359,20 @@ CATALOGS: dict[str, dict[str, str]] = {
         "summary.state.ready": "Az elérhető adatok konzisztensek",
         "summary.state.warning": "Néhány adatot érdemes ellenőrizni",
         "summary.state.incomplete": "Egy vagy több terület adatai hiányoznak",
+        "summary.hero.ready": "A számítógép készen áll",
+        "summary.hero.ready.body": (
+            "A Korunix beolvasta az elérhető konfigurációt, és nem talált "
+            "ellentmondást."
+        ),
+        "summary.hero.warning": "Egy beállítást érdemes ellenőrizni",
+        "summary.hero.warning.body": (
+            "A számítógép továbbra is biztonságos. A módosítások alkalmazása "
+            "előtt ellenőrizd a jelzett adatot."
+        ),
+        "summary.hero.incomplete": "Az állapot egy része nem érhető el",
+        "summary.hero.incomplete.body": (
+            "A válaszoló területek továbbra is megtekinthetők; semmi sem változott."
+        ),
         "localization.title": "Nyelv és régió",
         "localization.description": (
             "Ezek a beállítások különállók és szabadon kombinálhatók."

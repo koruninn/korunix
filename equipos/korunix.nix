@@ -1,14 +1,14 @@
 {
   # Este archivo contiene decisiones humanas y el contexto estructural mínimo que
-  # flake necesita antes de evaluar NixOS. Los hechos físicos viven en hardware/.
+  # flake necesita antes de evaluar NixOS. Los hechos físicos viven en equipos/.
   # La plataforma se detecta al adoptar el equipo, pero flake la necesita antes
   # de evaluar los módulos; por eso permanece como contexto estructural.
   system = "x86_64-linux";
 
   # Un host puede tener varias personas y una misma persona puede aparecer en
-  # varios hosts. Cada identificador apunta a users/<identificador>.nix.
+  # varios hosts. Cada identificador apunta a personas/<identificador>.nix.
   # El host es dueño de la pertenencia y de las decisiones locales. La identidad,
-  # preferencias y capacidades portables siguen viviendo en users/koru.nix.
+  # preferencias y capacidades portables siguen viviendo en personas/koru.nix.
   users = {
     koru = {
       homeDirectory = "/home/koru";
@@ -23,6 +23,11 @@
   korunix = {
     enable = true;
 
+    # El canal es una decisión de actualización de este equipo. Este host ya
+    # utilizaba nixos-unstable antes de que Korunix modelara esta elección, así
+    # que declararlo como inestable conserva exactamente su comportamiento.
+    channel = "unstable";
+
     # hostId identifica este archivo dentro de Korunix. hostName es el nombre que
     # el sistema publica en la red y puede cambiar sin renombrar la estructura.
     hostName = "korunix";
@@ -33,7 +38,7 @@
 
     localization = {
       # El idioma del sistema, los formatos y la región son estado de este host.
-      # La preferencia de idioma de cada persona sigue viviendo en users/.
+      # La preferencia de idioma de cada persona sigue viviendo en personas/.
       systemLanguage = "es";
       region = "PE";
 
