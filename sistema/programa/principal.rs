@@ -38,6 +38,9 @@ Uso:
   korunix channel unstable
   korunix channel stable --yes
   korunix channel unstable --yes
+  korunix hardware --json
+  korunix localization --json
+  korunix users --json
   korunix privileges --json
   korunix <operación todavía en transición>
 
@@ -1067,6 +1070,1400 @@ fn ejecutar_canal(raiz: &Path, argumentos: &[OsString]) -> Result<ExitCode, Stri
     Ok(ExitCode::SUCCESS)
 }
 
+// ---------------------------------------------------------------------------
+// D.2 · Lecturas del equipo
+// ---------------------------------------------------------------------------
+//
+// Estas tres lecturas mezclan dos clases de información:
+//
+//   1. decisiones declaradas en Nix;
+//   2. hechos del sistema que está funcionando ahora.
+//
+// Nix sigue siendo la fuente de verdad de lo declarativo. Rust consulta el
+// mundo vivo mediante interfaces normales del sistema y entrega el contrato
+// JSON. No hace falta pasar por Bash para leer hardware, localización o
+// personas.
+//
+// `jq` permanece temporalmente como herramienta de composición JSON en esta
+// etapa. No decide políticas ni ejecuta operaciones privilegiadas.
+
+fn ejecutar_con_entrada(
+    programa: &str,
+    argumentos: &[String],
+    raiz: &Path,
+    entrada: &str,
+) -> Result<String, String> {
+    let mut hijo = Command::new(programa)
+        .args(argumentos)
+        .current_dir(raiz)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("No pude ejecutar {programa}: {error}"))?;
+
+    if let Some(mut stdin) = hijo.stdin.take() {
+        use std::io::Write;
+        stdin
+            .write_all(entrada.as_bytes())
+            .map_err(|error| format!("No pude entregar datos a {programa}: {error}"))?;
+    }
+
+    let salida = hijo
+        .wait_with_output()
+        .map_err(|error| format!("No pude esperar a {programa}: {error}"))?;
+
+    if !salida.status.success() {
+        let error = String::from_utf8_lossy(&salida.stderr).trim().to_string();
+        return Err(if error.is_empty() {
+            format!("{programa} terminó con un error.")
+        } else {
+            error
+        });
+    }
+
+    Ok(String::from_utf8_lossy(&salida.stdout).trim().to_string())
+}
+
+fn jq_con_entrada(raiz: &Path, argumentos: &[String], entrada: &str) -> Result<String, String> {
+    ejecutar_con_entrada("jq", argumentos, raiz, entrada)
+}
+
+fn jq_texto(raiz: &Path, datos: &str, filtro: &str) -> Result<String, String> {
+    jq_con_entrada(raiz, &["-r".to_string(), filtro.to_string()], datos)
+}
+
+fn jq_compacto(raiz: &Path, datos: &str, filtro: &str) -> Result<String, String> {
+    jq_con_entrada(raiz, &["-c".to_string(), filtro.to_string()], datos)
+}
+
+fn flake_json(raiz: &Path, atributo: &str) -> Result<String, String> {
+    let instalable = format!("path:{}#{atributo}", raiz.display());
+    ejecutar_capturando(
+        "nix",
+        &["eval".to_string(), "--json".to_string(), instalable],
+        raiz,
+    )
+}
+
+fn capturar_opcional(programa: &str, argumentos: &[&str], raiz: &Path) -> String {
+    match Command::new(programa)
+        .args(argumentos)
+        .current_dir(raiz)
+        .output()
+    {
+        Ok(salida) => String::from_utf8_lossy(&salida.stdout).trim().to_string(),
+        Err(_) => String::new(),
+    }
+}
+
+fn comando_exitoso(programa: &str, argumentos: &[&str], raiz: &Path) -> bool {
+    Command::new(programa)
+        .args(argumentos)
+        .current_dir(raiz)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|estado| estado.success())
+        .unwrap_or(false)
+}
+
+fn fecha_iso(raiz: &Path) -> Result<String, String> {
+    ejecutar_capturando("date", &["--iso-8601=seconds".to_string()], raiz)
+}
+
+fn json_lista_textos(valores: &[String]) -> String {
+    format!(
+        "[{}]",
+        valores
+            .iter()
+            .map(|valor| json_texto(valor))
+            .collect::<Vec<_>>()
+            .join(",")
+    )
+}
+
+fn leer_texto(ruta: &Path) -> String {
+    fs::read(ruta)
+        .ok()
+        .map(|bytes| {
+            String::from_utf8_lossy(&bytes)
+                .replace('\0', "")
+                .trim_end()
+                .to_string()
+        })
+        .unwrap_or_default()
+}
+
+fn valor_cpu(campo: &str) -> String {
+    let texto = fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
+
+    for linea in texto.lines() {
+        let Some((nombre, valor)) = linea.split_once(':') else {
+            continue;
+        };
+
+        let coincide = match campo {
+            "modelo" => matches!(nombre.trim(), "model name" | "Processor" | "Hardware"),
+            "fabricante" => nombre.trim() == "vendor_id",
+            "microcode" => nombre.trim() == "microcode",
+            _ => false,
+        };
+
+        if coincide {
+            return valor.trim_start().to_string();
+        }
+    }
+
+    String::new()
+}
+
+fn procesadores_logicos() -> usize {
+    fs::read_to_string("/proc/cpuinfo")
+        .unwrap_or_default()
+        .lines()
+        .filter(|linea| {
+            linea
+                .split_once(':')
+                .map(|(nombre, _)| nombre.trim() == "processor")
+                .unwrap_or(false)
+        })
+        .count()
+}
+
+fn memoria_bytes() -> u64 {
+    fs::read_to_string("/proc/meminfo")
+        .unwrap_or_default()
+        .lines()
+        .find_map(|linea| {
+            linea
+                .strip_prefix("MemTotal:")
+                .and_then(|resto| resto.split_whitespace().next())
+                .and_then(|valor| valor.parse::<u64>().ok())
+        })
+        .unwrap_or(0)
+        .saturating_mul(1024)
+}
+
+fn bateria_de_sistema() -> bool {
+    let Ok(entradas) = fs::read_dir("/sys/class/power_supply") else {
+        return false;
+    };
+
+    for entrada in entradas.flatten() {
+        let ruta = entrada.path();
+        if leer_texto(&ruta.join("type")) == "Battery"
+            && leer_texto(&ruta.join("scope")) == "System"
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn tipo_equipo(chasis: &str) -> &'static str {
+    match chasis {
+        "3" | "4" | "5" | "6" | "7" | "15" | "16" | "24" => "desktop",
+        "8" | "9" | "10" | "14" | "30" | "31" | "32" => "laptop",
+        "13" => "all-in-one",
+        "17" | "23" => "server",
+        _ => "unknown",
+    }
+}
+
+fn lineas_pci(raiz: &Path, clase: &str) -> Vec<String> {
+    let salida = capturar_opcional("lspci", &["-nn"], raiz);
+    let mut valores = Vec::new();
+
+    for linea in salida.lines() {
+        let coincide = match clase {
+            "graphics" => {
+                linea.contains("[0300]") || linea.contains("[0302]") || linea.contains("[0380]")
+            }
+            "network" => linea.contains("[0200]") || linea.contains("[0280]"),
+            _ => false,
+        };
+
+        if !coincide {
+            continue;
+        }
+
+        let sin_direccion = linea
+            .find(char::is_whitespace)
+            .map(|posicion| linea[posicion..].trim_start().to_string())
+            .unwrap_or_else(|| linea.to_string());
+
+        if !sin_direccion.is_empty() {
+            valores.push(sin_direccion);
+        }
+    }
+
+    valores
+}
+
+fn drivers_graficos(raiz: &Path) -> Vec<String> {
+    let salida = capturar_opcional("lsmod", &[], raiz);
+    let mut drivers = Vec::new();
+
+    for linea in salida.lines() {
+        let Some(nombre) = linea.split_whitespace().next() else {
+            continue;
+        };
+
+        if matches!(nombre, "amdgpu" | "nvidia" | "nouveau" | "i915" | "xe") {
+            drivers.push(nombre.to_string());
+        }
+    }
+
+    drivers.sort();
+    drivers.dedup();
+    drivers
+}
+
+fn id_pci(ruta: &Path, nombre: &str) -> String {
+    leer_texto(&ruta.join(nombre))
+        .to_ascii_uppercase()
+        .trim_start_matches("0X")
+        .to_string()
+}
+
+fn nvidia_open_soportado(
+    raiz: &Path,
+    device_id: &str,
+    subsystem_vendor_id: &str,
+    subsystem_device_id: &str,
+) -> bool {
+    let catalogo = raiz.join("sistema/nvidia-open-pci-ids.txt");
+    let Ok(texto) = fs::read_to_string(catalogo) else {
+        return false;
+    };
+
+    for linea in texto.lines() {
+        if linea.trim().is_empty() || linea.starts_with('#') {
+            continue;
+        }
+
+        let columnas: Vec<&str> = linea.split('\t').collect();
+        if columnas.len() < 3 || columnas[0] != device_id {
+            continue;
+        }
+
+        if columnas[1] == "*" && columnas[2] == "*" {
+            return true;
+        }
+
+        if columnas[1] == subsystem_vendor_id && columnas[2] == subsystem_device_id {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn dispositivos_graficos_json(raiz: &Path) -> String {
+    let Ok(entradas) = fs::read_dir("/sys/bus/pci/devices") else {
+        return "[]".to_string();
+    };
+
+    let mut rutas: Vec<PathBuf> = entradas.flatten().map(|entrada| entrada.path()).collect();
+    rutas.sort();
+
+    let mut objetos = Vec::new();
+
+    for dispositivo in rutas {
+        let clase = id_pci(&dispositivo, "class");
+        if !matches!(clase.as_str(), "030000" | "030200" | "038000") {
+            continue;
+        }
+
+        let direccion = dispositivo
+            .file_name()
+            .and_then(|nombre| nombre.to_str())
+            .unwrap_or("")
+            .to_string();
+
+        let vendor_id = id_pci(&dispositivo, "vendor");
+        let device_id = id_pci(&dispositivo, "device");
+        let subsystem_vendor_id = {
+            let valor = id_pci(&dispositivo, "subsystem_vendor");
+            if valor.is_empty() {
+                "0000".to_string()
+            } else {
+                valor
+            }
+        };
+        let subsystem_device_id = {
+            let valor = id_pci(&dispositivo, "subsystem_device");
+            if valor.is_empty() {
+                "0000".to_string()
+            } else {
+                valor
+            }
+        };
+
+        let vendor = match vendor_id.as_str() {
+            "1002" => "amd",
+            "8086" => "intel",
+            "10DE" => "nvidia",
+            _ => "unknown",
+        };
+
+        let driver = fs::read_link(dispositivo.join("driver"))
+            .ok()
+            .and_then(|ruta| fs::canonicalize(dispositivo.join(ruta)).ok())
+            .and_then(|ruta| {
+                ruta.file_name()
+                    .map(|nombre| nombre.to_string_lossy().to_string())
+            })
+            .unwrap_or_else(|| "none".to_string());
+
+        let primary = leer_texto(&dispositivo.join("boot_vga")) == "1";
+
+        let lspci = capturar_opcional("lspci", &["-Dnn", "-s", &direccion], raiz);
+        let nombre = if lspci.is_empty() {
+            format!("GPU PCI {vendor_id}:{device_id}")
+        } else {
+            lspci
+                .find(' ')
+                .map(|posicion| lspci[posicion + 1..].to_string())
+                .unwrap_or(lspci)
+        };
+
+        let nvidia_open = vendor == "nvidia"
+            && nvidia_open_soportado(raiz, &device_id, &subsystem_vendor_id, &subsystem_device_id);
+
+        objetos.push(format!(
+            concat!(
+                "{{",
+                "\"pciAddress\":{},",
+                "\"name\":{},",
+                "\"vendor\":{},",
+                "\"vendorId\":{},",
+                "\"deviceId\":{},",
+                "\"subsystemVendorId\":{},",
+                "\"subsystemDeviceId\":{},",
+                "\"class\":{},",
+                "\"driver\":{},",
+                "\"primary\":{},",
+                "\"kind\":\"unknown\",",
+                "\"nvidiaOpen\":{}",
+                "}}"
+            ),
+            json_texto(&direccion),
+            json_texto(&nombre),
+            json_texto(vendor),
+            json_texto(&vendor_id),
+            json_texto(&device_id),
+            json_texto(&subsystem_vendor_id),
+            json_texto(&subsystem_device_id),
+            json_texto(&clase),
+            json_texto(&driver),
+            primary,
+            nvidia_open,
+        ));
+    }
+
+    format!("[{}]", objetos.join(","))
+}
+
+fn hardware_json(raiz: &Path) -> Result<String, String> {
+    let equipo = resolver_equipo(raiz)?;
+
+    let arch_kernel = ejecutar_capturando("uname", &["-m".to_string()], raiz)?;
+    let arch_detectada = match arch_kernel.as_str() {
+        "x86_64" => "x86_64-linux".to_string(),
+        "aarch64" | "arm64" => "aarch64-linux".to_string(),
+        otro => format!("{otro}-linux"),
+    };
+
+    let firmware_detectado = if Path::new("/sys/firmware/efi").is_dir() {
+        "uefi"
+    } else {
+        "bios"
+    };
+
+    let arch_declarada = flake_raw(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.nixpkgs.hostPlatform.system"),
+    )
+    .unwrap_or_default();
+
+    let firmware_declarado = flake_raw(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.korunix.hardware.firmware"),
+    )
+    .unwrap_or_default();
+
+    let virtualizacion_raw = capturar_opcional("systemd-detect-virt", &[], raiz);
+    let (virtualizacion, virtualizado) =
+        if virtualizacion_raw.is_empty() || virtualizacion_raw == "none" {
+            ("physical".to_string(), false)
+        } else {
+            (virtualizacion_raw, true)
+        };
+
+    let fabricante = {
+        let valor = leer_texto(Path::new("/sys/class/dmi/id/sys_vendor"));
+        if valor.is_empty() {
+            "desconocido".to_string()
+        } else {
+            valor
+        }
+    };
+    let modelo = {
+        let valor = leer_texto(Path::new("/sys/class/dmi/id/product_name"));
+        if valor.is_empty() {
+            "desconocido".to_string()
+        } else {
+            valor
+        }
+    };
+    let placa_fabricante = {
+        let valor = leer_texto(Path::new("/sys/class/dmi/id/board_vendor"));
+        if valor.is_empty() {
+            "desconocido".to_string()
+        } else {
+            valor
+        }
+    };
+    let placa_modelo = {
+        let valor = leer_texto(Path::new("/sys/class/dmi/id/board_name"));
+        if valor.is_empty() {
+            "desconocido".to_string()
+        } else {
+            valor
+        }
+    };
+    let chasis = leer_texto(Path::new("/sys/class/dmi/id/chassis_type"));
+
+    let cpu_modelo = {
+        let valor = valor_cpu("modelo");
+        if valor.is_empty() {
+            "desconocido".to_string()
+        } else {
+            valor
+        }
+    };
+    let cpu_fabricante = {
+        let valor = valor_cpu("fabricante");
+        if valor.is_empty() {
+            "desconocido".to_string()
+        } else {
+            valor
+        }
+    };
+    let microcode = {
+        let valor = valor_cpu("microcode");
+        if valor.is_empty() {
+            "desconocido".to_string()
+        } else {
+            valor
+        }
+    };
+
+    let graphics = lineas_pci(raiz, "graphics");
+    let network = lineas_pci(raiz, "network");
+    let drivers = drivers_graficos(raiz);
+    let graphics_devices = dispositivos_graficos_json(raiz);
+
+    let storage = capturar_opcional(
+        "lsblk",
+        &[
+            "-J",
+            "-b",
+            "-e",
+            "7",
+            "-o",
+            "NAME,PATH,TYPE,SIZE,FSTYPE,MOUNTPOINTS,MODEL,TRAN,ROTA,RM",
+        ],
+        raiz,
+    );
+    let storage = if storage.is_empty() {
+        "{\"blockdevices\":[]}".to_string()
+    } else {
+        storage
+    };
+
+    Ok(format!(
+        concat!(
+            "{{",
+            "\"schemaVersion\":1,",
+            "\"hostId\":{},",
+            "\"detectedAt\":{},",
+            "\"machine\":{{",
+            "\"type\":{},",
+            "\"chassisType\":{},",
+            "\"vendor\":{},",
+            "\"model\":{},",
+            "\"boardVendor\":{},",
+            "\"boardModel\":{},",
+            "\"systemBattery\":{}",
+            "}},",
+            "\"platform\":{{\"detected\":{},\"declared\":{},\"matches\":{}}},",
+            "\"firmware\":{{\"detected\":{},\"declared\":{},\"matches\":{}}},",
+            "\"virtualization\":{{\"kind\":{},\"virtualized\":{}}},",
+            "\"cpu\":{{",
+            "\"model\":{},",
+            "\"vendor\":{},",
+            "\"logicalProcessors\":{},",
+            "\"microcode\":{}",
+            "}},",
+            "\"memory\":{{\"bytes\":{}}},",
+            "\"graphics\":{},",
+            "\"graphicsDrivers\":{},",
+            "\"graphicsDevices\":{},",
+            "\"network\":{},",
+            "\"storage\":{}",
+            "}}"
+        ),
+        json_texto(&equipo),
+        json_texto(&fecha_iso(raiz)?),
+        json_texto(tipo_equipo(&chasis)),
+        json_texto(&chasis),
+        json_texto(&fabricante),
+        json_texto(&modelo),
+        json_texto(&placa_fabricante),
+        json_texto(&placa_modelo),
+        bateria_de_sistema(),
+        json_texto(&arch_detectada),
+        json_texto(&arch_declarada),
+        arch_detectada == arch_declarada,
+        json_texto(firmware_detectado),
+        json_texto(&firmware_declarado),
+        firmware_detectado == firmware_declarado,
+        json_texto(&virtualizacion),
+        virtualizado,
+        json_texto(&cpu_modelo),
+        json_texto(&cpu_fabricante),
+        procesadores_logicos(),
+        json_texto(&microcode),
+        memoria_bytes(),
+        json_lista_textos(&graphics),
+        json_lista_textos(&drivers),
+        graphics_devices,
+        json_lista_textos(&network),
+        storage,
+    ))
+}
+
+fn uid_minimo() -> u32 {
+    let texto = fs::read_to_string("/etc/login.defs").unwrap_or_default();
+
+    for linea in texto.lines() {
+        let sin_espacios = linea.trim_start();
+        if sin_espacios.starts_with('#') {
+            continue;
+        }
+
+        let mut partes = sin_espacios.split_whitespace();
+        if partes.next() == Some("UID_MIN") {
+            if let Some(valor) = partes.next().and_then(|valor| valor.parse::<u32>().ok()) {
+                return valor;
+            }
+        }
+    }
+
+    1000
+}
+
+fn cuenta_tecnica(home: &str, shell: &str) -> bool {
+    home == "/var/empty"
+        || home.starts_with("/run/gdm/")
+        || shell.ends_with("nologin")
+        || shell.ends_with("false")
+}
+
+fn perfil_base_json(raiz: &Path, ruta: &Path, id: &str) -> Result<String, String> {
+    let base = nix_archivo_json(raiz, ruta)?;
+
+    jq_con_entrada(
+        raiz,
+        &[
+            "-cn".to_string(),
+            "--arg".to_string(),
+            "id".to_string(),
+            id.to_string(),
+            "--argjson".to_string(),
+            "u".to_string(),
+            base,
+            r#"{
+                id: $id,
+                accountName: ($u.accountName // $id),
+                fullName: ($u.fullName // ""),
+                language: ($u.language // null),
+                inputMethods: ($u.inputMethods // []),
+                capabilities: ($u.capabilities // []),
+                avatarPath: ($u.avatar // null)
+            }"#
+            .to_string(),
+        ],
+        "",
+    )
+}
+
+fn usuarios_json(raiz: &Path) -> Result<String, String> {
+    let equipo = resolver_equipo(raiz)?;
+    let host_users = flake_json(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.korunix.users"),
+    )?;
+    let settings = flake_json(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.korunix.userSettings"),
+    )?;
+    let mutable_users = flake_json(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.users.mutableUsers"),
+    )?;
+
+    let carpeta = raiz.join("configuracion/personas");
+    let mut archivos: Vec<PathBuf> = fs::read_dir(&carpeta)
+        .map_err(|error| format!("No pude leer {}: {error}", carpeta.display()))?
+        .flatten()
+        .map(|entrada| entrada.path())
+        .filter(|ruta| ruta.is_file() && ruta.extension().and_then(|e| e.to_str()) == Some("nix"))
+        .collect();
+    archivos.sort();
+
+    let mut perfiles = Vec::new();
+    let mut perfil_cuenta = Vec::new();
+    let mut declarados_admin = 0usize;
+
+    for perfil in archivos {
+        let id = perfil
+            .file_stem()
+            .and_then(|valor| valor.to_str())
+            .ok_or_else(|| "Encontré un perfil con nombre no válido.".to_string())?
+            .to_string();
+
+        let base = perfil_base_json(raiz, &perfil, &id)?;
+        let assigned = jq_texto(
+            raiz,
+            &host_users,
+            &format!(r#"index({}) != null"#, json_texto(&id)),
+        )? == "true";
+
+        let local_settings = jq_compacto(
+            raiz,
+            &settings,
+            &format!(r#".[{}] // {{}}"#, json_texto(&id)),
+        )?;
+
+        let portable_account = jq_texto(raiz, &base, ".accountName")?;
+        let local_account = jq_texto(raiz, &local_settings, ".accountName // empty")?;
+        let effective_account = if local_account.is_empty() {
+            portable_account
+        } else {
+            local_account
+        };
+
+        let account_exists = comando_exitoso("getent", &["passwd", &effective_account], raiz);
+
+        let declared_groups = if assigned {
+            flake_json(
+                raiz,
+                &format!(
+                    "nixosConfigurations.{equipo}.config.users.users.\"{effective_account}\".extraGroups"
+                ),
+            )
+            .unwrap_or_else(|_| "[]".to_string())
+        } else {
+            "[]".to_string()
+        };
+
+        let enriquecido = jq_con_entrada(
+            raiz,
+            &[
+                "-cn".to_string(),
+                "--argjson".to_string(),
+                "base".to_string(),
+                base,
+                "--argjson".to_string(),
+                "settings".to_string(),
+                local_settings,
+                "--argjson".to_string(),
+                "assigned".to_string(),
+                assigned.to_string(),
+                "--argjson".to_string(),
+                "accountExists".to_string(),
+                account_exists.to_string(),
+                "--argjson".to_string(),
+                "declaredGroups".to_string(),
+                declared_groups,
+                "--arg".to_string(),
+                "effectiveAccount".to_string(),
+                effective_account.clone(),
+                r#"
+                  ($settings.deferredCapabilities // []) as $deferred
+                  | ($settings.deferredInputMethods // []) as $deferredInput
+                  | ($settings.homeDirectory // ("/home/" + $effectiveAccount)) as $home
+                  | ($settings.administrator // false) as $administrator
+                  | ($settings.preservedGroups // []) as $preserved
+                  | $base
+                  | del(.avatarPath)
+                  + {
+                      assignedToHost: $assigned,
+                      effectiveAccountName: $effectiveAccount,
+                      homeDirectory: $home,
+                      administrator: $administrator,
+                      enabledCapabilities:
+                        (.capabilities
+                         | map(select(. as $c | $deferred | index($c) == null))),
+                      deferredCapabilities: $deferred,
+                      enabledInputMethods:
+                        (.inputMethods
+                         | map(select(. as $m | $deferredInput | index($m) == null))),
+                      deferredInputMethods: $deferredInput,
+                      preservedGroups: $preserved,
+                      accountExists: $accountExists,
+                      declaredGroups: $declaredGroups
+                    }
+                "#
+                .to_string(),
+            ],
+            "",
+        )?;
+
+        let admin = jq_texto(raiz, &enriquecido, ".administrator")? == "true";
+        if assigned && admin {
+            declarados_admin += 1;
+        }
+
+        perfil_cuenta.push((effective_account, id, assigned));
+        perfiles.push(enriquecido);
+    }
+
+    let perfiles_json = format!("[{}]", perfiles.join(","));
+    let passwd = capturar_opcional("getent", &["passwd"], raiz);
+    let minimo = uid_minimo();
+
+    let mut cuentas = Vec::new();
+    let mut detectados_admin = 0usize;
+    let mut adoptados = 0usize;
+    let mut adoptables = 0usize;
+
+    for linea in passwd.lines() {
+        let campos: Vec<&str> = linea.split(':').collect();
+        if campos.len() < 7 {
+            continue;
+        }
+
+        let cuenta = campos[0];
+        let Ok(uid) = campos[2].parse::<u32>() else {
+            continue;
+        };
+
+        if uid < minimo || uid >= 65534 {
+            continue;
+        }
+
+        let real_home = campos[5];
+        let shell = campos[6];
+        if cuenta_tecnica(real_home, shell) {
+            continue;
+        }
+
+        let nombre = campos[4]
+            .split(',')
+            .next()
+            .filter(|valor| !valor.is_empty())
+            .unwrap_or(cuenta);
+
+        let grupos_texto = capturar_opcional("id", &["-nG", cuenta], raiz);
+        let mut grupos: Vec<String> = grupos_texto
+            .split_whitespace()
+            .map(ToString::to_string)
+            .collect();
+        grupos.sort();
+        grupos.dedup();
+
+        let administrador = grupos.iter().any(|grupo| grupo == "wheel");
+        if administrador {
+            detectados_admin += 1;
+        }
+
+        let perfil = perfil_cuenta
+            .iter()
+            .find(|(account, _, _)| account == cuenta);
+
+        let (profile_id, estado) = match perfil {
+            Some((_, id, true)) => {
+                adoptados += 1;
+                (json_texto(id), "adopted")
+            }
+            Some((_, id, false)) => (json_texto(id), "profile-available"),
+            None => {
+                adoptables += 1;
+                ("null".to_string(), "adoptable")
+            }
+        };
+
+        cuentas.push(format!(
+            concat!(
+                "{{",
+                "\"accountName\":{},",
+                "\"displayName\":{},",
+                "\"uid\":{},",
+                "\"home\":{},",
+                "\"shell\":{},",
+                "\"administrator\":{},",
+                "\"groups\":{},",
+                "\"profileId\":{},",
+                "\"status\":{}",
+                "}}"
+            ),
+            json_texto(cuenta),
+            json_texto(nombre),
+            uid,
+            json_texto(real_home),
+            json_texto(shell),
+            administrador,
+            json_lista_textos(&grupos),
+            profile_id,
+            json_texto(estado),
+        ));
+    }
+
+    let cuentas_json = format!("[{}]", cuentas.join(","));
+
+    Ok(format!(
+        concat!(
+            "{{",
+            "\"schemaVersion\":2,",
+            "\"hostId\":{},",
+            "\"detectedAt\":{},",
+            "\"accounts\":{},",
+            "\"profiles\":{},",
+            "\"summary\":{{",
+            "\"humanAccounts\":{},",
+            "\"adoptedAccounts\":{},",
+            "\"adoptableAccounts\":{},",
+            "\"detectedAdministrators\":{},",
+            "\"declaredAdministrators\":{}",
+            "}},",
+            "\"hostUserIds\":{},",
+            "\"policy\":{{",
+            "\"mutableUsers\":{},",
+            "\"preserveExistingPasswords\":true,",
+            "\"repositoryStoresPasswords\":false,",
+            "\"newPasswordMethod\":\"system-passwd\",",
+            "\"androidAccessModel\":\"systemd-uaccess\",",
+            "\"portableProfileSchemaVersion\":2,",
+            "\"compatiblePortableProfileSchemaVersions\":[1,2],",
+            "\"portableFields\":[",
+            "\"id\",\"accountName\",\"fullName\",\"language\",",
+            "\"inputMethods\",\"capabilities\",\"avatar\"",
+            "],",
+            "\"hostLocalFields\":[",
+            "\"homeDirectory\",\"administrator\",\"deferredCapabilities\",",
+            "\"deferredInputMethods\",\"preservedGroups\",\"password\"",
+            "]",
+            "}}",
+            "}}"
+        ),
+        json_texto(&equipo),
+        json_texto(&fecha_iso(raiz)?),
+        cuentas_json,
+        perfiles_json,
+        cuentas.len(),
+        adoptados,
+        adoptables,
+        detectados_admin,
+        declarados_admin,
+        host_users,
+        mutable_users,
+    ))
+}
+
+fn noctalia_idiomas_json(raiz: &Path) -> Result<String, String> {
+    let expresion = r#"
+      let
+        flake = builtins.getFlake (toString ./.);
+      in
+        toString flake.inputs.noctalia.outPath
+    "#;
+
+    let source = ejecutar_capturando(
+        "nix",
+        &[
+            "eval".to_string(),
+            "--raw".to_string(),
+            "--impure".to_string(),
+            "--expr".to_string(),
+            expresion.to_string(),
+        ],
+        raiz,
+    )
+    .unwrap_or_default();
+
+    if source.is_empty() {
+        return Ok("[]".to_string());
+    }
+
+    let carpeta = PathBuf::from(source).join("assets/translations");
+    let Ok(entradas) = fs::read_dir(carpeta) else {
+        return Ok("[]".to_string());
+    };
+
+    let mut idiomas = Vec::new();
+    for entrada in entradas.flatten() {
+        let ruta = entrada.path();
+        if ruta.is_file() && ruta.extension().and_then(|ext| ext.to_str()) == Some("json") {
+            if let Some(id) = ruta.file_stem().and_then(|nombre| nombre.to_str()) {
+                idiomas.push(id.to_string());
+            }
+        }
+    }
+
+    idiomas.sort();
+    Ok(json_lista_textos(&idiomas))
+}
+
+fn localectl_campo(raiz: &Path, campo: &str) -> String {
+    let salida = capturar_opcional("localectl", &["status", "--no-pager"], raiz);
+    let prefijo = format!("{campo}:");
+
+    for linea in salida.lines() {
+        let limpia = linea.trim_start();
+        if let Some(valor) = limpia.strip_prefix(&prefijo) {
+            return valor.trim_start().to_string();
+        }
+    }
+
+    String::new()
+}
+
+fn runtime_lang(raiz: &Path) -> String {
+    let salida = capturar_opcional("locale", &[], raiz);
+
+    for linea in salida.lines() {
+        if let Some(valor) = linea.strip_prefix("LANG=") {
+            return valor.trim_matches('"').to_string();
+        }
+    }
+
+    String::new()
+}
+
+fn runtime_console() -> String {
+    let texto = fs::read_to_string("/etc/vconsole.conf").unwrap_or_default();
+
+    for linea in texto.lines() {
+        if let Some(valor) = linea.strip_prefix("KEYMAP=") {
+            return valor.trim_matches('"').to_string();
+        }
+    }
+
+    String::new()
+}
+
+fn proceso_usuario_activo(raiz: &Path, nombre: &str) -> bool {
+    let uid = capturar_opcional("id", &["-u"], raiz);
+    if uid.is_empty() {
+        return false;
+    }
+
+    comando_exitoso("pgrep", &["-u", &uid, "-x", nombre], raiz)
+}
+
+fn localizacion_json(raiz: &Path) -> Result<String, String> {
+    let equipo = resolver_equipo(raiz)?;
+
+    let declared = flake_json(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.korunix.localization"),
+    )?;
+    let system_locale = flake_raw(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.i18n.defaultLocale"),
+    )?;
+    let format_locale = flake_raw(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.i18n.extraLocaleSettings.LC_TIME"),
+    )?;
+    let xkb_layout = flake_raw(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.services.xserver.xkb.layout"),
+    )?;
+    let xkb_variant = flake_raw(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.services.xserver.xkb.variant"),
+    )?;
+    let xkb_options = flake_raw(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.services.xserver.xkb.options"),
+    )?;
+    let console_map = flake_raw(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.console.keyMap"),
+    )?;
+
+    let input_method_model = flake_raw(
+        raiz,
+        &format!(
+            "nixosConfigurations.{equipo}.config.environment.etc.\"korunix/input-methods.json\".text"
+        ),
+    )?;
+    let input_method_enabled = flake_json(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.i18n.inputMethod.enable"),
+    )?;
+    let input_method_type_raw = flake_json(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.i18n.inputMethod.type"),
+    )?;
+    let input_method_package_raw = flake_json(
+        raiz,
+        &format!("nixosConfigurations.{equipo}.config.i18n.inputMethod.package"),
+    )?;
+
+    let input_method_type = jq_texto(
+        raiz,
+        &input_method_type_raw,
+        r#"if type == "string" then . else "none" end"#,
+    )?;
+    let input_method_package = jq_texto(
+        raiz,
+        &input_method_package_raw,
+        r#"if type == "string" then . else "" end"#,
+    )?;
+
+    let actual_lang = runtime_lang(raiz);
+    let actual_timezone = capturar_opcional(
+        "timedatectl",
+        &["show", "--property=Timezone", "--value"],
+        raiz,
+    );
+    let actual_layout = localectl_campo(raiz, "X11 Layout");
+    let actual_variant = localectl_campo(raiz, "X11 Variant");
+    let actual_options = localectl_campo(raiz, "X11 Options");
+    let actual_console = runtime_console();
+
+    let usuarios = usuarios_json(raiz)?;
+    let people = jq_compacto(
+        raiz,
+        &usuarios,
+        r#"[
+          .profiles[]
+          | {
+              id,
+              fullName,
+              language,
+              inputMethods,
+              enabledInputMethods,
+              deferredInputMethods,
+              effectiveAccountName
+            }
+        ]"#,
+    )?;
+
+    let noctalia_languages = noctalia_idiomas_json(raiz)?;
+
+    let runtime_gtk_im = env::var("GTK_IM_MODULE").unwrap_or_default();
+    let runtime_qt_im = env::var("QT_IM_MODULE").unwrap_or_default();
+    let runtime_xmodifiers = env::var("XMODIFIERS").unwrap_or_default();
+    let runtime_desktop = env::var("XDG_CURRENT_DESKTOP").ok();
+    let runtime_desktop_json = runtime_desktop
+        .as_deref()
+        .map(json_texto)
+        .unwrap_or_else(|| "null".to_string());
+
+    let filtro = r#"
+      def normlocale:
+        ascii_downcase
+        | gsub("-"; "")
+        | gsub("\\."; "");
+
+      def contradiction($field; $declared; $actual; $message):
+        {
+          field: $field,
+          declared: $declared,
+          actual: $actual,
+          message: $message
+        };
+
+      {
+        schemaVersion: 2,
+        host: $host,
+
+        ownership: {
+          portableUserFields: [
+            "language",
+            "inputMethods"
+          ],
+          hostLocalFields: [
+            "systemLanguage",
+            "region",
+            "formats",
+            "timeZone",
+            "keyboard",
+            "deferredInputMethods"
+          ]
+        },
+
+        declared: $declared,
+
+        derived: {
+          systemLocale: $systemLocale,
+          formatLocale: $formatLocale,
+          keyboard: {
+            layout: $xkbLayout,
+            variant: $xkbVariant,
+            options: $xkbOptions,
+            console: $consoleMap
+          }
+        },
+
+        runtime: {
+          lang: $runtimeLang,
+          timeZone: $runtimeTimezone,
+          keyboard: {
+            layout: $runtimeLayout,
+            variant: $runtimeVariant,
+            options: $runtimeOptions,
+            console: $runtimeConsole
+          },
+          desktop: $runtimeDesktop
+        },
+
+        people:
+          [
+            $people[]
+            | .language as $language
+            | . + {
+                noctaliaTranslationAvailable:
+                  (
+                    if $language == null then
+                      null
+                    else
+                      ($noctaliaLanguages | index($language)) != null
+                    end
+                  )
+              }
+          ],
+
+        noctalia: {
+          supportedLanguages: $noctaliaLanguages
+        },
+
+        inputMethod: {
+          candidate: $inputMethodModel,
+
+          nixos: {
+            enabled: $inputMethodEnabled,
+            type: $inputMethodType,
+            package: $inputMethodPackage
+          },
+
+          runtime: {
+            gtkImModule:
+              if $runtimeGtkIm == ""
+              then null
+              else $runtimeGtkIm
+              end,
+
+            qtImModule:
+              if $runtimeQtIm == ""
+              then null
+              else $runtimeQtIm
+              end,
+
+            xmodifiers:
+              if $runtimeXmodifiers == ""
+              then null
+              else $runtimeXmodifiers
+              end,
+
+            fcitx5Running: $fcitxRunning,
+            ibusRunning: $ibusRunning
+          }
+        },
+
+        contradictions:
+          [
+            if (
+              (
+                [
+                  $people[]
+                  | .enabledInputMethods[]?
+                ]
+                | length
+              ) > 0
+              and $inputMethodType != "fcitx5"
+            ) then
+              contradiction(
+                "inputMethod.backend";
+                "fcitx5";
+                $inputMethodType;
+                "Hay métodos de entrada avanzados efectivos pero el backend candidato no es Fcitx5."
+              )
+            else empty end,
+
+            if (
+              ($runtimeLang | length) > 0
+              and (($runtimeLang | normlocale) != ($systemLocale | normlocale))
+            ) then
+              contradiction(
+                "systemLocale";
+                $systemLocale;
+                $runtimeLang;
+                "LANG activo no coincide con el locale declarado."
+              )
+            else empty end,
+
+            if (
+              ($runtimeTimezone | length) > 0
+              and $runtimeTimezone != $declared.timeZone
+            ) then
+              contradiction(
+                "timeZone";
+                $declared.timeZone;
+                $runtimeTimezone;
+                "La zona horaria activa no coincide con la declarada."
+              )
+            else empty end,
+
+            if (
+              ($runtimeLayout | length) > 0
+              and $runtimeLayout != $xkbLayout
+            ) then
+              contradiction(
+                "keyboard.layout";
+                $xkbLayout;
+                $runtimeLayout;
+                "Los layouts XKB activos no coinciden con Korunix."
+              )
+            else empty end,
+
+            if (
+              ($runtimeVariant | length) > 0
+              and $runtimeVariant != $xkbVariant
+            ) then
+              contradiction(
+                "keyboard.variant";
+                $xkbVariant;
+                $runtimeVariant;
+                "Las variantes XKB activas no coinciden con Korunix."
+              )
+            else empty end,
+
+            if (
+              ($runtimeOptions | length) > 0
+              and $runtimeOptions != $xkbOptions
+            ) then
+              contradiction(
+                "keyboard.options";
+                $xkbOptions;
+                $runtimeOptions;
+                "Las opciones XKB activas no coinciden con Korunix."
+              )
+            else empty end,
+
+            if (
+              ($runtimeConsole | length) > 0
+              and $runtimeConsole != $consoleMap
+            ) then
+              contradiction(
+                "keyboard.console";
+                $consoleMap;
+                $runtimeConsole;
+                "El mapa de consola activo no coincide con Korunix."
+              )
+            else empty end
+          ]
+      }
+    "#;
+
+    jq_con_entrada(
+        raiz,
+        &[
+            "-cn".to_string(),
+            "--argjson".to_string(),
+            "declared".to_string(),
+            declared,
+            "--arg".to_string(),
+            "host".to_string(),
+            equipo,
+            "--arg".to_string(),
+            "systemLocale".to_string(),
+            system_locale,
+            "--arg".to_string(),
+            "formatLocale".to_string(),
+            format_locale,
+            "--arg".to_string(),
+            "xkbLayout".to_string(),
+            xkb_layout,
+            "--arg".to_string(),
+            "xkbVariant".to_string(),
+            xkb_variant,
+            "--arg".to_string(),
+            "xkbOptions".to_string(),
+            xkb_options,
+            "--arg".to_string(),
+            "consoleMap".to_string(),
+            console_map,
+            "--arg".to_string(),
+            "runtimeLang".to_string(),
+            actual_lang,
+            "--arg".to_string(),
+            "runtimeTimezone".to_string(),
+            actual_timezone,
+            "--arg".to_string(),
+            "runtimeLayout".to_string(),
+            actual_layout,
+            "--arg".to_string(),
+            "runtimeVariant".to_string(),
+            actual_variant,
+            "--arg".to_string(),
+            "runtimeOptions".to_string(),
+            actual_options,
+            "--arg".to_string(),
+            "runtimeConsole".to_string(),
+            actual_console,
+            "--argjson".to_string(),
+            "noctaliaLanguages".to_string(),
+            noctalia_languages,
+            "--argjson".to_string(),
+            "people".to_string(),
+            people,
+            "--argjson".to_string(),
+            "inputMethodModel".to_string(),
+            input_method_model,
+            "--argjson".to_string(),
+            "inputMethodEnabled".to_string(),
+            input_method_enabled,
+            "--arg".to_string(),
+            "inputMethodType".to_string(),
+            input_method_type,
+            "--arg".to_string(),
+            "inputMethodPackage".to_string(),
+            input_method_package,
+            "--arg".to_string(),
+            "runtimeGtkIm".to_string(),
+            runtime_gtk_im,
+            "--arg".to_string(),
+            "runtimeQtIm".to_string(),
+            runtime_qt_im,
+            "--arg".to_string(),
+            "runtimeXmodifiers".to_string(),
+            runtime_xmodifiers,
+            "--argjson".to_string(),
+            "runtimeDesktop".to_string(),
+            runtime_desktop_json,
+            "--argjson".to_string(),
+            "fcitxRunning".to_string(),
+            proceso_usuario_activo(raiz, "fcitx5").to_string(),
+            "--argjson".to_string(),
+            "ibusRunning".to_string(),
+            proceso_usuario_activo(raiz, "ibus-daemon").to_string(),
+            filtro.to_string(),
+        ],
+        "",
+    )
+}
+
 fn ejecutable(ruta: &Path) -> bool {
     fs::metadata(ruta)
         .map(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
@@ -1247,6 +2644,18 @@ fn ejecutar() -> Result<ExitCode, String> {
         }
         "modelo" => ejecutar_modelo(&raiz, &argumentos),
         "channel" => ejecutar_canal(&raiz, &argumentos),
+        "hardware" if argumentos.len() == 1 && argumentos[0] == "--json" => {
+            println!("{}", hardware_json(&raiz)?);
+            Ok(ExitCode::SUCCESS)
+        }
+        "localization" if argumentos.len() == 1 && argumentos[0] == "--json" => {
+            println!("{}", localizacion_json(&raiz)?);
+            Ok(ExitCode::SUCCESS)
+        }
+        "users" if argumentos.len() == 1 && argumentos[0] == "--json" => {
+            println!("{}", usuarios_json(&raiz)?);
+            Ok(ExitCode::SUCCESS)
+        }
         "privileges" if argumentos.is_empty() => {
             mostrar_permisos();
             Ok(ExitCode::SUCCESS)

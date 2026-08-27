@@ -2474,6 +2474,15 @@ ya no forman parte de la estructura activa. El sufijo `-detectado` puede
 permanecer temporalmente durante D.2 por compatibilidad, aunque la carpeta
 `generado/` ya define su naturaleza.
 
+**Avance de D.2 — lecturas del equipo en Rust:** `hardware --json`,
+`localization --json` y `users --json` ya nacen en el motor Rust. Las tres
+combinan el modelo declarativo de Nix con el estado vivo del sistema sin pasar
+por los backends Bash. Sus contratos JSON se mantienen idénticos a los contratos
+heredados; `detectedAt` sigue siendo una marca temporal y no participa en las
+comparaciones de identidad. `jq` permanece temporalmente como herramienta de
+composición JSON, pero ya no contiene el dominio operativo ni actúa como punto
+de entrada.
+
 #### D.3 · GTK/libadwaita sobre el motor
 
 Migrar la aplicación Python actual a la interfaz definitiva sobre el mismo
