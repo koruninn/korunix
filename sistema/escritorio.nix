@@ -1268,9 +1268,11 @@ in {
         pkgs.adw-gtk3
       ]
       ++ lib.optionals cinnamonEnabled [
+        pkgs.alacritty
+      ]
+      ++ lib.optionals plasmaEnabled [
         # Prioridad sobre la entrada upstream para que Plasma registre Ctrl+Alt+T.
         (lib.hiPrio plasmaAlacrittyDesktop)
-        pkgs.alacritty
       ]
       ++ lib.optionals noctaliaEnabled noctaliaApplications
       # Si Plasma también está instalado, programs.kdeconnect aporta KDE Connect;
