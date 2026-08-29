@@ -439,6 +439,10 @@
       fi
     }
 
+    # Este fragmento pertenece a Korunix y se carga junto a config.toml sin
+    # sobrescribir las preferencias personales guardadas por Noctalia.
+    ensure_link       "$config_home/noctalia/30-korunix-gtk4-live.toml"       "/etc/korunix/noctalia/gtk4-live.toml"
+
     # Fetch tiene una configuración común y legible dentro de .korunix.
     ensure_link "$config_home/fetch/config" "/etc/korunix/fetch.conf"
 
@@ -1042,21 +1046,28 @@ in {
       }
     ];
 
-    # GNOME propone IBus mediante mkDefault. Mientras nadie necesite un método
-    # avanzado dejamos ese comportamiento exactamente intacto. Cuando exista una
-    # selección efectiva, Korunix elige Fcitx5 explícitamente para todo el host.
-    i18n.inputMethod = lib.mkIf advancedInputMethodsEnabled {
-      enable = true;
-      type = "fcitx5";
+    # GTK4 4.20+ necesita un método de entrada para resolver correctamente
+    # teclas muertas y diacríticos. Antes GNOME aportaba IBus implícitamente;
+    # Korunix conserva aplicaciones GTK4 de GNOME sin conservar ese escritorio,
+    # así que IBus pasa a ser el backend normal cuando no se pidió uno avanzado.
+    i18n.inputMethod =
+      if advancedInputMethodsEnabled
+      then {
+        enable = true;
+        type = "fcitx5";
 
-      fcitx5 = {
-        addons = fcitxAddons;
+        fcitx5 = {
+          addons = fcitxAddons;
 
-        # GTK/Qt usan sus módulos Fcitx5. El compositor sigue siendo dueño del
-        # teclado Wayland/XKB del host.
-        waylandFrontend = false;
+          # GTK/Qt usan sus módulos Fcitx5. El compositor sigue siendo dueño del
+          # teclado Wayland/XKB del host.
+          waylandFrontend = false;
+        };
+      }
+      else {
+        enable = true;
+        type = "ibus";
       };
-    };
 
     # Contrato interno legible para los backends de terminal y la GUI futura.
     # No contiene nombres de paquetes dentro del perfil portable de la persona.
@@ -1066,12 +1077,9 @@ in {
       backend =
         if advancedInputMethodsEnabled
         then "fcitx5"
-        else "desktop-default";
+        else "ibus";
 
-      launcher =
-        if advancedInputMethodsEnabled
-        then "xdg-autostart"
-        else null;
+      launcher = "xdg-autostart";
 
       keyboard = {
         engine = fcitxKeyboard;

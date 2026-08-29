@@ -115,6 +115,40 @@
   cinnamonEnabled = lib.elem "cinnamon" enabledDesktops;
   plasmaEnabled = lib.elem "plasma" enabledDesktops;
 
+  # El módulo de Cinnamon reúne en un único directorio tanto los esquemas
+  # necesarios como los valores predeterminados visuales de Linux Mint.
+  # Conservamos ese conjunto intacto para la sesión Cinnamon.
+  cinnamonGSettingsOverrides = pkgs.cinnamon-gsettings-overrides.override {
+    extraGSettingsOverridePackages =
+      config.services.xserver.desktopManager.cinnamon.extraGSettingsOverridePackages;
+    extraGSettingsOverrides =
+      config.services.xserver.desktopManager.cinnamon.extraGSettingsOverrides;
+  };
+
+  cinnamonGSettingsSchemaDir = "${cinnamonGSettingsOverrides}/share/gsettings-schemas/nixos-gsettings-overrides/glib-2.0/schemas";
+
+  # Cinnamon exporta sus overrides de GSettings para todas las sesiones.
+  # Korunix conserva exactamente los mismos esquemas, pero recompila una copia
+  # sin mint-artwork.gschema.override para que los defaults visuales de Linux
+  # Mint no alcancen Niri, Hyprland ni Plasma.
+  neutralGSettingsOverrides = pkgs.runCommand "korunix-gsettings-overrides-neutral" {} ''
+    set -eu
+
+    schema_dir="$out/share/gsettings-schemas/korunix-gsettings-overrides/glib-2.0/schemas"
+
+    mkdir -p "$schema_dir"
+    cp -a ${cinnamonGSettingsSchemaDir}/. "$schema_dir/"
+    chmod -R u+w "$schema_dir"
+
+    rm -f \
+      "$schema_dir/gschemas.compiled" \
+      "$schema_dir/mint-artwork.gschema.override"
+
+    ${pkgs.glib.dev}/bin/glib-compile-schemas --strict "$schema_dir"
+  '';
+
+  neutralGSettingsSchemaDir = "${neutralGSettingsOverrides}/share/gsettings-schemas/korunix-gsettings-overrides/glib-2.0/schemas";
+
   monitorConfigured =
     cfg.monitor.output
     != null
@@ -190,7 +224,6 @@
       khelpcenter
       kinfocenter
       kmenuedit
-      konsole
       krdp
       kwalletmanager
       okular
@@ -233,7 +266,6 @@
     gnome-screenshot
     file-roller
     gucharmap
-    gnome-terminal
     nemo-with-extensions
     cinnamon-control-center
     cinnamon-screensaver
@@ -458,11 +490,25 @@
     exit 1
   '';
 
+  # DrKonqi pertenece a Plasma. El socket puede existir en cualquier sesión,
+  # pero el lanzador solo debe procesar fallos mientras Plasma esté activo.
+  # Consultamos el target de Plasma directamente porque el gestor systemd --user
+  # no conserva de forma fiable las variables XDG del escritorio.
+  plasmaSessionCheck = pkgs.writeShellScript "korunix-plasma-session-check" ''
+    exec ${config.systemd.package}/bin/systemctl --user --quiet is-active plasma-workspace.target
+  '';
+
   # El perfil visual de Noctalia usa una base de usuario distinta de la base
   # normal. Así puede cambiar con la paleta sin escribir la preferencia que
   # Cinnamon y Plasma leen al iniciar sus propias sesiones.
   noctaliaDconfProfile = pkgs.writeText "korunix-noctalia-dconf-profile" ''
     user-db:noctalia
+  '';
+
+  # Plasma mantiene una base dconf propia para que las preferencias GTK
+  # persistidas por Cinnamon no crucen la frontera de sesión.
+  plasmaDconfProfile = pkgs.writeText "korunix-plasma-dconf-profile" ''
+    user-db:plasma
   '';
 
   # Hatter Slate acompaña la apariencia predeterminada y las paletas generadas
@@ -546,9 +592,27 @@
       case ":''${XDG_CURRENT_DESKTOP:-}:''${XDG_SESSION_DESKTOP:-}:''${DESKTOP_SESSION:-}:" in
         *:niri:*|*:Niri:*|*:Hyprland:*|*:hyprland:*|*:hyprland-uwsm:*)
           export DCONF_PROFILE=noctalia
+          ${lib.optionalString cinnamonEnabled ''
+        export NIX_GSETTINGS_OVERRIDES_DIR=${lib.escapeShellArg neutralGSettingsSchemaDir}
+      ''}
+          ;;
+        *:X-Cinnamon:*|*:cinnamon:*|*:cinnamon-wayland:*)
+          export DCONF_PROFILE=user
+          ${lib.optionalString cinnamonEnabled ''
+        export NIX_GSETTINGS_OVERRIDES_DIR=${lib.escapeShellArg cinnamonGSettingsSchemaDir}
+      ''}
+          ;;
+        *:KDE:*|*:plasma:*)
+          export DCONF_PROFILE=plasma
+          ${lib.optionalString cinnamonEnabled ''
+        export NIX_GSETTINGS_OVERRIDES_DIR=${lib.escapeShellArg neutralGSettingsSchemaDir}
+      ''}
           ;;
         *)
-          unset DCONF_PROFILE
+          export DCONF_PROFILE=user
+          ${lib.optionalString cinnamonEnabled ''
+        export NIX_GSETTINGS_OVERRIDES_DIR=${lib.escapeShellArg neutralGSettingsSchemaDir}
+      ''}
           ;;
       esac
 
@@ -564,6 +628,245 @@
     portalSessionWrapper
     "korunix-xdg-desktop-portal-gnome"
     "${pkgs.xdg-desktop-portal-gnome}/libexec/xdg-desktop-portal-gnome";
+
+  # Cinnamon conserva sus defaults de Linux Mint únicamente durante su propia
+  # sesión. También actualizamos el entorno de activación de D-Bus y systemd
+  # para que los servicios iniciados posteriormente reciban el mismo conjunto.
+  cinnamonSessionWrapper = pkgs.writeShellScript "korunix-cinnamon-session" ''
+    set -u
+
+    # Cinnamon usa la base dconf normal de la persona y los overrides visuales
+    # originales del módulo Cinnamon. Nunca debe heredar el perfil de Noctalia.
+    export DCONF_PROFILE=user
+    export NIX_GSETTINGS_OVERRIDES_DIR=${lib.escapeShellArg cinnamonGSettingsSchemaDir}
+
+    if ! ${config.systemd.package}/bin/systemctl --user set-environment \
+      DCONF_PROFILE=user \
+      NIX_GSETTINGS_OVERRIDES_DIR=${lib.escapeShellArg cinnamonGSettingsSchemaDir}
+    then
+      echo "Korunix: no se pudo publicar el entorno de Cinnamon en systemd." >&2
+    fi
+
+    if ! ${pkgs.dbus}/bin/dbus-update-activation-environment \
+      --systemd \
+      DCONF_PROFILE \
+      NIX_GSETTINGS_OVERRIDES_DIR
+    then
+      echo "Korunix: no se pudo publicar el entorno de Cinnamon en D-Bus." >&2
+    fi
+
+    restore_neutral_gsettings() {
+      export DCONF_PROFILE=user
+      export NIX_GSETTINGS_OVERRIDES_DIR=${lib.escapeShellArg neutralGSettingsSchemaDir}
+
+      ${config.systemd.package}/bin/systemctl --user set-environment \
+        DCONF_PROFILE=user \
+        NIX_GSETTINGS_OVERRIDES_DIR=${lib.escapeShellArg neutralGSettingsSchemaDir} ||
+        true
+
+      ${pkgs.dbus}/bin/dbus-update-activation-environment \
+        --systemd \
+        DCONF_PROFILE \
+        NIX_GSETTINGS_OVERRIDES_DIR ||
+        true
+    }
+
+    trap restore_neutral_gsettings EXIT
+
+    status=0
+    ${pkgs.cinnamon-session}/bin/cinnamon-session-cinnamon --wayland "$@" ||
+      status=$?
+
+    restore_neutral_gsettings
+    trap - EXIT
+
+    exit "$status"
+  '';
+
+  # Cinnamon Wayland 6.6 no restaura por sí mismo numlock-state al iniciar.
+  # Este ayudante solo puede encender NumLock: comprueba primero los LED reales
+  # y, si siguen apagados, inyecta una única pulsación KEY_NUMLOCK mediante uinput.
+  cinnamonSessionCheck = pkgs.writeShellScript "korunix-cinnamon-session-check" ''
+    case ":''${XDG_CURRENT_DESKTOP:-}:''${XDG_SESSION_DESKTOP:-}:''${DESKTOP_SESSION:-}:" in
+      *:X-Cinnamon:*|*:cinnamon:*|*:cinnamon-wayland:*|*:korunix-cinnamon-wayland:*)
+        exit 0
+        ;;
+      *)
+        exit 1
+        ;;
+    esac
+  '';
+
+  numlockOnHelper = pkgs.runCommandCC "korunix-numlock-on" {} ''
+    mkdir -p "$out/bin"
+
+    cat > numlock-on.c <<'EOF'
+    #include <fcntl.h>
+    #include <glob.h>
+    #include <linux/input.h>
+    #include <linux/uinput.h>
+    #include <stdio.h>
+    #include <string.h>
+    #include <sys/ioctl.h>
+    #include <unistd.h>
+
+    #define KORUNIX_BITS_PER_LONG (sizeof(unsigned long) * 8)
+    #define KORUNIX_NBITS(max) (((max) / KORUNIX_BITS_PER_LONG) + 1)
+
+    static int bit_is_set(const unsigned long *bits, unsigned int bit) {
+      return (bits[bit / KORUNIX_BITS_PER_LONG] >>
+              (bit % KORUNIX_BITS_PER_LONG)) & 1UL;
+    }
+
+    /*
+     * Devuelve 1 si NumLock está encendido, 0 si está apagado y -1 si ningún
+     * teclado físico expone el estado LED mediante evdev.
+     */
+    static int numlock_state(void) {
+      glob_t paths;
+      size_t i;
+      int saw_keyboard = 0;
+
+      memset(&paths, 0, sizeof(paths));
+
+      if (glob("/dev/input/event*", 0, NULL, &paths) != 0) {
+        return -1;
+      }
+
+      for (i = 0; i < paths.gl_pathc; ++i) {
+        unsigned long key_bits[KORUNIX_NBITS(KEY_MAX)];
+        unsigned long led_bits[KORUNIX_NBITS(LED_MAX)];
+        unsigned long led_state[KORUNIX_NBITS(LED_MAX)];
+        int fd = open(paths.gl_pathv[i], O_RDONLY | O_NONBLOCK);
+
+        if (fd < 0) {
+          continue;
+        }
+
+        memset(key_bits, 0, sizeof(key_bits));
+        memset(led_bits, 0, sizeof(led_bits));
+        memset(led_state, 0, sizeof(led_state));
+
+        if (ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(key_bits)), key_bits) < 0 ||
+            ioctl(fd, EVIOCGBIT(EV_LED, sizeof(led_bits)), led_bits) < 0 ||
+            !bit_is_set(key_bits, KEY_NUMLOCK) ||
+            !bit_is_set(led_bits, LED_NUML)) {
+          close(fd);
+          continue;
+        }
+
+        saw_keyboard = 1;
+
+        if (ioctl(fd, EVIOCGLED(sizeof(led_state)), led_state) >= 0 &&
+            bit_is_set(led_state, LED_NUML)) {
+          close(fd);
+          globfree(&paths);
+          return 1;
+        }
+
+        close(fd);
+      }
+
+      globfree(&paths);
+      return saw_keyboard ? 0 : -1;
+    }
+
+    static int emit_event(int fd, unsigned short type, unsigned short code, int value) {
+      struct input_event event;
+
+      memset(&event, 0, sizeof(event));
+      event.type = type;
+      event.code = code;
+      event.value = value;
+
+      return write(fd, &event, sizeof(event)) == sizeof(event) ? 0 : -1;
+    }
+
+    int main(int argc, char **argv) {
+      struct uinput_setup setup;
+      int fd;
+
+      usleep(1000000);
+
+      int state = numlock_state();
+
+      if (argc > 1 && strcmp(argv[1], "--status") == 0) {
+        if (state > 0) {
+          puts("on");
+          return 0;
+        }
+
+        if (state == 0) {
+          puts("off");
+          return 0;
+        }
+
+        puts("unknown");
+        return 1;
+      }
+
+      if (state > 0) {
+        return 0;
+      }
+
+      if (state < 0) {
+        fprintf(
+          stderr,
+          "Korunix: no se pudo determinar de forma segura el estado de NumLock.\n"
+        );
+        return 1;
+      }
+
+      fd = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+      if (fd < 0) {
+        perror("Korunix: no se pudo abrir /dev/uinput");
+        return 1;
+      }
+
+      if (ioctl(fd, UI_SET_EVBIT, EV_KEY) < 0 ||
+          ioctl(fd, UI_SET_KEYBIT, KEY_NUMLOCK) < 0 ||
+          ioctl(fd, UI_SET_EVBIT, EV_SYN) < 0) {
+        perror("Korunix: no se pudo preparar uinput");
+        close(fd);
+        return 1;
+      }
+
+      memset(&setup, 0, sizeof(setup));
+      setup.id.bustype = BUS_USB;
+      setup.id.vendor = 0x4b4f;
+      setup.id.product = 0x5255;
+      snprintf(setup.name, UINPUT_MAX_NAME_SIZE, "Korunix NumLock");
+
+      if (ioctl(fd, UI_DEV_SETUP, &setup) < 0 ||
+          ioctl(fd, UI_DEV_CREATE) < 0) {
+        perror("Korunix: no se pudo crear el teclado virtual");
+        close(fd);
+        return 1;
+      }
+
+      usleep(700000);
+
+      if (emit_event(fd, EV_KEY, KEY_NUMLOCK, 1) < 0 ||
+          emit_event(fd, EV_SYN, SYN_REPORT, 0) < 0 ||
+          emit_event(fd, EV_KEY, KEY_NUMLOCK, 0) < 0 ||
+          emit_event(fd, EV_SYN, SYN_REPORT, 0) < 0) {
+        perror("Korunix: no se pudo enviar NumLock");
+        ioctl(fd, UI_DEV_DESTROY);
+        close(fd);
+        return 1;
+      }
+
+      usleep(150000);
+      ioctl(fd, UI_DEV_DESTROY);
+      close(fd);
+      return 0;
+    }
+    EOF
+
+    "$CC" -O2 -Wall -Wextra -Werror \
+      -o "$out/bin/korunix-numlock-on" \
+      numlock-on.c
+  '';
 
   # Los módulos pueden traer varias sesiones, pero Korunix publica una sola
   # sesión Wayland por escritorio. El propio paquete declara exactamente esos
@@ -606,6 +909,12 @@
       ${lib.optionalString cinnamonEnabled ''
         cp \
           ${pkgs.cinnamon}/share/wayland-sessions/cinnamon-wayland.desktop \
+          "$out/share/wayland-sessions/cinnamon-wayland.desktop"
+
+        # Cinnamon entra con sus propios overrides en lugar de heredar el
+        # conjunto neutral utilizado por el resto de escritorios.
+        ${pkgs.gnused}/bin/sed -i \
+          "s|^Exec=.*|Exec=${cinnamonSessionWrapper}|" \
           "$out/share/wayland-sessions/cinnamon-wayland.desktop"
 
         # Cinnamon no declara DesktopNames upstream. Korunix lo hace explícito
@@ -668,6 +977,43 @@
     (builtins.readFile ../config/hyprland.lua)
   );
 in {
+  options.korunix.internal.desktopCatalog = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    readOnly = true;
+    internal = true;
+    default = implementedDesktops;
+    description = "Escritorios que el modelo Nix de Korunix puede implementar.";
+  };
+
+  options.korunix.appearance = {
+    style = lib.mkOption {
+      type = lib.types.enum [
+        "default"
+        "everforest"
+      ];
+      default = "default";
+      description = ''
+        Estilo visual administrado por Korunix. "default" conserva la apariencia
+        natural del escritorio; "everforest" expresa la decisión global de usar
+        la identidad Everforest donde exista integración soportada.
+      '';
+    };
+
+    mode = lib.mkOption {
+      type = lib.types.enum [
+        "light"
+        "dark"
+        "auto"
+      ];
+      default = "auto";
+      description = ''
+        Variante clara, oscura o automática de la apariencia. El modo automático
+        sigue la fuente de estado del sistema que Korunix pueda observar de forma
+        fiable.
+      '';
+    };
+  };
+
   options.korunix.desktop = {
     primary = lib.mkOption {
       type = desktopType;
@@ -763,9 +1109,102 @@ in {
     # aplicaciones. Cada escritorio completo mantiene su propia experiencia.
     services.xserver.desktopManager.cinnamon.enable = cinnamonEnabled;
 
+    # La política de Korunix es NumLock encendido al entrar en cualquier
+    # escritorio. Niri, Hyprland y Plasma usan sus mecanismos nativos; Cinnamon
+    # Wayland 6.6 recibe el mismo resultado mediante un ayudante mínimo y acotado.
+    security.wrappers."korunix-numlock-on" = lib.mkIf cinnamonEnabled {
+      source = "${numlockOnHelper}/bin/korunix-numlock-on";
+      owner = "root";
+      group = "root";
+      setuid = true;
+      permissions = "u+rx,g+x,o+x";
+    };
+
+    systemd.user.services.korunix-cinnamon-numlock = lib.mkIf cinnamonEnabled {
+      description = "Enciende NumLock al iniciar Cinnamon";
+
+      wantedBy = ["graphical-session.target"];
+
+      serviceConfig = {
+        Type = "oneshot";
+        ExecCondition = cinnamonSessionCheck;
+        ExecStart = "/run/wrappers/bin/korunix-numlock-on";
+      };
+    };
+
+    # Cinnamon utiliza Alacritty como terminal predeterminada. GNOME Terminal
+    # se excluye del conjunto nativo para no duplicar terminales.
+    environment.cinnamon.excludePackages = lib.optionals cinnamonEnabled [
+      pkgs.gnome-terminal
+    ];
+
+    services.xserver.desktopManager.cinnamon.extraGSettingsOverrides = lib.mkIf cinnamonEnabled (lib.mkAfter ''
+      [org.cinnamon.desktop.default-applications.terminal]
+      exec='alacritty'
+      exec-arg='-e'
+
+      [org.cinnamon.desktop.keybindings.media-keys]
+      terminal=['<Primary><Alt>t']
+    '');
+
     # Plasma conserva igualmente su escritorio y su conjunto nativo completo.
     # GDM continúa siendo el gestor de inicio común de Korunix.
     services.desktopManager.plasma6.enable = plasmaEnabled;
+
+    # Korunix usa Alacritty como única terminal. Konsole no se instala aunque
+    # forme parte del conjunto opcional predeterminado del módulo Plasma 6.
+    environment.plasma6.excludePackages = lib.optionals plasmaEnabled [
+      pkgs.kdePackages.konsole
+    ];
+
+    # Plasma instala DrKonqi como manejador de coredumps de usuario. Su socket
+    # pertenece a sockets.target y, sin este límite, también intenta mostrar
+    # fallos dentro de Niri, Hyprland y Cinnamon. Conservamos la unidad original
+    # y añadimos únicamente una condición específica de la sesión Plasma.
+    systemd.user.services."drkonqi-coredump-launcher@" = lib.mkIf plasmaEnabled {
+      overrideStrategy = "asDropin";
+      serviceConfig.ExecCondition = plasmaSessionCheck;
+    };
+
+    # Plasma carga estos scripts antes de iniciar el escritorio. Esta es la
+    # frontera nativa para variables que deben pertenecer únicamente a Plasma.
+    environment.etc."xdg/plasma-workspace/env/20-korunix-session.sh" = lib.mkIf plasmaEnabled {
+      mode = "0755";
+      text = ''
+        export DCONF_PROFILE=plasma
+        export NIX_GSETTINGS_OVERRIDES_DIR=${lib.escapeShellArg neutralGSettingsSchemaDir}
+      '';
+    };
+
+    # Al salir de Plasma retiramos su perfil del gestor systemd de usuario. Los
+    # demás escritorios publican después su propio entorno al iniciar.
+    environment.etc."xdg/plasma-workspace/shutdown/20-korunix-session.sh" = lib.mkIf plasmaEnabled {
+      mode = "0755";
+      text = ''
+        ${config.systemd.package}/bin/systemctl --user set-environment \
+          DCONF_PROFILE=user \
+          NIX_GSETTINGS_OVERRIDES_DIR=${lib.escapeShellArg neutralGSettingsSchemaDir} ||
+          true
+
+        DCONF_PROFILE=user \
+        NIX_GSETTINGS_OVERRIDES_DIR=${lib.escapeShellArg neutralGSettingsSchemaDir} \
+          ${pkgs.dbus}/bin/dbus-update-activation-environment \
+            --systemd \
+            DCONF_PROFILE \
+            NIX_GSETTINGS_OVERRIDES_DIR ||
+          true
+      '';
+    };
+
+    # Plasma y Dolphin usan Alacritty como terminal predeterminada. La
+    # entrada desktop oficial se llama Alacritty.desktop.
+    environment.etc."xdg/kdeglobals" = lib.mkIf plasmaEnabled {
+      text = ''
+        [General]
+        TerminalApplication=alacritty
+        TerminalService=Alacritty.desktop
+      '';
+    };
 
     # Plasma usa kcminputrc para decidir el estado inicial del teclado numérico.
     # NumLock=0 significa «encendido al iniciar Plasma».
@@ -795,11 +1234,21 @@ in {
     # menús sin desinstalar componentes que cada escritorio necesite.
     environment.systemPackages =
       [
+        # También se publica con prioridad en /run/current-system/sw porque
+        # Cinnamon enlaza /share completo y, de otro modo, reaparece su .desktop
+        # upstream con Exec=cinnamon-session-cinnamon.
+        (lib.hiPrio waylandSessions)
         (lib.hiPrio desktopVisibilityOverlay)
         (lib.hiPrio hiddenUnselectedSessions)
       ]
       ++ lib.optionals niriEnabled [
         pkgs.xwayland-satellite
+      ]
+      ++ lib.optionals noctaliaEnabled [
+        pkgs.adw-gtk3
+      ]
+      ++ lib.optionals cinnamonEnabled [
+        pkgs.alacritty
       ]
       ++ lib.optionals noctaliaEnabled noctaliaApplications
       # Si Plasma también está instalado, programs.kdeconnect aporta KDE Connect;
@@ -872,6 +1321,14 @@ in {
       (lib.mkIf hyprlandEnabled {
         HYPRLAND_CONFIG = "/etc/hypr/hyprland.lua";
       })
+
+      # El módulo de Cinnamon exporta sus esquemas para todas las sesiones.
+      # Korunix conserva los esquemas, pero elimina de este contexto global
+      # únicamente los defaults visuales aportados por mint-artwork.
+      (lib.mkIf cinnamonEnabled {
+        NIX_GSETTINGS_OVERRIDES_DIR =
+          lib.mkForce neutralGSettingsSchemaDir;
+      })
     ];
 
     environment.etc."hypr/hyprland.lua" = lib.mkIf hyprlandEnabled {
@@ -882,6 +1339,9 @@ in {
     # escribe aquí la variante que corresponde y nunca toca el tema de Cinnamon.
     programs.dconf.profiles.noctalia =
       lib.mkIf noctaliaEnabled noctaliaDconfProfile;
+
+    programs.dconf.profiles.plasma =
+      lib.mkIf plasmaEnabled plasmaDconfProfile;
 
     # Slate se fija antes de que arranquen Noctalia y los portales. Esto evita
     # reutilizar la variante de una sesión anterior mientras el IPC aún no está
@@ -999,13 +1459,35 @@ in {
 
       wants = ["korunix-noctalia-icon-theme-default.service"];
 
-      environment.DCONF_PROFILE = "noctalia";
+      environment =
+        {
+          DCONF_PROFILE = "noctalia";
+        }
+        // lib.optionalAttrs cinnamonEnabled {
+          NIX_GSETTINGS_OVERRIDES_DIR = neutralGSettingsSchemaDir;
+        };
 
       serviceConfig.ExecCondition = noctaliaSessionCheck;
     };
 
     # El TOML contiene valores comunes. El servicio korunix-user-prepare sustituye
     # únicamente datos que dependen de la persona, como avatar y ruta XDG de fotos.
+    # Noctalia conserva su plantilla GTK4 integrada. Esta plantilla adicional
+    # contiene simultáneamente las variantes clara y oscura de la misma paleta,
+    # permitiendo que GTK4 cambie en vivo mediante prefers-color-scheme.
+    environment.etc."korunix/noctalia/gtk4-live.css" = lib.mkIf noctaliaEnabled {
+      source = ../config/noctalia/gtk4-live.css;
+    };
+
+    environment.etc."korunix/noctalia/gtk4-live.toml" = lib.mkIf noctaliaEnabled {
+      source = ../config/noctalia/gtk4-live.toml;
+    };
+
+    environment.etc."korunix/noctalia/gtk4-live-apply.sh" = lib.mkIf noctaliaEnabled {
+      source = ../config/noctalia/gtk4-live-apply.sh;
+      mode = "0755";
+    };
+
     environment.etc."korunix/noctalia/config.toml" = lib.mkIf noctaliaEnabled {
       source = ../config/noctalia/config.toml;
     };
