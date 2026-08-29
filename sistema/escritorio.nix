@@ -507,6 +507,26 @@
 
   # Plasma mantiene una base dconf propia para que las preferencias GTK
   # persistidas por Cinnamon no crucen la frontera de sesión.
+  # Plasma registra los atajos globales de lanzamiento a partir de las entradas
+  # .desktop. Al eliminar Konsole, su Ctrl+Alt+T desaparece; publicamos la entrada
+  # oficial de Alacritty con el mismo atajo KDE, sin escribir estado personal.
+  plasmaAlacrittyDesktop = pkgs.runCommand "korunix-plasma-alacritty-desktop" {} ''
+    install -Dm644 \
+      ${pkgs.alacritty}/share/applications/Alacritty.desktop \
+      "$out/share/applications/Alacritty.desktop"
+
+    if ${pkgs.gnugrep}/bin/grep -q '^X-KDE-Shortcuts=' \
+      "$out/share/applications/Alacritty.desktop"; then
+      ${pkgs.gnused}/bin/sed -i \
+        's/^X-KDE-Shortcuts=.*/X-KDE-Shortcuts=Ctrl+Alt+T/' \
+        "$out/share/applications/Alacritty.desktop"
+    else
+      ${pkgs.gnused}/bin/sed -i \
+        '/^\[Desktop Entry\]$/a X-KDE-Shortcuts=Ctrl+Alt+T' \
+        "$out/share/applications/Alacritty.desktop"
+    fi
+  '';
+
   plasmaDconfProfile = pkgs.writeText "korunix-plasma-dconf-profile" ''
     user-db:plasma
   '';
@@ -1248,6 +1268,8 @@ in {
         pkgs.adw-gtk3
       ]
       ++ lib.optionals cinnamonEnabled [
+        # Prioridad sobre la entrada upstream para que Plasma registre Ctrl+Alt+T.
+        (lib.hiPrio plasmaAlacrittyDesktop)
         pkgs.alacritty
       ]
       ++ lib.optionals noctaliaEnabled noctaliaApplications
