@@ -27,7 +27,7 @@ ejecutar() {
 
 printf '%s\n' \
   '========================================' \
-  ' KORUNIX · PUERTA INTEGRAL E + F' \
+  ' KORUNIX · PUERTA AUTOMATIZABLE' \
   '========================================'
 
 printf '\n%s\n' '→ Integridad del árbol'
@@ -207,18 +207,12 @@ else
 fi
 
 
-printf '\n%s\n' '→ Producto distribuible'
+printf '\n%s\n' '→ Producto y contrato'
 
-if [[ -s README.md ]]; then
-  ok 'README'
+if [[ -s spec.md ]] && grep -q '^# Korunix' spec.md; then
+  ok 'especificación de producto'
 else
-  fallo 'falta README'
-fi
-
-if [[ -s LANZAMIENTO.md ]]; then
-  ok 'criterios de lanzamiento'
-else
-  fallo 'faltan criterios de lanzamiento'
+  fallo 'falta la especificación de producto'
 fi
 
 if [[ -s sistema/interfaz/io.github.koruninn.Korunix.metainfo.xml ]]; then
@@ -271,7 +265,7 @@ else
 fi
 
 
-printf '\n%s\n' '→ Localización de producto'
+printf '\n%s\n' '→ Estructura de localización'
 
 # Revisión fijada actualmente para Noctalia:
 # 4b8c722e0c82816ca50a28ab4695ab765f3f4ab0
@@ -320,22 +314,22 @@ ramas_localizadas="$(
 
 if [[ "$gui_variants" -eq "${#noctalia_locales[@]}" ]]; then
   if [[ "$ramas_localizadas" -eq 20 ]]; then
-    ok "GUI negocia y traduce las ${#noctalia_locales[@]} localizaciones verificadas"
+    ok "GUI declara las ${#noctalia_locales[@]} localizaciones verificadas y contiene ramas específicas"
   else
-    fallo "hay variantes declaradas sin ramas de traducción reales: $ramas_localizadas/20"
+    fallo "hay variantes declaradas sin ramas específicas: $ramas_localizadas/20"
   fi
 else
   fallo \
-    "traducciones incompletas: GUI=${gui_variants}, Noctalia verificada=${#noctalia_locales[@]}"
+    "estructura de localización incompleta: GUI=${gui_variants}, Noctalia verificada=${#noctalia_locales[@]}"
 fi
 
 
-printf '\n%s\n' '=== RESULTADO INTEGRAL ==='
+printf '\n%s\n' '=== RESULTADO AUTOMATIZABLE ==='
 
 if [[ "$fallos" -eq 0 ]]; then
   printf '%s\n' \
-    '✓ E y F superan la puerta integral automatizable'
+    '✓ las comprobaciones automatizables actuales fueron superadas'
 else
-  printf '✗ la puerta integral encontró %s bloqueo(s)\n' "$fallos"
+  printf '✗ la puerta automatizable encontró %s bloqueo(s)\n' "$fallos"
   false
 fi
