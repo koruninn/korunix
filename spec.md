@@ -984,27 +984,67 @@ Para Nemo, Dolphin u otros gestores se debe utilizar la integración adecuada de
 
 ### 22.6. Visor de imágenes
 
-Se usa el visor nativo del escritorio cuando existe una opción adecuada.
+Korunix utiliza el visor natural de cada escritorio para el rol de imágenes:
 
-Niri e Hyprland utilizan Eye of GNOME como fallback GTK.
+- Niri y Hyprland con Noctalia → Loupe;
+- Cinnamon → Xviewer;
+- Plasma → Gwenview.
+
+Los navegadores web no satisfacen el rol de visor de imágenes. En particular,
+Google Chrome nunca debe configurarse como aplicación predeterminada para abrir
+imágenes ni recibir asociaciones MIME de imágenes administradas por Korunix.
+
+Instalar o seleccionar Chrome como navegador no debe alterar esta regla. Las
+asociaciones de imágenes permanecen en el visor correspondiente al escritorio.
 
 ### 22.7. PDF
 
-Se utiliza el visor nativo del escritorio cuando corresponde.
+Korunix utiliza el visor natural de cada escritorio para el rol de documentos
+PDF:
 
-Niri e Hyprland utilizan Papers.
+- Niri y Hyprland con Noctalia → Papers;
+- Cinnamon → Xreader;
+- Plasma → Okular.
 
-### 22.8. Suite ofimática
+Mientras exista el visor correspondiente al escritorio, un navegador no debe
+convertirse en la aplicación predeterminada para PDF por el simple hecho de
+estar instalado o de ser el navegador predeterminado.
+
+La elección del navegador y el rol de visor PDF son decisiones independientes.
+
+### 22.8. Editor de texto
+
+El editor de texto también respeta la aplicación natural de cada experiencia:
+
+- Niri y Hyprland con Noctalia → GNOME Text Editor;
+- Cinnamon → Xed;
+- Plasma → KWrite o Kate.
+
+GNOME Text Editor pertenece a la experiencia Noctalia y no debe aparecer como
+editor propio de Plasma. Korunix debe aislar su visibilidad a Niri/Hyprland.
+
+En Plasma, KWrite puede satisfacer el rol como editor ligero. Si Kate está
+seleccionada por la persona, Kate también puede satisfacer ese mismo rol sin
+obligar a mantener KWrite como una segunda elección visible innecesaria.
+
+La decisión humana es el rol “editor de texto”; las aplicaciones concretas son
+implementaciones del escritorio y no deben contaminar los menús de otras
+sesiones.
+
+### 22.9. Suite ofimática
 
 Se modela el rol “suite ofimática”. La implementación preferida puede depender de arquitectura y disponibilidad.
 
 Para x86_64 la opción preferida definida es OnlyOffice. Cuando no esté disponible o no sea compatible en otra arquitectura, Korunix debe ofrecer el fallback curado definido para esa plataforma, como LibreOffice.
 
-### 22.9. Regla superior
+### 22.10. Regla superior
 
 > Usar primero la solución natural del escritorio; sustituirla únicamente cuando Korunix haya establecido explícitamente una experiencia común.
 
 Alacritty/Fish es una excepción deliberada. Nautilus en Niri/Hyprland también.
+
+Las asociaciones de navegador, imágenes, PDF y editor de texto son roles
+independientes. Elegir una aplicación para un rol no debe secuestrar otro.
 
 ## 23. Atajos: registro semántico y prevención de conflictos
 
