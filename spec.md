@@ -799,7 +799,7 @@ Niri es un gestor de ventanas desplazable. Hyprland usa un modelo de mosaico din
 
 Cada escritorio debe declarar e implementar un contrato explícito.
 
-Como mínimo:
+Como mínimo, el contrato común contiene:
 
 ```text
 session
@@ -810,7 +810,6 @@ polkit
 terminal
 fileManager
 screenCapture
-screenRecording
 nightLight
 clipboard
 cursor
@@ -826,6 +825,11 @@ shortcuts
 keyboardInput
 accessibility
 ```
+
+`screenRecording` no forma parte del contrato común de los cuatro escritorios.
+Es una capacidad propia de la experiencia Noctalia y solo es obligatoria para
+Niri y Hyprland. Plasma y Cinnamon no necesitan implementar ni exponer
+grabación de pantalla como requisito de Korunix.
 
 Una capacidad solo puede marcarse como soportada si Korunix puede garantizar un resultado real y probado.
 
@@ -848,7 +852,16 @@ La persona puede:
 - instalar ambos;
 - elegir cuál de los instalados será predeterminado.
 
-Korunix debe configurar las asociaciones y el navegador predeterminado de manera coherente. Instalar Chrome como secundario no debe hacer que secuestre asociaciones de manera inesperada.
+Korunix debe preguntar explícitamente qué navegador quiere la persona como
+predeterminado. Instalar un navegador no constituye por sí solo consentimiento
+para convertirlo en predeterminado. Si solo existe un candidato, Korunix puede
+proponerlo como opción recomendada, pero la elección debe seguir siendo visible
+y confirmable.
+
+Después de esa elección, Korunix debe configurar de manera coherente el
+navegador predeterminado y sus asociaciones. Instalar Chrome como secundario no
+debe hacer que secuestre asociaciones de manera inesperada, y lo mismo se aplica
+a cualquier otro navegador instalado como alternativa.
 
 ### 22.2. Terminal
 
@@ -1009,7 +1022,6 @@ lockScreen
 screenshotRegion
 screenshotWindow
 screenshotScreen
-screenRecording
 volumeUp
 volumeDown
 brightnessUp
@@ -1018,7 +1030,11 @@ overview
 closeWindow
 ```
 
-Cada escritorio implementa esas acciones según sus mecanismos reales.
+Cada escritorio implementa esas acciones comunes según sus mecanismos reales.
+
+`screenRecording` es una acción semántica adicional de la experiencia Noctalia.
+Korunix debe registrarla y comprobar su binding en Niri y Hyprland, pero no debe
+exigirla a Plasma ni a Cinnamon.
 
 Antes de considerar válida una configuración, Korunix debe comprobar:
 
@@ -1040,7 +1056,13 @@ Korunix debe escoger o adaptar un atajo diferente y verificar que no colisione c
 
 ### 23.2. Niri y Hyprland no se presuponen idénticos
 
-Capturas de pantalla, grabación, cambio de teclado y otras funciones pueden tener bindings o mecanismos internos diferentes. El contrato debe probar cada escritorio por separado.
+Capturas de pantalla, grabación, cambio de teclado y otras funciones pueden tener
+bindings o mecanismos internos diferentes. El contrato debe probar Niri y
+Hyprland por separado.
+
+La grabación de pantalla se valida únicamente en estos dos escritorios porque
+pertenece a la experiencia Noctalia. No forma parte de la paridad exigida a
+Plasma o Cinnamon.
 
 ## 24. Capturas de pantalla
 
@@ -1996,7 +2018,7 @@ Esta especificación fija la dirección, pero los siguientes puntos requieren un
 - ruta final que separará motor de Korunix, configuración editable y estado local sensible;
 - mecanismo exacto para almacenar hashes de contraseña fuera del repositorio y del Nix store cuando sea posible;
 - integración exacta de avatar entre Korunix, AccountsService, GDM y Noctalia;
-- contrato final de captura/grabación y sus bindings en los cuatro escritorios actuales;
+- contrato final de captura en los cuatro escritorios y de grabación de pantalla únicamente en Niri/Hyprland mediante Noctalia, con sus bindings correspondientes;
 - lista real de idiomas soportados por la versión de Noctalia utilizada;
 - aplicaciones nativas concretas de Cinnamon y Plasma para cada rol en la versión de NixOS soportada;
 - política de soporte de releases stable a medida que cambien NixOS y dependencias como AAGL;
@@ -2250,36 +2272,38 @@ un final reconocible.
 | Fase | Objetivo |
 | --- | --- |
 | **A · Estabilización** | Consolidar la base declarativa, eliminar interferencias entre escritorios, estabilizar Noctalia/Niri y cerrar regresiones heredadas. |
-| **B · Modelo funcional** | Definir las fuentes de verdad y el modelo común de canales, hardware, producto, personas, localización y primera adopción. |
-| **C · Operaciones del sistema** | ✅ Cerrada · C.1-C.7 |
-| **D · GUI completa** | ✅ Cerrada |
+| **B · Modelo funcional** | ↺ Reabierta por auditoría de especificación · los modelos ya construidos se conservan, pero la adopción limpia y otros contratos permanentes deben reconciliarse antes de volver a cerrar la fase. |
+| **C · Operaciones del sistema** | ↺ Reabierta por auditoría de especificación · C.1-C.7 siguen siendo evidencia válida, pero la auditoría encontró operaciones permanentes que no quedaron cubiertas por aquel cierre. |
+| **D · GUI completa** | ↺ Reabierta por auditoría de especificación · D.1-D.3 permanecen válidas y D.4 vuelve a estar activa hasta completar las superficies exigidas por la propia puerta constitucional de D. |
 | **E · Robustez** | ↺ Reabierta por auditoría de especificación · la puerta automatizada fue superada, pero el cierre requiere reconciliar también los requisitos permanentes que esa puerta no comprobaba. |
 | **F · Producto** | ↺ Reabierta por auditoría de especificación · la puerta automatizada fue superada, pero distribución, bootstrap, experiencia de producto y localización deben contrastarse contra el contrato completo antes del cierre definitivo. |
 
 ### Estado actual
 
 - **A · Estabilización:** cerrada.
-- **B · Modelo funcional:** cerrada.
-  - Canales, hardware, defaults, personas, localización y primera adopción
-    disponen de contratos estructurados.
-  - **B.3.5 · adopción transaccional de una instalación existente** está
-    cerrado.
-  - `bootstrap --adopt` y `bootstrap --adopt --yes` forman parte de la interfaz
-    pública.
-  - La adopción prepara configuración declarativa sin construir ni aplicar una
-    generación.
-- **C · Operaciones del sistema:** cerrada.
-  - C.1-C.7 comparten contratos estructurados comunes para CLI y GUI.
-  - C.7 completó aplicaciones, escritorio, apariencia, localización, Personas,
-    copias de seguridad e historial sin crear un backend exclusivo para GTK.
-  - D debe presentar esos contratos sin duplicar su lógica.
-- **D · GUI completa:** cerrada.
-  - D.1 está cerrada: Nix-first y estructura humana están fijados.
-  - D.2 está cerrada: Rust es el único motor operativo público.
-  - D.3 está cerrada: la interfaz GTK/libadwaita también está escrita en Rust.
-  - D.4 está cerrada: la experiencia final y las fronteras entre escritorios quedaron validadas en sesiones reales.
-  - D.4 completó la integración final de las superficies constitucionales y su
-    validación visual.
+- **B · Modelo funcional:** reabierta por auditoría de especificación.
+  - Canales, hardware, defaults, personas, localización y la adopción ya
+    implementada siguen siendo trabajo válido.
+  - **B.3.5 · adopción transaccional de una instalación existente** conserva
+    su evidencia previa, pero el cierre de B vuelve a depender de demostrar la
+    adopción completa desde una instalación gráfica limpia y de reconciliar los
+    modelos permanentes que la auditoría encuentre ausentes.
+- **C · Operaciones del sistema:** reabierta por auditoría de especificación.
+  - C.1-C.7 conservan sus contratos y pruebas anteriores.
+  - Reabrir C no invalida esas piezas: reconoce que la auditoría constitucional
+    encontró operaciones permanentes que no estaban incluidas en aquel cierre.
+  - C solo volverá a cerrarse cuando esas operaciones utilicen el mismo motor
+    público y no introduzcan una implementación paralela para la GUI.
+- **D · GUI completa:** reabierta por auditoría de especificación.
+  - D.1 permanece cerrada: Nix-first y estructura humana están fijados.
+  - D.2 permanece cerrada: Rust es el único motor operativo público.
+  - D.3 permanece cerrada: la interfaz GTK/libadwaita también está escrita en
+    Rust.
+  - D.4 vuelve a estar activa porque la propia puerta constitucional de D
+    prohíbe cerrar la fase mientras falten superficies cotidianas obligatorias,
+    contratos de escritorio o requisitos de accesibilidad y adaptación.
+  - Las validaciones de fronteras de sesión ya realizadas siguen siendo
+    evidencia válida y no necesitan repetirse salvo regresión.
 - **E · Robustez:** reabierta por auditoría de especificación.
   - La puerta integral automatizable E+F fue superada.
   - La auditoría posterior de `spec.md` encontró requisitos permanentes cuya
@@ -2557,9 +2581,11 @@ realizar una grabación temporal reproducible; e inventariar/previsualizar
 cámaras con resolución y FPS. Las pruebas de micrófono no realizan
 monitorización directa y las grabaciones se eliminan salvo petición explícita.
 
-**Fase C cerrada.** C.1-C.7 comparten contratos operativos públicos y las
-decisiones puramente declarativas se obtienen de Nix. D debe presentar estos
-mismos motores y no crear implementaciones paralelas para el panel cotidiano.
+**Cierre histórico de C.1-C.7.** Estos siete frentes comparten contratos
+operativos públicos y las decisiones puramente declarativas se obtienen de Nix.
+La auditoría posterior reabrió la macrofase C al descubrir operaciones
+permanentes no cubiertas por aquel corte. Los contratos C.1-C.7 se conservan y
+no deben duplicarse mientras se completa lo que falta.
 <!-- KORUNIX-ROADMAP-C:END -->
 
 <!-- KORUNIX-ROADMAP-D:BEGIN -->
@@ -2614,7 +2640,7 @@ final sin volver a introducir un backend paralelo.
 
 **Estado: cerrado.**
 
-#### D.4 · Cierre de experiencia — cerrada
+#### D.4 · Cierre de experiencia — reabierta por auditoría
 
 Completar navegación adaptable, progreso, confirmaciones, errores humanos,
 detalles técnicos opcionales, internacionalización y validación visual.
@@ -2756,11 +2782,12 @@ permanente.
 runtime interactivo pasa por un único motor; la GUI no ejecuta como root ni
 duplica operaciones; y las rutas transitorias retiradas durante D ya no forman
 parte de la arquitectura final.
-**Estado: cerrado.** Las fronteras de sesión de Niri/Hyprland, Cinnamon y
-Plasma se validaron sin contaminación visual entre escritorios; Noctalia
-conserva su integración propia, Plasma y Cinnamon mantienen sus preferencias
-nativas o neutrales, y las decisiones declarativas sobreviven al cambio real de
-sesión.
+**Estado: reabierto por auditoría.** Las fronteras de sesión de
+Niri/Hyprland, Cinnamon y Plasma ya validadas siguen siendo evidencia válida:
+Noctalia conserva su integración propia, Plasma y Cinnamon mantienen sus
+preferencias nativas o neutrales y las decisiones declarativas sobreviven al
+cambio real de sesión. D.4 permanece abierto únicamente por los requisitos
+constitucionales que todavía falten o no estén demostrados.
 
 <!-- KORUNIX-ROADMAP-D:END -->
 
