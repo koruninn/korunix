@@ -1121,7 +1121,7 @@ La regla general es:
 
 > Si una capacidad tiene un coste técnico bajo, un riesgo bajo y elimina una fricción frecuente, Korunix debe preferir habilitarla como parte de la experiencia recomendada.
 
-Los servicios que exponen el equipo a la red se evalúan aparte. SSH no cumple automáticamente la regla de “bajo riesgo” y no debe habilitarse silenciosamente solo por conveniencia. Korunix preserva un SSH existente y puede activarlo cuando la persona elija una función que realmente lo necesite.
+Los servicios que exponen el equipo a la red se evalúan aparte. En Korunix, SSH es una decisión deliberada de producto y está habilitado por defecto. Debe funcionar acompañado del firewall y de una configuración segura, ser visible como capacidad activa y poder desactivarse desde Korunix. Este valor predeterminado de SSH no implica que otros servicios que expongan el equipo a la red deban habilitarse automáticamente.
 
 Cuando una capacidad como KDE Connect, Sunshine u otro servicio local necesite reglas de firewall, la persona no administra puertos manualmente:
 
@@ -1701,7 +1701,7 @@ Korunix debe preferir defaults útiles, pero “oculto” no significa “sin co
 Reglas mínimas:
 
 - firewall activado por defecto;
-- SSH no se activa silenciosamente hasta definir una política segura;
+- SSH está activado por defecto como decisión explícita de producto; el firewall permanece activo y la persona puede desactivarlo;
 - la GUI no corre completa como root;
 - Polkit/helper privilegiado para operaciones de sistema;
 - credenciales fuera de Git y fuera de perfiles exportables;
@@ -2253,8 +2253,8 @@ un final reconocible.
 | **B · Modelo funcional** | Definir las fuentes de verdad y el modelo común de canales, hardware, producto, personas, localización y primera adopción. |
 | **C · Operaciones del sistema** | ✅ Cerrada · C.1-C.7 |
 | **D · GUI completa** | ✅ Cerrada |
-| **E · Robustez** | ▶ Cierre integral · interrupciones, rollback, idempotencia, instalación limpia, hardware/arquitecturas, offline, degradación y finalización segura se validan como una sola puerta. |
-| **F · Producto** | ▶ Cierre integral · distribución, bootstrap remoto/local, empaquetado, onboarding, documentación, traducciones y lanzamiento se validan en la misma campaña. |
+| **E · Robustez** | ↺ Reabierta por auditoría de especificación · la puerta automatizada fue superada, pero el cierre requiere reconciliar también los requisitos permanentes que esa puerta no comprobaba. |
+| **F · Producto** | ↺ Reabierta por auditoría de especificación · la puerta automatizada fue superada, pero distribución, bootstrap, experiencia de producto y localización deben contrastarse contra el contrato completo antes del cierre definitivo. |
 
 ### Estado actual
 
@@ -2280,10 +2280,18 @@ un final reconocible.
   - D.4 está cerrada: la experiencia final y las fronteras entre escritorios quedaron validadas en sesiones reales.
   - D.4 completó la integración final de las superficies constitucionales y su
     validación visual.
-- **E · Robustez:** activa.
-  - Corresponde probar interrupciones, rollback, idempotencia, instalación limpia,
-    hardware diverso, arquitecturas soportadas, trabajo offline y degradación segura.
-- **F · Producto:** pendiente.
+- **E · Robustez:** reabierta por auditoría de especificación.
+  - La puerta integral automatizable E+F fue superada.
+  - La auditoría posterior de `spec.md` encontró requisitos permanentes cuya
+    implementación o validación no queda demostrada por esa puerta.
+  - E solo volverá a considerarse cerrada cuando esos requisitos hayan sido
+    reconciliados mediante implementación, validación o una precisión explícita
+    de la especificación.
+- **F · Producto:** reabierta por auditoría de especificación.
+  - La puerta integral automatizable E+F fue superada.
+  - El cierre definitivo exige además contrastar distribución, bootstrap,
+    onboarding, localización y demás contratos de producto contra la
+    especificación completa, sin interpretar ausencia de prueba como éxito.
 
 <!-- KORUNIX-ROADMAP-C:BEGIN -->
 ### Desglose de la fase C
