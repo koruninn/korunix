@@ -28,6 +28,7 @@ Uso:
   korunix bootstrap --plan [--json]
   korunix bootstrap --adopt [--yes]
   korunix product [--json]
+  korunix host [--json | rename <nombre> [--plan] [--yes] [--json]]
   korunix users [operación]
   korunix applications [operación]
   korunix desktop [operación]
@@ -238,6 +239,40 @@ fn equipos_disponibles(raiz: &Path) -> Result<Vec<String>, String> {
     Ok(ids)
 }
 
+fn host_id_marker_value(texto: &str) -> Result<String, String> {
+    let valor = texto.trim();
+
+    if !id_valido(valor) {
+        return Err(
+            "El identificador estructural persistido por Korunix no es válido.".to_string(),
+        );
+    }
+
+    Ok(valor.to_string())
+}
+
+fn host_id_persistido() -> Result<Option<String>, String> {
+    let ruta = env::var_os("KORUNIX_HOST_ID_FILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/etc/korunix/host-id"));
+
+    if !ruta.exists() {
+        return Ok(None);
+    }
+
+    if !ruta.is_file() {
+        return Err(format!(
+            "El marcador de identidad {} no es un archivo.",
+            ruta.display()
+        ));
+    }
+
+    let texto = fs::read_to_string(&ruta)
+        .map_err(|error| format!("No pude leer {}: {error}", ruta.display()))?;
+
+    Ok(Some(host_id_marker_value(&texto)?))
+}
+
 fn resolver_equipo(raiz: &Path) -> Result<String, String> {
     if let Ok(valor) = env::var("KORUNIX_HOST") {
         if !id_valido(&valor) {
@@ -256,6 +291,21 @@ fn resolver_equipo(raiz: &Path) -> Result<String, String> {
         return Err(format!("No existe configuracion/equipos/{valor}.nix."));
     }
 
+    if let Some(valor) = host_id_persistido()? {
+        if raiz
+            .join("configuracion")
+            .join("equipos")
+            .join(format!("{valor}.nix"))
+            .is_file()
+        {
+            return Ok(valor);
+        }
+
+        return Err(format!(
+            "Este sistema se identifica como {valor}, pero falta configuracion/equipos/{valor}.nix."
+        ));
+    }
+
     let nombre = ejecutar_capturando("hostname", &[], raiz).unwrap_or_default();
     if id_valido(&nombre)
         && raiz
@@ -272,7 +322,7 @@ fn resolver_equipo(raiz: &Path) -> Result<String, String> {
         [unico] => Ok(unico.clone()),
         [] => Err("Korunix no encontró ninguna computadora configurada.".to_string()),
         _ => Err(
-            "Hay varias computadoras configuradas. Define KORUNIX_HOST para elegir una."
+            "Hay varias computadoras configuradas y este sistema todavía no tiene un hostId persistido. Define KORUNIX_HOST para elegir una."
                 .to_string(),
         ),
     }
@@ -2660,7 +2710,7 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod pruebas {
-    use super::{id_valido, json_texto, texto_con_canal};
+    use super::{host_id_marker_value, id_valido, json_texto, texto_con_canal};
 
     #[test]
     fn acepta_identificadores_humanos_simples() {
@@ -2674,6 +2724,15 @@ mod pruebas {
         assert!(!id_valido("../otro"));
         assert!(!id_valido("equipo.casa"));
         assert!(!id_valido(""));
+    }
+
+    #[test]
+    fn acepta_host_id_persistido_con_salto_final() {
+        assert_eq!(
+            host_id_marker_value("portatil-1\n").expect("hostId válido"),
+            "portatil-1"
+        );
+        assert!(host_id_marker_value("../otro").is_err());
     }
 
     #[test]

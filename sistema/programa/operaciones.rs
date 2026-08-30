@@ -4308,6 +4308,284 @@ fn avatar_source(path: &str) -> Result<(PathBuf, String), String> {
     Ok((origen, extension))
 }
 
+fn host_name_normalized(requested: &str) -> Result<String, String> {
+    let mut output = String::new();
+    let mut separator_pending = false;
+
+    for character in requested.trim().chars() {
+        if character.is_ascii_alphanumeric() {
+            if separator_pending && !output.is_empty() {
+                output.push('-');
+            }
+
+            output.push(character.to_ascii_lowercase());
+            separator_pending = false;
+        } else if character == '-' || character == '_' || character.is_ascii_whitespace() {
+            if !output.is_empty() {
+                separator_pending = true;
+            }
+        } else {
+            return Err(
+                "El nombre del equipo solo puede usar letras sin tildes, números, espacios, guion o guion bajo."
+                    .to_string(),
+            );
+        }
+    }
+
+    if output.is_empty() {
+        return Err("El nombre del equipo no puede quedar vacío.".to_string());
+    }
+
+    if output.len() > 63 {
+        return Err("El nombre del equipo no puede superar 63 caracteres.".to_string());
+    }
+
+    Ok(output)
+}
+
+fn host_name_assignment(text: &str) -> Result<(usize, usize, String), String> {
+    const TOKEN: &str = "hostName";
+    let bytes = text.as_bytes();
+    let mut found = Vec::<(usize, usize, String)>::new();
+
+    for (position, _) in text.match_indices(TOKEN) {
+        if position > 0 {
+            let previous = bytes[position - 1];
+            if previous.is_ascii_alphanumeric() || previous == b'_' {
+                continue;
+            }
+        }
+
+        let after_token = position + TOKEN.len();
+        if after_token < bytes.len() {
+            let next = bytes[after_token];
+            if next.is_ascii_alphanumeric() || next == b'_' {
+                continue;
+            }
+        }
+
+        let line_start = text[..position]
+            .rfind('\n')
+            .map(|index| index + 1)
+            .unwrap_or(0);
+
+        if text[line_start..position].contains('#') {
+            continue;
+        }
+
+        let mut cursor = after_token;
+
+        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+
+        if cursor >= bytes.len() || bytes[cursor] != b'=' {
+            continue;
+        }
+
+        cursor += 1;
+
+        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+
+        if cursor >= bytes.len() || bytes[cursor] != b'"' {
+            return Err(
+                "hostName debe ser una cadena literal para que Korunix pueda cambiarlo de forma segura."
+                    .to_string(),
+            );
+        }
+
+        let value_start = cursor + 1;
+        cursor = value_start;
+        let mut escaped = false;
+        let mut closing = None;
+
+        while cursor < bytes.len() {
+            match bytes[cursor] {
+                b'\\' if !escaped => escaped = true,
+                b'"' if !escaped => {
+                    closing = Some(cursor);
+                    break;
+                }
+                _ => escaped = false,
+            }
+
+            cursor += 1;
+        }
+
+        let value_end = closing
+            .ok_or_else(|| "La declaración hostName no tiene comillas de cierre.".to_string())?;
+
+        let raw = &text[value_start..value_end];
+
+        if raw.contains('\\') {
+            return Err(
+                "hostName contiene escapes que Korunix no modificará automáticamente.".to_string(),
+            );
+        }
+
+        found.push((value_start, value_end, raw.to_string()));
+    }
+
+    match found.as_slice() {
+        [entry] => Ok(entry.clone()),
+        [] => {
+            Err("El archivo del equipo debe declarar hostName como una cadena literal.".to_string())
+        }
+        _ => Err("El archivo del equipo contiene más de una declaración hostName.".to_string()),
+    }
+}
+
+fn host_name_text(text: &str, target: &str) -> Result<(String, String), String> {
+    let (start, end, before) = host_name_assignment(text)?;
+
+    let mut output = String::with_capacity(text.len() + target.len());
+    output.push_str(&text[..start]);
+    output.push_str(target);
+    output.push_str(&text[end..]);
+
+    Ok((output, before))
+}
+
+fn host_state_json(raiz: &Path) -> Result<String, String> {
+    let host_id = resolver_equipo(raiz)?;
+    let path = host_config_path(raiz)?;
+    let text = fs::read_to_string(&path)
+        .map_err(|error| format!("No pude leer {}: {error}", path.display()))?;
+    let (_, _, host_name) = host_name_assignment(&text)?;
+
+    Ok(format!(
+        "{{\"schemaVersion\":1,\"kind\":\"korunix-host-state\",\"hostId\":{},\"hostName\":{},\"structuralIdStable\":true,\"profilePath\":{},\"hardwarePath\":{}}}",
+        json_texto(&host_id),
+        json_texto(&host_name),
+        json_texto(&format!("configuracion/equipos/{host_id}.nix")),
+        json_texto(&format!("generado/equipos/{host_id}-detectado.nix"))
+    ))
+}
+
+fn host_rename_plan_json(host_id: &str, requested: &str, before: &str, after: &str) -> String {
+    let changed = before != after;
+
+    format!(
+        "{{\"schemaVersion\":1,\"kind\":\"korunix-host-rename-plan\",\"hostId\":{},\"requested\":{},\"before\":{},\"after\":{},\"changed\":{},\"identity\":{{\"structuralIdStable\":true,\"profileFileRenamed\":false,\"hardwareFileRenamed\":false}},\"effects\":{{\"writesConfiguration\":{},\"runningHostnameChanged\":false,\"requiresSystemApply\":{},\"buildsGeneration\":false,\"appliesGeneration\":false}}}}",
+        json_texto(host_id),
+        json_texto(requested),
+        json_texto(before),
+        json_texto(after),
+        changed,
+        changed,
+        changed
+    )
+}
+
+fn host_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
+    if args.is_empty() {
+        pretty(raiz, &host_state_json(raiz)?)?;
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    if args == ["--json"] {
+        println!("{}", host_state_json(raiz)?);
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    if args.first().map(String::as_str) != Some("rename") {
+        return Err(
+            "Uso: korunix host [--json] | rename <nombre> [--plan] [--yes] [--json].".to_string(),
+        );
+    }
+
+    let requested = args
+        .get(1)
+        .ok_or_else(|| "Indica el nuevo nombre del equipo.".to_string())?
+        .to_string();
+
+    let mut plan_only = false;
+    let mut yes = false;
+    let mut json = false;
+
+    for arg in &args[2..] {
+        match arg.as_str() {
+            "--plan" => plan_only = true,
+            "--yes" => yes = true,
+            "--json" => json = true,
+            other => return Err(format!("Opción de nombre de equipo desconocida: {other}")),
+        }
+    }
+
+    if plan_only && yes {
+        return Err("--yes no se utiliza junto con --plan.".to_string());
+    }
+
+    let target = host_name_normalized(&requested)?;
+    let host_id = resolver_equipo(raiz)?;
+    let path = host_config_path(raiz)?;
+    let text = fs::read_to_string(&path)
+        .map_err(|error| format!("No pude leer {}: {error}", path.display()))?;
+    let (new_text, before) = host_name_text(&text, &target)?;
+    let plan = host_rename_plan_json(&host_id, &requested, &before, &target);
+
+    if plan_only {
+        if json {
+            println!("{plan}");
+        } else {
+            pretty(raiz, &plan)?;
+        }
+
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    if before == target {
+        if json {
+            println!(
+                "{{\"schemaVersion\":1,\"kind\":\"korunix-host-rename-result\",\"changed\":false,\"hostId\":{},\"hostName\":{},\"requiresSystemApply\":false}}",
+                json_texto(&host_id),
+                json_texto(&target)
+            );
+        } else {
+            println!("✓ el equipo ya usa ese nombre");
+        }
+
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    if let Some(code) = salida_plan_o_confirmacion(
+        raiz,
+        &plan,
+        false,
+        yes,
+        json,
+        &format!(
+            "¿Preparar el nombre {target}? El identificador estructural {host_id} no cambiará."
+        ),
+    )? {
+        return Ok(code);
+    }
+
+    let backup = aplicar_configuracion_host(raiz, "host-name", &new_text)?;
+
+    history_record(
+        "host-name-prepared",
+        &format!("Preparaste el nombre visible {target} para el equipo {host_id}"),
+    )?;
+
+    if json {
+        println!(
+            "{{\"schemaVersion\":1,\"kind\":\"korunix-host-rename-result\",\"changed\":true,\"hostId\":{},\"before\":{},\"hostName\":{},\"structuralIdChanged\":false,\"profileFileRenamed\":false,\"hardwareFileRenamed\":false,\"requiresSystemApply\":true,\"backup\":{}}}",
+            json_texto(&host_id),
+            json_texto(&before),
+            json_texto(&target),
+            json_texto(&backup.display().to_string())
+        );
+    } else {
+        println!("✓ nombre preparado: {target}; el identificador {host_id} no cambió");
+        println!("Falta aplicar la configuración para cambiar el hostname del sistema.");
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
 fn applications_state_json(raiz: &Path) -> Result<String, String> {
     let seleccion = nix_config_json(raiz, "applications")?;
     let catalogo = nix_config_json(raiz, "internal.applicationCatalog")?;
@@ -7567,6 +7845,7 @@ pub(super) fn ejecutar_operacion(
         "bootstrap" => bootstrap(raiz, &args),
         "product" if args.is_empty() => product_status(raiz, false),
         "product" if args == ["--json"] => product_status(raiz, true),
+        "host" => host_operation(raiz, &args),
         "hardware" if args.is_empty() => {
             hardware_human(raiz)?;
             Ok(ExitCode::SUCCESS)
@@ -7628,6 +7907,40 @@ mod tests {
         assert!(account_valid("persona_2"));
         assert!(!account_valid("../root"));
         assert!(!account_valid("Mayuscula"));
+    }
+
+    #[test]
+    fn nombre_visible_del_equipo_se_normaliza() {
+        assert_eq!(
+            host_name_normalized("  Mi_Equipo Casa  ").expect("nombre válido"),
+            "mi-equipo-casa"
+        );
+
+        assert!(host_name_normalized("portátil").is_err());
+        assert!(host_name_normalized("").is_err());
+    }
+
+    #[test]
+    fn renombrar_equipo_preserva_el_resto_del_host() {
+        let original = r#"{
+  system = "x86_64-linux";
+  korunix = {
+    enable = true;
+    channel = "stable";
+    hostName = "equipo-viejo";
+    stateVersion = "26.05";
+  };
+}
+"#;
+
+        let (nuevo, anterior) =
+            host_name_text(original, "equipo-nuevo").expect("hostName editable");
+
+        assert_eq!(anterior, "equipo-viejo");
+        assert!(nuevo.contains(r#"hostName = "equipo-nuevo";"#));
+        assert!(nuevo.contains(r#"channel = "stable";"#));
+        assert!(nuevo.contains(r#"stateVersion = "26.05";"#));
+        assert!(!nuevo.contains("equipo-viejo"));
     }
 
     #[test]

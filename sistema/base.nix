@@ -121,6 +121,12 @@ in {
   config = lib.mkIf cfg.enable {
     networking.hostName = cfg.hostName;
 
+    # El nombre visible puede cambiar sin mover el perfil estructural. Este
+    # marcador permite que el motor reconozca el host correcto incluso cuando
+    # un mismo árbol de Korunix contiene varios equipos y el hostname ya no
+    # coincide con configuracion/equipos/<hostId>.nix.
+    environment.etc."korunix/host-id".text = "${cfg.hostId}\n";
+
     # stateVersion protege decisiones de compatibilidad histórica. Cambiar de
     # canal o actualizar paquetes no modifica este valor automáticamente.
     system.stateVersion = cfg.stateVersion;
