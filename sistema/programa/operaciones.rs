@@ -260,13 +260,16 @@ fn transaction_relative_path(raiz: &Path, path: &Path) -> Result<String, String>
         .strip_prefix(raiz)
         .map_err(|_| format!("{} queda fuera del repositorio de Korunix.", path.display()))?;
 
+    let configuracion = relative.starts_with(Path::new("configuracion"));
+    let hardware_generado = relative.starts_with(Path::new("generado/equipos"));
+
     if relative
         .components()
         .any(|component| matches!(component, std::path::Component::ParentDir))
-        || !relative.starts_with("configuracion")
+        || !(configuracion || hardware_generado)
     {
         return Err(format!(
-            "Korunix rechazó una ruta fuera de configuracion/: {}",
+            "Korunix rechazó una ruta fuera de configuracion/ y generado/equipos/: {}",
             path.display()
         ));
     }
@@ -6021,6 +6024,75 @@ fn simple_quoted_value(path: &Path, key: &str) -> String {
     String::new()
 }
 
+fn bootstrap_hardware_target(raiz: &Path, host: &str) -> PathBuf {
+    raiz.join("generado/equipos")
+        .join(format!("{host}-detectado.nix"))
+}
+
+fn bootstrap_hardware_text_from(
+    source_text: &str,
+    firmware: &str,
+    graphics_json: &str,
+) -> Result<String, String> {
+    if !matches!(firmware, "uefi" | "bios") {
+        return Err("Tipo de firmware inválido durante la adopción.".into());
+    }
+
+    let graphics: serde_json::Value = serde_json::from_str(graphics_json).map_err(|error| {
+        format!("No pude interpretar las GPU detectadas durante la adopción: {error}")
+    })?;
+
+    if !graphics.is_array() {
+        return Err("La detección gráfica no produjo una lista válida.".into());
+    }
+
+    let trimmed = source_text.trim_end();
+    if !trimmed.ends_with('}') {
+        return Err(
+            "hardware-configuration.nix no tiene la forma esperada de un módulo NixOS.".into(),
+        );
+    }
+
+    let final_brace = trimmed.len() - 1;
+    let mut output = String::new();
+
+    output.push_str(
+        "# NO CAMBIES ESTE ARCHIVO A MANO.\n\
+#\n\
+# Korunix incorporó aquí el hardware generado por NixOS durante la adopción.\n\
+# Conserva los dispositivos, sistemas de archivos y módulos de la instalación\n\
+# existente, y añade únicamente los hechos que Korunix necesita para decidir\n\
+# firmware y gráficos. Para corregirlo se debe volver a detectar/adoptar el\n\
+# hardware; una edición manual puede perderse.\n#\n",
+    );
+
+    output.push_str(&source_text[..final_brace]);
+    if !output.ends_with('\n') {
+        output.push('\n');
+    }
+
+    output.push_str("\n  # Hechos detectados por Korunix durante la adopción.\n");
+    output.push_str(&format!(
+        "  korunix.hardware.firmware = {};\n",
+        json_texto(firmware)
+    ));
+    output.push_str(&format!(
+        "  korunix.hardware.graphics = builtins.fromJSON {};\n",
+        json_texto(graphics_json)
+    ));
+    output.push_str(&source_text[final_brace..]);
+
+    Ok(output)
+}
+
+fn bootstrap_hardware_text(raiz: &Path, source: &Path, firmware: &str) -> Result<String, String> {
+    let source_text = fs::read_to_string(source)
+        .map_err(|error| format!("No pude leer {}: {error}", source.display()))?;
+    let graphics_json = dispositivos_graficos_json(raiz);
+
+    bootstrap_hardware_text_from(&source_text, firmware, &graphics_json)
+}
+
 fn bootstrap_plan_json(raiz: &Path) -> Result<String, String> {
     let config = env::var_os("KORUNIX_CONFIG_SOURCE")
         .map(PathBuf::from)
@@ -6050,6 +6122,7 @@ fn bootstrap_plan_json(raiz: &Path) -> Result<String, String> {
     } else {
         "bios"
     };
+    let hardware_target = format!("generado/equipos/{host_id}-detectado.nix");
 
     let channel = capture(
         raiz,
@@ -6188,6 +6261,9 @@ fn bootstrap_plan_json(raiz: &Path) -> Result<String, String> {
             "--arg".into(),
             "hardwareSha".into(),
             sha256(raiz, &hardware)?,
+            "--arg".into(),
+            "hardwareTarget".into(),
+            hardware_target,
             "--argjson".into(),
             "localization".into(),
             localization,
@@ -6210,9 +6286,11 @@ fn bootstrap_plan_json(raiz: &Path) -> Result<String, String> {
                 configurationSha256:$configSha,
                 hardware:$hardware,
                 hardwareSha256:$hardwareSha,
+                hardwareTarget:$hardwareTarget,
                 productDefaults:"sistema/predeterminados.nix",
                 channels:"sistema/canales.nix",
                 reusesInstalledHardware:true,
+                copiesInstalledHardware:true,
                 generatesHardware:false
               },
               host:{
@@ -6275,18 +6353,67 @@ fn bootstrap(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
             );
         }
         [mode, yes] if mode == "--adopt" && yes == "--yes" => {
-            // La primera adopción real ya fue cerrada en B y C. Aquí usamos el
-            // mismo mecanismo de personas/equipo; no tocamos /etc/nixos.
             let plan = bootstrap_plan_json(raiz)?;
             let host = jq_texto(raiz, &plan, ".host.id")?;
+            let firmware = jq_texto(raiz, &plan, ".hardware.firmware.detected")?;
+            let hardware_source = PathBuf::from(jq_texto(raiz, &plan, ".source.hardware")?);
+            let expected_hardware_sha = jq_texto(raiz, &plan, ".source.hardwareSha256")?;
+            let actual_hardware_sha = sha256(raiz, &hardware_source)?;
+
+            if actual_hardware_sha != expected_hardware_sha {
+                return Err(
+                    "El hardware de origen cambió después de preparar el plan. Vuelve a revisar la adopción."
+                        .into(),
+                );
+            }
+
+            let hardware_text = bootstrap_hardware_text(raiz, &hardware_source, &firmware)?;
+            let hardware_target = bootstrap_hardware_target(raiz, &host);
             let existing_host = raiz
                 .join("configuracion/equipos")
                 .join(format!("{host}.nix"));
+
             if existing_host.exists() {
-                validate(raiz)?;
-                println!("✓ esta instalación ya estaba adoptada; no se modificó nada");
+                if hardware_target.exists() {
+                    validate(raiz)?;
+                    println!("✓ esta instalación ya estaba adoptada; no se modificó nada");
+                    return Ok(ExitCode::SUCCESS);
+                }
+
+                let transaction =
+                    files_transaction_begin(raiz, std::slice::from_ref(&hardware_target))?;
+
+                let result = (|| -> Result<(), String> {
+                    atomic_write(&hardware_target, hardware_text.as_bytes())?;
+                    validate(raiz)
+                })();
+
+                if let Err(error) = result {
+                    let recovery = rollback_pending_transaction(raiz);
+                    return match recovery {
+                        Ok(_) => Err(format!(
+                            "La reparación del hardware adoptado fue revertida: {error}"
+                        )),
+                        Err(recovery_error) => Err(format!(
+                            "La reparación del hardware falló ({error}) y la recuperación automática también falló: {recovery_error}"
+                        )),
+                    };
+                }
+
+                transaction_commit(Some(&transaction))?;
+                println!(
+                    "✓ hardware adoptado reparado sin modificar /etc/nixos ni aplicar una generación"
+                );
                 return Ok(ExitCode::SUCCESS);
             }
+
+            if hardware_target.exists() {
+                return Err(format!(
+                    "Korunix encontró {} sin su archivo de host y no lo sobrescribirá.",
+                    hardware_target.display()
+                ));
+            }
+
             let backup = backup_dir(&format!("bootstrap-{host}"))?;
             fs::write(backup.join("plan.json"), &plan).map_err(|e| e.to_string())?;
 
@@ -6344,6 +6471,7 @@ fn bootstrap(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
                 .iter()
                 .map(|(path, _)| path.clone())
                 .collect::<Vec<_>>();
+            transaction_paths.push(hardware_target.clone());
             transaction_paths.push(host_path.clone());
             let transaction = files_transaction_begin(raiz, &transaction_paths)?;
 
@@ -6351,6 +6479,7 @@ fn bootstrap(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
                 for (path, profile) in &prepared_profiles {
                     atomic_write(path, profile.as_bytes())?;
                 }
+                atomic_write(&hardware_target, hardware_text.as_bytes())?;
                 atomic_write(&host_path, host_text.as_bytes())?;
                 validate(raiz)
             })();
@@ -6366,7 +6495,9 @@ fn bootstrap(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
             }
 
             transaction_commit(Some(&transaction))?;
-            println!("✓ instalación adoptada sin modificar /etc/nixos");
+            println!(
+                "✓ instalación adoptada con su hardware, sin modificar /etc/nixos ni aplicar una generación"
+            );
         }
         _ => return Err("Uso: korunix bootstrap --plan [--json] | --adopt [--yes].".into()),
     }
@@ -6408,8 +6539,8 @@ fn product_status(raiz: &Path, json: bool) -> Result<ExitCode, String> {
                 "storage", "media", "validate"
             ],
             "networkWhenRefreshing": ["update", "firmware refresh"],
-            "localDistribution": "nix run path:/ruta/a/korunix#bootstrap",
-            "remoteDistribution": "nix run github:koruninn/korunix#bootstrap"
+            "localDistribution": "nix --extra-experimental-features 'nix-command flakes' run path:/ruta/a/korunix#bootstrap",
+            "remoteDistribution": "nix --extra-experimental-features 'nix-command flakes' run github:koruninn/korunix#bootstrap"
         }
     });
 
@@ -7420,6 +7551,46 @@ mod tests {
     #[test]
     fn bootstrap_id_humano() {
         assert_eq!(bootstrap_host_id("Mi Equipo!!!"), "mi-equipo");
+    }
+
+    #[test]
+    fn bootstrap_incorpora_hardware_sin_regenerarlo() {
+        let original = r#"{ config, lib, modulesPath, ... }:
+{
+  imports = [ (modulesPath + "/installer/scan/not-detected.nix") ];
+  fileSystems."/" = { device = "/dev/disk/by-uuid/PRUEBA"; fsType = "btrfs"; };
+  nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
+}
+"#;
+        let graphics = r#"[{"pciAddress":"0000:01:00.0","name":"GPU de prueba","vendor":"amd","vendorId":"1002","deviceId":"0001","subsystemVendorId":"0000","subsystemDeviceId":"0000","driver":"amdgpu","primary":true,"kind":"unknown","nvidiaOpen":false}]"#;
+
+        let adopted =
+            bootstrap_hardware_text_from(original, "uefi", graphics).expect("hardware válido");
+
+        assert!(adopted.contains(r#"device = "/dev/disk/by-uuid/PRUEBA""#));
+        assert!(adopted.contains(r#"korunix.hardware.firmware = "uefi";"#));
+        assert!(adopted.contains("korunix.hardware.graphics = builtins.fromJSON"));
+        assert!(adopted.contains("GPU de prueba"));
+        assert!(adopted.starts_with("# NO CAMBIES ESTE ARCHIVO A MANO."));
+    }
+
+    #[test]
+    fn transaccion_solo_admite_configuracion_y_hardware_generado() {
+        let raiz = Path::new("/tmp/korunix-prueba");
+
+        assert!(
+            transaction_relative_path(raiz, &raiz.join("configuracion/equipos/prueba.nix")).is_ok()
+        );
+
+        assert!(transaction_relative_path(
+            raiz,
+            &raiz.join("generado/equipos/prueba-detectado.nix")
+        )
+        .is_ok());
+
+        assert!(transaction_relative_path(raiz, &raiz.join("sistema/base.nix")).is_err());
+
+        assert!(transaction_relative_path(raiz, &raiz.join("generado/otro/archivo.nix")).is_err());
     }
 
     #[test]

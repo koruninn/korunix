@@ -243,10 +243,18 @@
         name = "korunix-bootstrap";
 
         runtimeInputs = [
+          pkgs.coreutils
           pkgs.nix
         ];
 
-        text = builtins.readFile ./scripts/korunix-bootstrap;
+        # Cuando el bootstrap se ejecuta directamente como aplicación Nix, el
+        # código está en el store y no es editable. Entregamos al puente Bash la
+        # fuente exacta del producto para que pueda crear ~/.korunix antes de
+        # arrancar el motor. La lógica de adopción continúa íntegramente en Rust.
+        text = ''
+          export KORUNIX_BOOTSTRAP_SOURCE=${lib.escapeShellArg (toString productSource)}
+          ${builtins.readFile ./scripts/korunix-bootstrap}
+        '';
       };
 
     makeHost = hostId: let

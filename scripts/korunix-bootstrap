@@ -1,11 +1,93 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source_ref="${KORUNIX_SOURCE:-github:koruninn/korunix}"
+# Este archivo es el puente mínimo hacia el motor Rust de Korunix.
+# Su única responsabilidad es garantizar que exista una copia editable del
+# producto y arrancar el motor desde esa misma raíz. No contiene decisiones
+# sobre NixOS ni duplica la lógica de adopción.
 
-if [[ -d "$source_ref" ]]; then
-  source_ref="path:$(cd "$source_ref" && pwd -P)"
+home="${HOME:?HOME no está disponible}"
+target="${KORUNIX_ROOT:-$home/.korunix}"
+packaged_source="${KORUNIX_BOOTSTRAP_SOURCE:-}"
+
+is_korunix_root() {
+  local root="$1"
+
+  [[ -f "$root/flake.nix" ]] &&
+    [[ -f "$root/sistema/canales.nix" ]] &&
+    [[ -f "$root/sistema/predeterminados.nix" ]] &&
+    [[ -f "$root/sistema/programa/principal.rs" ]]
+}
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+checkout_root="$(cd -- "$script_dir/.." && pwd -P)"
+
+local_source=""
+
+if is_korunix_root "$checkout_root"; then
+  local_source="$checkout_root"
+elif [[ -n "${KORUNIX_SOURCE:-}" ]]; then
+  case "$KORUNIX_SOURCE" in
+    path:*)
+      candidate="${KORUNIX_SOURCE#path:}"
+      if is_korunix_root "$candidate"; then
+        local_source="$(cd -- "$candidate" && pwd -P)"
+      fi
+      ;;
+    *)
+      if [[ -d "$KORUNIX_SOURCE" ]] && is_korunix_root "$KORUNIX_SOURCE"; then
+        local_source="$(cd -- "$KORUNIX_SOURCE" && pwd -P)"
+      fi
+      ;;
+  esac
 fi
+
+if ! is_korunix_root "$target"; then
+  source_root=""
+
+  if [[ -n "$local_source" ]]; then
+    source_root="$local_source"
+  elif [[ -n "$packaged_source" ]] && is_korunix_root "$packaged_source"; then
+    source_root="$packaged_source"
+  fi
+
+  if [[ -z "$source_root" ]]; then
+    printf "%s\n" \
+      "ERROR: Korunix todavía no tiene una copia editable en $target." \
+      "Ejecuta el bootstrap desde una copia local de Korunix o mediante la aplicación bootstrap publicada."
+    exit 1
+  fi
+
+  if [[ -e "$target" ]] && [[ -n "$(ls -A -- "$target" 2>/dev/null)" ]]; then
+    printf "ERROR: %s existe, pero no es una copia válida de Korunix.\n" "$target"
+    printf "%s\n" "Korunix no sobrescribirá esa carpeta."
+    exit 1
+  fi
+
+  mkdir -p -- "$target"
+
+  # El source de una aplicación Nix vive en el store y es de solo lectura.
+  # Copiamos el árbol completo sin conservar esos permisos para convertirlo en
+  # la copia editable que almacenará configuracion/ y generado/.
+  cp -R \
+    --preserve=links \
+    --no-preserve=mode,ownership,timestamps \
+    -- "$source_root/." "$target/"
+
+  chmod -R u+rwX -- "$target"
+
+  mkdir -p \
+    "$target/configuracion/equipos" \
+    "$target/configuracion/personas" \
+    "$target/generado/equipos"
+fi
+
+if ! is_korunix_root "$target"; then
+  printf "ERROR: no pude preparar una copia válida de Korunix en %s.\n" "$target"
+  exit 1
+fi
+
+export KORUNIX_ROOT="$target"
 
 if [[ "$#" -eq 0 ]]; then
   set -- --plan
@@ -13,6 +95,6 @@ fi
 
 exec nix \
   --extra-experimental-features "nix-command flakes" \
-  run "${source_ref}#motor" \
+  run "path:${target}#motor" \
   -- \
   bootstrap "$@"
