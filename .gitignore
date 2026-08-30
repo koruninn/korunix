@@ -4,3 +4,11 @@
 # Son resultados temporales y no forman parte del código de Korunix.
 __pycache__/
 *.py[cod]
+
+# KORUNIX-BUILD-OUTPUT
+# Cargo y Nix generan estas rutas localmente; nunca forman parte del producto.
+target/
+result
+result-*
+
+/target/

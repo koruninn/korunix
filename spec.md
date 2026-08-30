@@ -384,6 +384,8 @@ Si el usuario cambia el idioma dentro de Korunix, la aplicación debe traducirse
 
 Los idiomas soportados de Korunix deben alinearse con la lista real de idiomas soportados por Noctalia cuando se implemente esta capa. La lista debe verificarse contra la versión de Noctalia utilizada; no se debe codificar una cifra histórica sin comprobación.
 
+Para la revisión de Noctalia fijada actualmente en `flake.lock` (`4b8c722e0c82816ca50a28ab4695ab765f3f4ab0`), la verificación de producto encontró estas localizaciones publicadas: `be-Latn`, `be`, `ca`, `cs`, `de`, `en`, `es`, `fr`, `gl-ES`, `hu`, `it`, `ko`, `ku`, `nl`, `nn`, `pl`, `pt-BR`, `ru`, `sv`, `tr`, `uk-UA`, `vi` y `zh-Hans`. Cambiar la revisión de Noctalia obliga a volver a obtener la lista; esta enumeración es evidencia de la revisión fijada, no una cifra permanente.
+
 ## 9. Localización, región e entrada
 
 Korunix debe mantener separadas estas decisiones:
@@ -649,7 +651,7 @@ Korunix puede ofrecer adoptarlo dentro de su modelo y mostrar qué aspectos admi
 
 ### 15.3. Crear usuarios desde Korunix
 
-Korunix debe poder crear nuevas cuentas independientemente del escritorio utilizado. La gestión de usuarios no depende de que GNOME, Plasma o Cinnamon tengan sus propios paneles, y debe estar igualmente disponible en Niri e Hyprland.
+Korunix debe poder crear nuevas cuentas independientemente del escritorio utilizado. La gestión de usuarios no depende de que Plasma o Cinnamon tengan sus propios paneles, y debe estar igualmente disponible en Niri e Hyprland.
 
 La interfaz humana para crear una cuenta incluye, como mínimo:
 
@@ -761,7 +763,7 @@ Los recursos de usuario deben mantenerse cerca de su definición mientras sigan 
 
 ## 19. GDM universal
 
-GDM es el gestor de inicio de sesión común de Korunix para los cinco escritorios soportados.
+GDM es el gestor de inicio de sesión común de Korunix para los cuatro escritorios soportados.
 
 Debe mostrar las cuentas del host con su nombre visible y avatar correspondiente cuando la integración del sistema lo permita.
 
@@ -771,13 +773,12 @@ Korunix debe recordar o establecer de forma coherente la sesión principal/prefe
 
 ## 20. Escritorios soportados
 
-La primera familia objetivo contiene cinco escritorios:
+La primera familia objetivo contiene cuatro escritorios:
 
 1. Niri;
 2. Hyprland;
-3. GNOME;
-4. Cinnamon;
-5. KDE Plasma.
+3. Cinnamon;
+4. KDE Plasma.
 
 ### 20.1. Regla general
 
@@ -895,9 +896,68 @@ Si en el futuro Kitty fuera la terminal activa:
 
 Noctalia no debe mantener plantillas activas para aplicaciones que Korunix no usa en ese rol.
 
+#### Aislamiento visual por sesión
+
+Las plantillas de Noctalia pertenecen a la experiencia Noctalia de Niri y
+Hyprland. No deben convertir archivos de configuración compartidos del usuario
+en una fuente de contaminación visual para Plasma o Cinnamon.
+
+Esta regla se limita a la salida visual generada o modificada por plantillas de
+Noctalia. No redefine los temas nativos de Plasma o Cinnamon ni convierte toda
+preferencia visual del sistema en una responsabilidad de Noctalia.
+
+La activación de una plantilla debe distinguir entre:
+
+- integración funcional necesaria para una aplicación;
+- integración visual dinámica de Noctalia;
+- integración visual Everforest.
+
+Cuando la apariencia dinámica de Noctalia o Everforest no corresponda a la
+sesión activa, una plantilla visual de Noctalia no debe imponer su tema, paleta,
+iconos ni preferencias sobre aplicaciones utilizadas desde otros escritorios.
+
+Si una aplicación comparte el mismo archivo de configuración entre varios
+escritorios, Korunix debe preferir, en este orden:
+
+1. un perfil o archivo de configuración específico de sesión;
+2. variables de entorno o mecanismos de inclusión condicional;
+3. una configuración neutral compartida más una capa visual aislada de
+   Noctalia.
+
+No se debe sobrescribir de forma permanente una configuración compartida solo
+para que Noctalia pueda aplicar una paleta.
+
+Modelo esperado:
+
+```text
+Niri / Hyprland + apariencia dinámica de Noctalia
+→ plantillas visuales de Noctalia activas
+→ paleta correspondiente a Noctalia
+
+Niri / Hyprland + Everforest
+→ plantillas visuales de Noctalia activas
+→ paleta Everforest
+
+Plasma / Cinnamon
+→ configuración visual nativa o neutral del escritorio
+→ ninguna plantilla visual de Noctalia domina la sesión
+```
+
+La desactivación de la integración visual o el cambio de sesión debe dejar de
+aplicar la capa visual de Noctalia sin destruir las preferencias propias del
+otro escritorio.
+
+**Excepción funcional de Spotify:** el aislamiento de las plantillas de
+Noctalia nunca desactiva, elimina ni cambia el conjunto de extensiones de
+Spotify/Spicetify seleccionado por Korunix. Las extensiones se conservan en
+Niri, Hyprland, Plasma y Cinnamon, independientemente del tema o modo visual.
+Si una plantilla de Noctalia aporta una paleta o tema para Spotify, únicamente
+esa capa visual puede aislarse o dejar de aplicarse al cambiar de sesión; las
+extensiones permanecen intactas.
+
+
 ### 22.5. Explorador de archivos
 
-- GNOME → Nautilus;
 - Niri → Nautilus;
 - Hyprland → Nautilus;
 - Cinnamon → explorador nativo del escritorio;
@@ -931,7 +991,7 @@ Para x86_64 la opción preferida definida es OnlyOffice. Cuando no esté disponi
 
 > Usar primero la solución natural del escritorio; sustituirla únicamente cuando Korunix haya establecido explícitamente una experiencia común.
 
-Alacritty/Fish es una excepción deliberada. Nautilus en GNOME/Niri/Hyprland también.
+Alacritty/Fish es una excepción deliberada. Nautilus en Niri/Hyprland también.
 
 ## 23. Atajos: registro semántico y prevención de conflictos
 
@@ -1517,7 +1577,7 @@ Las migraciones deben ser versionadas y probables automáticamente.
 
 Korunix debe mantener un historial comprensible de acciones relevantes, por ejemplo:
 
-- instalaste GNOME;
+- instalaste Niri;
 - cambiaste Everforest a modo automático;
 - añadiste a María como usuario estándar;
 - actualizaste Firefox 145 → 146;
@@ -1936,13 +1996,13 @@ Esta especificación fija la dirección, pero los siguientes puntos requieren un
 - ruta final que separará motor de Korunix, configuración editable y estado local sensible;
 - mecanismo exacto para almacenar hashes de contraseña fuera del repositorio y del Nix store cuando sea posible;
 - integración exacta de avatar entre Korunix, AccountsService, GDM y Noctalia;
-- contrato final de captura/grabación y sus bindings en cada uno de los cinco escritorios;
+- contrato final de captura/grabación y sus bindings en los cuatro escritorios actuales;
 - lista real de idiomas soportados por la versión de Noctalia utilizada;
 - aplicaciones nativas concretas de Cinnamon y Plasma para cada rol en la versión de NixOS soportada;
 - política de soporte de releases stable a medida que cambien NixOS y dependencias como AAGL;
 - fuente de verdad para el modo de apariencia automático en cada escritorio;
 - forma de obtener porcentajes y ETA reales del backend de Nix sin presentar progreso ficticio;
-- implementación exacta del arranque silencioso con Plymouth en UEFI/BIOS y en los cinco escritorios;
+- implementación exacta del arranque silencioso con Plymouth en UEFI/BIOS y en los cuatro escritorios actuales;
 - estrategia correcta para autologin, bloqueo sin contraseña y keyring sin introducir prompts contradictorios ni debilitar secretos fuera de la elección del usuario;
 - política exacta de `xpadneo` y otras capacidades automáticas por hardware;
 - definición de qué funciones offline requieren únicamente el código de Korunix y cuáles necesitan cierres/dependencias ya presentes en el Nix store;
@@ -1972,6 +2032,10 @@ prueba accesibles directamente.
 
 Korunix conserva su propia identidad GTK/libadwaita y Everforest; la referencia
 no implica copiar visualmente macOS.
+
+Cuando un modelo permita identificar de forma inequívoca un fabricante conocido,
+Korunix debe preferir una etiqueta humana de **marca + modelo**. Si la asociación
+no es fiable, debe conservar una descripción neutral y no adivinar la marca.
 
 ### Salidas de sonido
 
@@ -2074,7 +2138,7 @@ principalmente PipeWire/WirePlumber para audio y las interfaces de vídeo
 disponibles en Linux, sin exponer esos detalles como conocimiento obligatorio
 para el usuario.
 
-La capacidad debe funcionar bajo GNOME, Niri, Hyprland, KDE Plasma y Cinnamon.
+La capacidad debe funcionar bajo Niri, Hyprland, KDE Plasma y Cinnamon.
 
 ### Responsabilidad por fase
 
@@ -2187,10 +2251,10 @@ un final reconocible.
 | --- | --- |
 | **A · Estabilización** | Consolidar la base declarativa, eliminar interferencias entre escritorios, estabilizar Noctalia/Niri y cerrar regresiones heredadas. |
 | **B · Modelo funcional** | Definir las fuentes de verdad y el modelo común de canales, hardware, producto, personas, localización y primera adopción. |
-| **C · Operaciones del sistema** | ✅ Cerrada |
-| **D · GUI completa** | ▶ Activa · D.3 cerrada, D.4 activa |
-| **E · Robustez** | Probar interrupciones, rollback, idempotencia, instalación limpia, hardware diverso, arquitecturas soportadas, trabajo offline y degradación segura. |
-| **F · Producto** | Completar distribución, bootstrap remoto, empaquetado, onboarding, documentación, traducciones y criterios de lanzamiento. |
+| **C · Operaciones del sistema** | ✅ Cerrada · C.1-C.7 |
+| **D · GUI completa** | ✅ Cerrada |
+| **E · Robustez** | ▶ Cierre integral · interrupciones, rollback, idempotencia, instalación limpia, hardware/arquitecturas, offline, degradación y finalización segura se validan como una sola puerta. |
+| **F · Producto** | ▶ Cierre integral · distribución, bootstrap remoto/local, empaquetado, onboarding, documentación, traducciones y lanzamiento se validan en la misma campaña. |
 
 ### Estado actual
 
@@ -2205,24 +2269,30 @@ un final reconocible.
   - La adopción prepara configuración declarativa sin construir ni aplicar una
     generación.
 - **C · Operaciones del sistema:** cerrada.
-  - C.1-C.6 conservan contratos estructurados comunes para CLI y GUI.
-  - D debe presentar esos motores sin duplicar su lógica.
-- **D · GUI completa:** activa.
+  - C.1-C.7 comparten contratos estructurados comunes para CLI y GUI.
+  - C.7 completó aplicaciones, escritorio, apariencia, localización, Personas,
+    copias de seguridad e historial sin crear un backend exclusivo para GTK.
+  - D debe presentar esos contratos sin duplicar su lógica.
+- **D · GUI completa:** cerrada.
   - D.1 está cerrada: Nix-first y estructura humana están fijados.
   - D.2 está cerrada: Rust es el único motor operativo público.
   - D.3 está cerrada: la interfaz GTK/libadwaita también está escrita en Rust.
-  - D.4 está activa: resta completar la experiencia final y su validación visual.
-- **E · Robustez:** pendiente como fase principal, aunque fases anteriores pueden
-  adelantar pruebas de robustez cuando sean necesarias para cerrar correctamente
-  un contrato.
+  - D.4 está cerrada: la experiencia final y las fronteras entre escritorios quedaron validadas en sesiones reales.
+  - D.4 completó la integración final de las superficies constitucionales y su
+    validación visual.
+- **E · Robustez:** activa.
+  - Corresponde probar interrupciones, rollback, idempotencia, instalación limpia,
+    hardware diverso, arquitecturas soportadas, trabajo offline y degradación segura.
 - **F · Producto:** pendiente.
 
 <!-- KORUNIX-ROADMAP-C:BEGIN -->
 ### Desglose de la fase C
 
-La fase **C · Operaciones del sistema** tiene un alcance finito de seis frentes.
-Este desglose existe para evitar convertir el desarrollo en una cadena
-indefinida de subetapas.
+La fase **C · Operaciones del sistema** tiene siete frentes. C.7 fue añadido
+únicamente después de que la puerta constitucional de D demostrara que varios
+requisitos permanentes del panel no tenían todavía un contrato operativo
+suficiente. Este ajuste corrige el alcance real; no abre una cadena indefinida
+de subetapas.
 
 #### C.1 · Ciclo de cambios — cerrada
 
@@ -2388,12 +2458,85 @@ La capa visual completa de estas capacidades corresponde a D y los escenarios
 de desconexión, dispositivos ocupados, pérdida de señal y otros fallos
 corresponden a E.
 
+
+#### C.7 · Contratos cotidianos del panel — cerrada
+
+La auditoría constitucional de D reveló que C.1-C.6 cubrieron correctamente sus
+frentes, pero no agotaron todos los contratos operativos requeridos por las
+secciones permanentes de esta especificación. C.7 cierra esa omisión sin
+reimplementar en Rust decisiones declarativas que pertenecen a Nix.
+
+C.7 debe exponer mediante el motor público, reutilizando los modelos Nix
+existentes y el ciclo común de propuesta → validación → aplicación cuando
+corresponda:
+
+- consulta y modificación del catálogo/selección de aplicaciones, incluidas las
+  operaciones necesarias para instalar y retirar decisiones administradas por
+  Korunix;
+- creación y modificación de cuentas de usuario conforme al contrato humano de
+  Personas, sin introducir secretos en el repositorio ni en salida diagnóstica;
+- modificación de idioma, región, zona horaria, teclado y demás decisiones
+  separadas de localización que el modelo soporte;
+- lectura y modificación de apariencia y escritorio cuando esas decisiones
+  pertenezcan al modelo declarativo de Korunix;
+- exportación y restauración de configuración conforme al contrato de copias de
+  seguridad, manteniendo fuera credenciales y estado no portable;
+- historial humano estructurado para las operaciones relevantes que Korunix
+  aplica, sin convertirlo en un log técnico;
+- cualquier consulta estructurada que D necesite para presentar esas capacidades
+  sin leer ni editar directamente archivos Nix desde GTK.
+
+No se crea un backend exclusivo para la GUI. Los nombres, defaults, relaciones y
+catálogos que puedan evaluarse declarativamente siguen perteneciendo a Nix; Rust
+solo publica el contrato, valida la intención y ejecuta las operaciones vivas o
+transaccionales necesarias.
+
+La actualización selectiva ya publicada por `korunix update [entradas...]`, los
+motores multimedia de C.6, recuperación, limpieza, almacenamiento y firmware no
+se duplican en C.7. D debe consumir esos contratos existentes.
+
+**Criterio de cierre de C.7:** cada capacidad anterior que la especificación
+exija como modificable desde el panel debe disponer de una consulta estructurada
+y, cuando corresponda, una propuesta/ejecución estructurada compartida por CLI y
+GUI. Si una capacidad es puramente declarativa, el motor debe obtenerla de Nix y
+no mantener una segunda tabla propia.
+
+**Implementación en curso de C.7:** este corte publica contratos estructurados
+para aplicaciones, escritorio, localización, creación de personas, entrega de
+contraseña exclusivamente por entrada estándar tras aplicar la cuenta, copias de
+seguridad e historial humano. Los catálogos de aplicaciones y escritorios se
+obtienen del modelo Nix evaluado; Rust no conserva una segunda lista.
+
+La búsqueda de aplicaciones distingue catálogo curado, Nixpkgs y Flatpak. Los
+cambios declarativos preparan y validan la configuración, pero no aplican una
+generación por su cuenta: D debe encadenarlos con el ciclo común
+preview → build → apply ya cerrado en C.1.
+
+La apariencia dispone ahora de una fuente declarativa propia:
+`config.korunix.appearance.style = default | everforest` y
+`config.korunix.appearance.mode = light | dark | auto`. El motor consulta ese
+modelo Nix y ofrece plan/cambio estructurado sin duplicar las opciones en Rust.
+La adopción visual en vivo y los previews pertenecen a D.4, que consume esta
+decisión y conserva el gestor global de apariencia ya implementado.
+
+**Corrección constitucional posterior al primer cierre de C.7:** el contrato de
+Aplicaciones no se limita al catálogo curado. Una selección encontrada en
+Nixpkgs o Flatpak conserva explícitamente su fuente en la decisión declarativa,
+puede prepararse para instalarse o retirarse y vuelve a pasar por la validación
+Nix del host. El catálogo curado continúa siendo la opción recomendada y no se
+convierte en una lista universal.
+
+La creación estructurada de Personas admite además **avatar opcional**. El
+archivo de imagen se copia únicamente al perfil administrado por Korunix cuando
+la operación se ejecuta; el plan no modifica nada. Contraseñas y hashes siguen
+fuera de perfiles, repositorio, historial y diagnósticos.
+
 ### Criterio de cierre de C
 
-C podrá marcarse como cerrada cuando los seis frentes anteriores tengan un
-contrato operativo común, sus operaciones reales estén conectadas a la interfaz
-pública de Korunix y ninguna de ellas dependa de una segunda implementación
-paralela exclusiva de la GUI.
+C podrá volver a marcarse como cerrada cuando C.1-C.7 tengan un contrato
+operativo común, sus operaciones reales estén conectadas a la interfaz pública
+de Korunix y ninguna dependa de una segunda implementación paralela exclusiva
+de la GUI.
 
 Cerrar C no exige que toda la interfaz gráfica esté terminada; esa integración
 visual completa pertenece a D.
@@ -2406,13 +2549,13 @@ realizar una grabación temporal reproducible; e inventariar/previsualizar
 cámaras con resolución y FPS. Las pruebas de micrófono no realizan
 monitorización directa y las grabaciones se eliminan salvo petición explícita.
 
-**Fase C cerrada.** C.1-C.6 comparten contratos operativos que puede consumir la
-GUI. La fase D debe presentar estos mismos motores y no crear implementaciones
-paralelas para aplicar, recuperar, limpiar, firmware o multimedia.
+**Fase C cerrada.** C.1-C.7 comparten contratos operativos públicos y las
+decisiones puramente declarativas se obtienen de Nix. D debe presentar estos
+mismos motores y no crear implementaciones paralelas para el panel cotidiano.
 <!-- KORUNIX-ROADMAP-C:END -->
 
 <!-- KORUNIX-ROADMAP-D:BEGIN -->
-### Desglose de la fase activa D
+### Desglose de la fase D
 
 D tiene exactamente cuatro frentes. No se crearán subfases formales dentro de
 ellos.
@@ -2457,21 +2600,160 @@ compilación independiente de GTK; la interfaz se construye con la característi
 `interfaz`. La aplicación Python anterior y su backend fueron retirados.
 
 Los textos visibles ya conservan las tres localizaciones que tenía la GUI
-transitoria: español, inglés y húngaro. D.4 completa la experiencia, la
+transitoria: español, inglés y húngaro. D.4 completó la experiencia, la
 adaptación visual, progreso, confirmaciones, detalles humanos y localización
 final sin volver a introducir un backend paralelo.
 
 **Estado: cerrado.**
 
-#### D.4 · Cierre de experiencia — activa
+#### D.4 · Cierre de experiencia — cerrada
 
 Completar navegación adaptable, progreso, confirmaciones, errores humanos,
 detalles técnicos opcionales, internacionalización y validación visual.
+
+**Estado de dependencia:** C.7 quedó cerrado después de publicar los contratos
+cotidianos que faltaban. D.4 consumió
+esos contratos desde GTK sin leer ni editar directamente la configuración Nix.
+
+**Integración constitucional amplia de D.4:** la GUI consume ya los contratos de
+Aplicaciones, Escritorios/Apariencia, Localización, Personas, Copias e Historial,
+y Actualizaciones presenta los niveles **Actualizar todo**, **Personalizar** y
+**Avanzado**. La búsqueda global navega desde términos humanos hacia las áreas
+correspondientes sin ejecutar operaciones por su cuenta.
+
+La apariencia viva corrige además la sincronización con Noctalia: cuando un
+archivo contiene tanto la preferencia `theme.mode` como un `darkMode` efectivo,
+el estado efectivo tiene prioridad. Los eventos consecutivos de escritura de
+Noctalia/CSS se agrupan con un debounce corto antes de releer estado y paleta,
+evitando mostrar transitoriamente la variante opuesta durante cambios normales.
+
+Este corte **no cierra D.4**. Antes del cierre deben verificarse visualmente y de
+forma explícita: claro/oscuro/automático de Noctalia repetidos sin inversión,
+1366×768 sin clipping y navegación completa por teclado/foco.
+
+La puerta de diagnóstico y multimedia queda implementada en código: los errores
+de operaciones muestran primero un estado humano y mantienen los detalles
+técnicos detrás de una acción explícita; la página de error conserva el mismo
+patrón. Las cámaras presentan resoluciones/FPS disponibles cuando V4L2 los
+informa y la prueba integrada declara la combinación usada por Korunix
+(640×360, FPS automático cuando no se fuerza una frecuencia).
+
+**Corrección de contrato posterior a la prevalidación real:** C se reabrió de
+forma puntual porque V4L2 entregaba modos reales para la cámara física mientras
+el campo estructurado `formats` del motor permanecía vacío. El texto crudo nunca
+se había perdido: estaba conservado en `rawFormats`, pero D no debe parsear esa
+salida técnica. C vuelve a publicar los modos como datos estructurados
+(formato de píxel → resoluciones → FPS), elimina del inventario los nodos físicos
+que solo transportan metadatos y conserva las cámaras virtuales identificables
+como candidatas no disponibles mientras esperan una fuente.
+
+D consume exclusivamente ese contrato estructurado. Una cámara virtual sin
+productor permanece visible como **Esperando una fuente de vídeo** y su prueba
+queda deshabilitada hasta que el motor la declare disponible.
+
+La apariencia viva de Noctalia usa primero su IPC `theme-mode-get`, que devuelve
+la variante **resuelta** `dark` o `light`, incluso cuando la preferencia es
+`auto`. Los archivos `config.toml` y `settings.toml` quedan como respaldo de
+arranque si el IPC todavía no responde; además Korunix reconsulta
+periódicamente el modo resuelto para acompañar un cambio automático por horario
+aunque no exista una nueva escritura de archivo.
+
+D.4 debe presentar en la GUI, mediante el motor común ya cerrado en C.6, el
+entorno completo de prueba de sonido y micrófono. La salida seleccionada debe
+poder probarse sin convertirla en predeterminada y debe ofrecer prueba de canales
+cuando corresponda. El micrófono seleccionado debe disponer de medidor de nivel
+en vivo que se inicia y se detiene manualmente mediante el mismo control, sin
+una duración fija impuesta por Korunix, y de un flujo explícito
+**Probar micrófono** con **Grabar prueba**,
+**Reproducir prueba** y **Grabar de nuevo**. La grabación es temporal, se elimina
+automáticamente al terminar salvo petición explícita y nunca se sustituye por
+monitorización directa del micrófono. La GUI no debe reimplementar estas
+operaciones fuera del motor ni exponer nombres internos de PipeWire, PulseAudio
+o V4L2 cuando exista una descripción humana.
+
+La sección **Cámaras** debe permitir iniciar una **prueba de cámara** explícita
+desde la GUI. La prueba abre una previsualización temporal integrada en una
+ventana compacta de Korunix, al estilo de los ajustes de videollamada: no debe
+abrir un reproductor externo ni ocupar la pantalla completa. No cambia
+dispositivos predeterminados, no graba vídeo en segundo plano y no conserva
+ninguna grabación al cerrarse. Korunix debe mantener como máximo una
+previsualización de cámara activa y liberar el dispositivo inmediatamente al
+cerrarla, de modo que pueda volver a ser usado por otra aplicación. El proceso
+de captura no puede quedar huérfano después de cerrar la vista previa ni retener
+el nodo V4L2 cuando la ventana de prueba ya no existe.
+
+La pantalla **Firmware** debe estar curada por función de producto, no ser un
+volcado del inventario de `fwupd`. No debe mostrar HDD, SSD, NVMe, memorias USB
+ni otros dispositivos de almacenamiento masivo, aunque `fwupd` los enumere:
+estos pertenecen a **Almacenamiento**. Firmware debe mostrar únicamente hardware
+pertinente a su propio flujo de consulta o actualización y conservar una
+presentación humana, sin repetir categorías que ya tienen una sección propia.
+
+**Objetivo inmediato de D.4:** completar juntos la superficie de pruebas de
+salida, micrófono y cámara y el filtrado funcional de Firmware, reutilizando los
+contratos existentes del motor. D.4 no puede cerrarse mientras estas capacidades
+de C.6 no sean accesibles desde la GUI.
+
+
+**Puerta constitucional de cierre de D:** D no puede cerrarse por impresión
+visual ni únicamente porque los motores de C ya tengan una pantalla. Antes del
+cierre se debe confrontar la GUI completa contra todos los requisitos
+permanentes de esta especificación que correspondan al panel cotidiano.
+
+Como mínimo, la reconciliación de D debe comprobar y, cuando falte, completar
+en superficies reales y no placeholders:
+
+- **Aplicaciones:** catálogo, estado instalado, instalación, eliminación y
+  búsqueda conforme al modelo de aplicaciones y roles.
+- **Personas:** administración de cuentas, incluida la creación de usuario con
+  los campos humanos definidos por esta especificación; las decisiones sobre
+  secretos deben respetar la frontera segura ya fijada.
+- **Idioma y región:** no basta con mostrar lo detectado cuando el modelo permite
+  corregir idioma, región, zona horaria, teclado u otras decisiones separadas.
+- **Apariencia y escritorios:** las decisiones y previews permanentes descritos
+  por el producto deben tener superficie visual cuando su modelo exista.
+- **Actualizaciones:** la GUI debe representar la actualización general y la
+  personalización/selectividad que el motor pueda garantizar, sin fingir una
+  granularidad inexistente.
+- **Copias de seguridad y recuperación de configuración:** exportación,
+  restauración y las operaciones que esta especificación exige para el panel.
+- **Accesibilidad de la propia GUI:** navegación por teclado, foco visible,
+  nombres accesibles, contraste, escalado de texto, ausencia de clipping,
+  traducciones largas, diacríticos y preparación para RTL.
+- **Búsqueda global:** el panel permanente debe poder llevar desde lenguaje
+  humano a las áreas correspondientes.
+- **Diagnóstico humano:** los errores principales deben explicar qué falló y qué
+  puede hacerse; la salida técnica cruda debe quedar detrás de detalles
+  opcionales.
+- **Adaptación visual:** debe validarse expresamente el funcionamiento en
+  resoluciones comunes como 1366×768, además del modo ancho y estrecho.
+- **Multimedia:** toda capacidad de C.6 que corresponda a D debe ser accesible
+  visualmente; cuando el backend informe resolución/FPS de cámara, la prueba
+  debe poder presentarlos de forma humana.
+
+Si esta reconciliación descubre que un requisito permanente necesita un contrato
+operativo que todavía no existe, no se permite ocultarlo ni declarar D cerrada:
+se debe corregir la asignación de la hoja de ruta y completar el contrato en la
+fase arquitectónica correspondiente antes de volver al cierre de D.
+
+**Frontera con las fases siguientes:** E conserva robustez, hotplug, dispositivos
+ocupados, pérdida de señal, interrupciones, idempotencia, hardware diverso,
+degradación y escenarios de fallo. F conserva distribución, bootstrap final,
+onboarding de producto, documentación, expansión completa de traducciones y
+criterios de lanzamiento. Esta frontera no puede utilizarse para desplazar a E o
+F una superficie cotidiana obligatoria que la especificación ya exige al panel
+permanente.
 
 **Criterio de cierre de D:** el modelo declarativo se obtiene de Nix; el
 runtime interactivo pasa por un único motor; la GUI no ejecuta como root ni
 duplica operaciones; y las rutas transitorias retiradas durante D ya no forman
 parte de la arquitectura final.
+**Estado: cerrado.** Las fronteras de sesión de Niri/Hyprland, Cinnamon y
+Plasma se validaron sin contaminación visual entre escritorios; Noctalia
+conserva su integración propia, Plasma y Cinnamon mantienen sus preferencias
+nativas o neutrales, y las decisiones declarativas sobreviven al cambio real de
+sesión.
+
 <!-- KORUNIX-ROADMAP-D:END -->
 
 ### Regla obligatoria de seguimiento durante el desarrollo
@@ -2499,7 +2781,17 @@ Mientras esta sección exista:
    sección debe actualizarse para seguir representando el plan real;
 9. esta hoja de ruta describe el **progreso de desarrollo de Korunix**, no debe
    convertirse en una pantalla, opción ni concepto visible para el usuario final
-   del producto salvo que exista una decisión independiente que lo justifique.
+   del producto salvo que exista una decisión independiente que lo justifique;
+10. si una fase, frente o subetapa necesita subdividirse por razones técnicas,
+    las divisiones deben ser **pocas, amplias y orientadas a resultados
+    verificables**. No se debe fragmentar el trabajo en microetapas,
+    numeraciones moleculares, cortes artificiales o validaciones repetitivas que
+    aumenten el tedio sin aportar una frontera técnica real. Como regla general,
+    una subetapa no debe volver a subdividirse; si varias correcciones pueden
+    implementarse y validarse de forma segura en una misma intervención, deben
+    agruparse. Una subdivisión adicional solo se justifica por una separación
+    técnica real, como riesgo destructivo, dependencia externa o necesidad de
+    una validación independiente.
 
 ### Criterio para retirar esta sección
 

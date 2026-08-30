@@ -79,10 +79,39 @@
 
     hostDataFor = hostId: import (hostFileFor hostId);
 
-    systems = lib.unique (map (
+    # El producto se publica para las dos arquitecturas que el bootstrap sabe
+    # detectar. Las salidas no dependen de que exista ya un host local de esa
+    # arquitectura dentro de configuracion/equipos.
+    supportedSystems = ["x86_64-linux" "aarch64-linux"];
+    hostSystems = lib.unique (map (
         hostId: (hostDataFor hostId).system
       )
       hostIds);
+    systems = lib.unique (
+      [
+        "x86_64-linux"
+        "aarch64-linux"
+      ]
+      ++ map (
+        hostId: (hostDataFor hostId).system
+      )
+      hostIds
+    );
+
+    # El código empaquetado nunca arrastra la configuración humana de quien
+    # construyó Korunix ni los resultados locales de desarrollo.
+    productSource = lib.cleanSourceWith {
+      src = ./.;
+      filter = path: type: let
+        root = toString ./. + "/";
+        relative = lib.removePrefix root (toString path);
+      in
+        !(lib.hasPrefix ".git/" relative)
+        && !(lib.hasPrefix "target/" relative)
+        && !(lib.hasPrefix "configuracion/equipos/" relative)
+        && !(lib.hasPrefix "configuracion/personas/" relative)
+        && !(lib.hasPrefix "generado/equipos/" relative);
+    };
 
     pkgsFor = system:
       import nixpkgs {
@@ -97,14 +126,43 @@
       pkgs.rustPlatform.buildRustPackage {
         pname = "korunix";
         version = "0.1.0";
-        src = ./.;
+        src = productSource;
 
         cargoLock.lockFile = ./Cargo.lock;
+
+        # El motor llama herramientas del sistema vivo. Se empaquetan sus
+        # ejecutables de consulta/operación para que la GUI y `nix run .#motor`
+        # no dependan accidentalmente del PATH de la sesión desde la que se abren.
+        nativeBuildInputs = [
+          pkgs.makeWrapper
+        ];
 
         cargoBuildFlags = [
           "--bin"
           "korunix"
         ];
+
+        postFixup = ''
+          wrapProgram "$out/bin/korunix" \
+            --prefix PATH : ${lib.makeBinPath [
+            pkgs.coreutils
+            pkgs.ffmpeg
+            pkgs.flatpak
+            pkgs.fwupd
+            pkgs.git
+            pkgs.gnutar
+            pkgs.jq
+            pkgs.nix
+            pkgs.pciutils
+            pkgs.pulseaudio
+            pkgs.pipewire
+            pkgs.systemd
+            pkgs.udisks2
+            pkgs.util-linux
+            pkgs.v4l-utils
+            pkgs.wireplumber
+          ]}
+        '';
 
         meta = {
           description = "Motor operativo de Korunix";
@@ -122,11 +180,12 @@
       pkgs.rustPlatform.buildRustPackage {
         pname = "korunix-interfaz";
         version = "0.1.0";
-        src = ./.;
+        src = productSource;
 
         cargoLock.lockFile = ./Cargo.lock;
 
         nativeBuildInputs = [
+          pkgs.appstream
           pkgs.desktop-file-utils
           pkgs.makeWrapper
           pkgs.pkg-config
@@ -153,7 +212,14 @@
         ];
 
         postInstall = ''
-          install -Dm644             sistema/interfaz/io.github.koruninn.Korunix.desktop             "$out/share/applications/io.github.koruninn.Korunix.desktop"
+          install -Dm644 sistema/interfaz/io.github.koruninn.Korunix.desktop \
+            "$out/share/applications/io.github.koruninn.Korunix.desktop"
+          install -Dm644 sistema/interfaz/io.github.koruninn.Korunix.metainfo.xml \
+            "$out/share/metainfo/io.github.koruninn.Korunix.metainfo.xml"
+
+          desktop-file-validate "$out/share/applications/io.github.koruninn.Korunix.desktop"
+          appstreamcli validate --no-net \
+            "$out/share/metainfo/io.github.koruninn.Korunix.metainfo.xml"
 
           makeWrapper             "$out/bin/korunix-interfaz"             "$out/bin/korunix"             --set KORUNIX_MOTOR_BIN ${korunixMotorFor system}/bin/korunix
         '';
@@ -163,6 +229,24 @@
           mainProgram = "korunix";
           platforms = lib.platforms.linux;
         };
+      };
+
+    # Puente único de instalación y actualización. Puede ejecutarse desde
+    # GitHub o desde una copia local/USB. Conserva configuracion/, generado/ y el
+    # historial Git; si el código local está modificado se niega a sobrescribirlo.
+    # El bootstrap público vive como Bash mínimo y no contiene dominio.
+    # Solo consigue/abre el motor Rust y le entrega la adopción real.
+    korunixBootstrapFor = system: let
+      pkgs = pkgsFor system;
+    in
+      pkgs.writeShellApplication {
+        name = "korunix-bootstrap";
+
+        runtimeInputs = [
+          pkgs.nix
+        ];
+
+        text = builtins.readFile ./scripts/korunix-bootstrap;
       };
 
     makeHost = hostId: let
@@ -276,6 +360,7 @@
       default = korunixGuiFor system;
       korunix = korunixGuiFor system;
       motor = korunixMotorFor system;
+      bootstrap = korunixBootstrapFor system;
     });
 
     apps = lib.genAttrs systems (system: {
@@ -296,11 +381,18 @@
         program = "${korunixMotorFor system}/bin/korunix";
         meta.description = "Ejecutar el motor Rust de Korunix";
       };
+
+      bootstrap = {
+        type = "app";
+        program = "${korunixBootstrapFor system}/bin/korunix-bootstrap";
+        meta.description = "Instalar o actualizar Korunix conservando la configuración humana";
+      };
     });
 
     checks = lib.genAttrs systems (system: {
       korunix-gui = korunixGuiFor system;
       korunix-motor = korunixMotorFor system;
+      korunix-bootstrap = korunixBootstrapFor system;
     });
 
     # API declarativa que puede consumir el motor sin reimplementar el modelo.

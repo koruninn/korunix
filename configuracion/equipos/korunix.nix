@@ -38,6 +38,11 @@
   };
 
   korunix = {
+    appearance = {
+      style = "default";
+      mode = "auto";
+    };
+
     enable = true;
 
     # El canal es una decisión de actualización de este equipo. Este host ya

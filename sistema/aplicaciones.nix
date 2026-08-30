@@ -87,11 +87,46 @@
 
   knownApplications = (builtins.attrNames packageMap) ++ specialApplications;
 
+  isNixpkgsSelection = name: lib.hasPrefix "nixpkgs:" name;
+  isFlatpakSelection = name: lib.hasPrefix "flatpak:" name;
+
+  nixpkgsSelections =
+    map (name: lib.removePrefix "nixpkgs:" name)
+    (lib.filter isNixpkgsSelection cfg);
+
+  flatpakSelections =
+    map (name: lib.removePrefix "flatpak:" name)
+    (lib.filter isFlatpakSelection cfg);
+
+  nixpkgsAttrPath = raw: let
+    legacyPrefix = "legacyPackages.${hostSystem}.";
+    packagesPrefix = "packages.${hostSystem}.";
+    normalized =
+      if lib.hasPrefix legacyPrefix raw
+      then lib.removePrefix legacyPrefix raw
+      else if lib.hasPrefix packagesPrefix raw
+      then lib.removePrefix packagesPrefix raw
+      else raw;
+  in
+    lib.splitString "." normalized;
+
+  nixpkgsPackageFor = raw:
+    lib.attrByPath (nixpkgsAttrPath raw) null pkgs;
+
   unknownApplications =
     lib.filter (
-      name: !(lib.elem name knownApplications)
+      name:
+        !(lib.elem name knownApplications)
+        && !(isNixpkgsSelection name)
+        && !(isFlatpakSelection name)
     )
     cfg;
+
+  unknownNixpkgsApplications =
+    lib.filter (
+      name: nixpkgsPackageFor name == null
+    )
+    nixpkgsSelections;
 
   ordinaryApplications =
     lib.filter (
@@ -105,13 +140,21 @@
     )
     ordinaryApplications;
 
+  selectedNixpkgsPackages = map nixpkgsPackageFor (
+    lib.filter (
+      name: nixpkgsPackageFor name != null
+    )
+    nixpkgsSelections
+  );
+
   flatpakPackages =
     lib.optionals (lib.elem "polyglot" cfg) [
       "io.github.DraqueT.PolyGlot"
     ]
     ++ lib.optionals (lib.elem "cohesion" cfg) [
       "io.github.brunofin.Cohesion"
-    ];
+    ]
+    ++ flatpakSelections;
 
   spicePkgs = inputs.spicetify-nix.legacyPackages.${pkgs.stdenv.hostPlatform.system};
 
@@ -442,6 +485,14 @@ in {
     '';
   };
 
+  options.korunix.internal.applicationCatalog = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    readOnly = true;
+    internal = true;
+    default = knownApplications;
+    description = "Catálogo Nix que consume el motor de Korunix.";
+  };
+
   config = lib.mkIf config.korunix.enable {
     assertions = [
       {
@@ -450,10 +501,17 @@ in {
           "Korunix todavía no conoce estas aplicaciones: "
           + lib.concatStringsSep ", " unknownApplications;
       }
+      {
+        assertion = unknownNixpkgsApplications == [];
+        message =
+          "Estas aplicaciones de Nixpkgs no existen en el canal del host: "
+          + lib.concatStringsSep ", " unknownNixpkgsApplications;
+      }
     ];
 
     environment.systemPackages =
       selectedPackages
+      ++ selectedNixpkgsPackages
       ++ lib.optionals spotifySelected [
         (lib.hiPrio spotifySessionWrapper)
         syncNoctaliaSpotify

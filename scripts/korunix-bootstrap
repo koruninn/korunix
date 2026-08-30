@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source_ref="${KORUNIX_SOURCE:-github:koruninn/korunix}"
+
+if [[ -d "$source_ref" ]]; then
+  source_ref="path:$(cd "$source_ref" && pwd -P)"
+fi
+
+if [[ "$#" -eq 0 ]]; then
+  set -- --plan
+fi
+
+exec nix \
+  --extra-experimental-features "nix-command flakes" \
+  run "${source_ref}#motor" \
+  -- \
+  bootstrap "$@"

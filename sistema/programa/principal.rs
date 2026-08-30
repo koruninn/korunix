@@ -27,9 +27,15 @@ Uso:
   korunix modelo [canales|predeterminados|equipos [id]]
   korunix bootstrap --plan [--json]
   korunix bootstrap --adopt [--yes]
+  korunix product [--json]
   korunix users [operación]
+  korunix applications [operación]
+  korunix desktop [operación]
+  korunix appearance [operación]
   korunix hardware [--json]
-  korunix localization [--json]
+  korunix localization [operación]
+  korunix backup [operación]
+  korunix history [--json]
   korunix channel [opciones]
   korunix status
   korunix structure

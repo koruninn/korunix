@@ -108,3 +108,7 @@ gui:
 # Comprueba la estructura de la interfaz Rust sin abrir una ventana.
 gui-check:
     ./scripts/validar-interfaz.sh
+
+# Ejecuta en una sola puerta todas las comprobaciones automatizables de robustez y producto.
+launch-check:
+    ./scripts/validar-lanzamiento.sh
