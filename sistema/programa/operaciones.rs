@@ -6388,6 +6388,48 @@ fn bootstrap_plan_json(raiz: &Path) -> Result<String, String> {
     )
 }
 
+fn bootstrap_host_profile_lines(plan: &str) -> Result<String, String> {
+    let data: serde_json::Value = serde_json::from_str(plan)
+        .map_err(|error| format!("El plan de bootstrap no es JSON válido: {error}"))?;
+
+    let profiles = data
+        .pointer("/userAdoption/profiles")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "El plan de bootstrap no contiene perfiles de usuario.".to_string())?;
+
+    let mut lines = Vec::with_capacity(profiles.len());
+
+    for profile in profiles {
+        let id = profile
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| "Un perfil de bootstrap no contiene identificador.".to_string())?;
+
+        if !account_valid(id) {
+            return Err(format!(
+                "El identificador de usuario {id} no es válido para la configuración de Korunix."
+            ));
+        }
+
+        let home = profile
+            .pointer("/local/homeDirectory")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| format!("El perfil {id} no contiene carpeta personal."))?;
+
+        let administrator = profile
+            .pointer("/local/administrator")
+            .and_then(serde_json::Value::as_bool)
+            .ok_or_else(|| format!("El perfil {id} no contiene su rol administrativo."))?;
+
+        lines.push(format!(
+            "    {id} = {{ homeDirectory = {}; administrator = {administrator}; deferredCapabilities = []; deferredInputMethods = []; preservedGroups = []; githubSshIdentityFile = null; }};",
+            json_texto(home)
+        ));
+    }
+
+    Ok(lines.join("\n"))
+}
+
 fn bootstrap(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
     match args {
         [mode] if mode == "--plan" => pretty(raiz, &bootstrap_plan_json(raiz)?)?,
@@ -6494,20 +6536,7 @@ fn bootstrap(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
             let host_name = jq_texto(raiz, &plan, ".host.name")?;
             let state_version = jq_texto(raiz, &plan, ".host.stateVersion")?;
             let channel = jq_texto(raiz, &plan, ".host.channel")?;
-            let profile_lines = jq_con_entrada(
-                raiz,
-                &[
-                    "-r".into(),
-                    r#".userAdoption.profiles[]
-                       | "    " + .id + " = { homeDirectory = "
-                         + (.local.homeDirectory|@json)
-                         + "; administrator = "
-                         + (.local.administrator|tostring)
-                         + "; deferredCapabilities = []; deferredInputMethods = []; preservedGroups = []; githubSshIdentityFile = null; };"#
-                        .into(),
-                ],
-                &plan,
-            )?;
+            let profile_lines = bootstrap_host_profile_lines(&plan)?;
             let host_text = format!(
                 "# ESTE ARCHIVO SE PUEDE CAMBIAR.\n{{\n  system = {};\n  users = {{\n{}\n  }};\n  korunix = {{ enable = true; channel = {}; hostName = {}; stateVersion = {}; }};\n}}\n",
                 json_texto(&system),
@@ -7604,6 +7633,30 @@ mod tests {
     #[test]
     fn bootstrap_id_humano() {
         assert_eq!(bootstrap_host_id("Mi Equipo!!!"), "mi-equipo");
+    }
+
+    #[test]
+    fn bootstrap_lineas_usuario_se_generan_sin_jq() {
+        let plan = r#"{
+          "userAdoption": {
+            "profiles": [
+              {
+                "id": "ana",
+                "local": {
+                  "homeDirectory": "/home/ana",
+                  "administrator": true
+                }
+              }
+            ]
+          }
+        }"#;
+
+        let lines = bootstrap_host_profile_lines(plan).expect("plan válido");
+
+        assert_eq!(
+            lines,
+            r#"    ana = { homeDirectory = "/home/ana"; administrator = true; deferredCapabilities = []; deferredInputMethods = []; preservedGroups = []; githubSshIdentityFile = null; };"#
+        );
     }
 
     #[test]
