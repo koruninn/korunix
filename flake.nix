@@ -232,10 +232,12 @@
       };
 
     # Puente único de instalación y actualización. Puede ejecutarse desde
-    # GitHub o desde una copia local/USB. Conserva configuracion/, generado/ y el
-    # historial Git; si el código local está modificado se niega a sobrescribirlo.
+    # GitHub o desde una copia local/USB. Conserva configuracion/ y generado/.
+    # Una copia de desarrollo puede conservar además su historial Git, pero la
+    # distribución empaquetada no depende de metadatos .git para funcionar.
     # El bootstrap público vive como Bash mínimo y no contiene dominio.
     # Solo consigue/abre el motor Rust y le entrega la adopción real.
+
     korunixBootstrapFor = system: let
       pkgs = pkgsFor system;
     in

@@ -1007,7 +1007,13 @@ fn structure(raiz: &Path) -> Result<(), String> {
 
 fn validate(raiz: &Path) -> Result<(), String> {
     structure(raiz)?;
-    visible(raiz, "git", &["diff".into(), "--check".into()])?;
+
+    if raiz.join(".git").exists() {
+        visible(raiz, "git", &["diff".into(), "--check".into()])?;
+    } else {
+        println!("✓ distribución sin metadatos Git; se valida como producto");
+    }
+
     visible(
         raiz,
         "nix",
@@ -1034,6 +1040,7 @@ fn validate(raiz: &Path) -> Result<(), String> {
             return Err(format!("Nix no produjo drvPath para {id}."));
         }
     }
+
     println!("✓ VALIDACIÓN COMPLETA");
     Ok(())
 }
@@ -1069,12 +1076,18 @@ fn format_nix(raiz: &Path) -> Result<(), String> {
 }
 
 fn status(raiz: &Path) -> Result<(), String> {
-    println!("=== Repositorio ===");
-    visible(
-        raiz,
-        "git",
-        &["status".into(), "--short".into(), "--branch".into()],
-    )?;
+    println!("=== Fuente de Korunix ===");
+
+    if raiz.join(".git").exists() {
+        visible(
+            raiz,
+            "git",
+            &["status".into(), "--short".into(), "--branch".into()],
+        )?;
+    } else {
+        println!("Distribución de producto sin metadatos Git.");
+    }
+
     println!("\n=== Equipo ===");
     println!("Host: {}", resolver_equipo(raiz)?);
     println!("Cargador: {}", bootloader());
@@ -6029,6 +6042,52 @@ fn bootstrap_hardware_target(raiz: &Path, host: &str) -> PathBuf {
         .join(format!("{host}-detectado.nix"))
 }
 
+fn bootstrap_graphics_json(graphics_json: &str) -> Result<String, String> {
+    let graphics: serde_json::Value = serde_json::from_str(graphics_json).map_err(|error| {
+        format!("No pude interpretar las GPU detectadas durante la adopción: {error}")
+    })?;
+
+    let devices = graphics
+        .as_array()
+        .ok_or_else(|| "La detección gráfica no produjo una lista válida.".to_string())?;
+
+    let allowed = [
+        "pciAddress",
+        "name",
+        "vendor",
+        "vendorId",
+        "deviceId",
+        "subsystemVendorId",
+        "subsystemDeviceId",
+        "driver",
+        "primary",
+        "kind",
+        "nvidiaOpen",
+    ];
+
+    let mut normalized = Vec::with_capacity(devices.len());
+
+    for device in devices {
+        let object = device
+            .as_object()
+            .ok_or_else(|| "La detección gráfica contiene una entrada inválida.".to_string())?;
+
+        let mut clean = serde_json::Map::new();
+
+        for key in allowed {
+            let value = object.get(key).cloned().ok_or_else(|| {
+                format!("La detección gráfica no contiene el campo obligatorio {key}.")
+            })?;
+            clean.insert(key.to_string(), value);
+        }
+
+        normalized.push(serde_json::Value::Object(clean));
+    }
+
+    serde_json::to_string(&normalized)
+        .map_err(|error| format!("No pude normalizar las GPU detectadas: {error}"))
+}
+
 fn bootstrap_hardware_text_from(
     source_text: &str,
     firmware: &str,
@@ -6038,13 +6097,7 @@ fn bootstrap_hardware_text_from(
         return Err("Tipo de firmware inválido durante la adopción.".into());
     }
 
-    let graphics: serde_json::Value = serde_json::from_str(graphics_json).map_err(|error| {
-        format!("No pude interpretar las GPU detectadas durante la adopción: {error}")
-    })?;
-
-    if !graphics.is_array() {
-        return Err("La detección gráfica no produjo una lista válida.".into());
-    }
+    let graphics_json = bootstrap_graphics_json(graphics_json)?;
 
     let trimmed = source_text.trim_end();
     if !trimmed.ends_with('}') {
@@ -6078,7 +6131,7 @@ fn bootstrap_hardware_text_from(
     ));
     output.push_str(&format!(
         "  korunix.hardware.graphics = builtins.fromJSON {};\n",
-        json_texto(graphics_json)
+        json_texto(&graphics_json)
     ));
     output.push_str(&source_text[final_brace..]);
 
@@ -7562,7 +7615,8 @@ mod tests {
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
 }
 "#;
-        let graphics = r#"[{"pciAddress":"0000:01:00.0","name":"GPU de prueba","vendor":"amd","vendorId":"1002","deviceId":"0001","subsystemVendorId":"0000","subsystemDeviceId":"0000","driver":"amdgpu","primary":true,"kind":"unknown","nvidiaOpen":false}]"#;
+
+        let graphics = r#"[{"pciAddress":"0000:01:00.0","name":"GPU de prueba","vendor":"amd","vendorId":"1002","deviceId":"0001","subsystemVendorId":"0000","subsystemDeviceId":"0000","class":"030000","driver":"amdgpu","primary":true,"kind":"unknown","nvidiaOpen":false}]"#;
 
         let adopted =
             bootstrap_hardware_text_from(original, "uefi", graphics).expect("hardware válido");
@@ -7571,6 +7625,7 @@ mod tests {
         assert!(adopted.contains(r#"korunix.hardware.firmware = "uefi";"#));
         assert!(adopted.contains("korunix.hardware.graphics = builtins.fromJSON"));
         assert!(adopted.contains("GPU de prueba"));
+        assert!(!adopted.contains(r#"\"class\""#));
         assert!(adopted.starts_with("# NO CAMBIES ESTE ARCHIVO A MANO."));
     }
 
