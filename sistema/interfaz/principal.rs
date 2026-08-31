@@ -9309,7 +9309,7 @@ fn terminos_busqueda_pagina(nombre: &str) -> &'static str {
             "firmware dispositivos actualizaciones bios uefi placa hardware"
         }
         "applications" => {
-            "aplicaciones programas software navegador browser firefox chrome correo thunderbird editor texto kwrite kate oficina juegos diseño multimedia flatpak"
+            "aplicaciones programas software navegador browser firefox chrome correo thunderbird editor texto kwrite kate oficina juegos diseño multimedia instalar eliminar"
         }
         "appearance" => {
             "apariencia tema claro oscuro automático automatico everforest escritorio niri hyprland plasma cinnamon fondo iconos"
@@ -9344,151 +9344,231 @@ fn nombre_desde_id(id: &str) -> String {
         .join(" ")
 }
 
-fn nombre_aplicacion_humano(id: &str) -> String {
-    match id {
-        "baobab" => "Uso del disco".to_string(),
-        "birdfont" => "Birdfont".to_string(),
-        "cohesion" => "Cohesion".to_string(),
-        "darktable" => "Darktable".to_string(),
-        "figma-linux" => "Figma".to_string(),
-        "firefox" => "Firefox".to_string(),
-        "fontforge" => "FontForge".to_string(),
-        "genshin-impact" => "Genshin Impact".to_string(),
-        "google-chrome" => "Google Chrome".to_string(),
-        "heroic" => "Heroic Games Launcher".to_string(),
-        "honkai-star-rail" => "Honkai: Star Rail".to_string(),
-        "inkscape" => "Inkscape".to_string(),
-        "kdenlive" => "Kdenlive".to_string(),
-        "krita" => "Krita".to_string(),
-        "localsend" => "LocalSend".to_string(),
-        "lutris" => "Lutris".to_string(),
-        "obs-studio" => "OBS Studio".to_string(),
-        "obsidian" => "Obsidian".to_string(),
-        "onlyoffice-desktopeditors" => "ONLYOFFICE".to_string(),
-        "peazip" => "PeaZip".to_string(),
-        "polyglot" => "Polyglot".to_string(),
-        "prismlauncher" => "Prism Launcher".to_string(),
-        "protonplus" => "ProtonPlus".to_string(),
-        "rapidraw" => "RapidRAW".to_string(),
-        "scrcpy" => "Controlar Android".to_string(),
-        "spotdl" => "spotDL".to_string(),
-        "spotify" => "Spotify".to_string(),
-        "steam" => "Steam".to_string(),
-        "vesktop" => "Vesktop".to_string(),
-        "vlc" => "VLC".to_string(),
-        "vscode" => "Visual Studio Code".to_string(),
-        _ => nombre_desde_id(id),
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PresentacionAplicacion {
+    nombre: String,
+    descripcion: String,
+    categoria: String,
+}
+
+fn presentacion_aplicacion(datos: &Value, id: &str) -> Option<PresentacionAplicacion> {
+    let entrada = datos.get("presentation")?.get(id)?;
+
+    Some(PresentacionAplicacion {
+        nombre: entrada.get("name")?.as_str()?.to_string(),
+        descripcion: entrada.get("description")?.as_str()?.to_string(),
+        categoria: entrada.get("category")?.as_str()?.to_string(),
+    })
+}
+
+fn ids_aplicaciones_seleccionadas(datos: &Value) -> Vec<String> {
+    datos
+        .get("selected")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|valor| valor.as_str().map(str::to_string))
+        .collect()
+}
+
+fn escritorio_usa_noctalia(datos: &Value) -> bool {
+    let principal = datos
+        .pointer("/desktop/primary")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+
+    if matches!(principal, "niri" | "hyprland") {
+        return true;
     }
+
+    datos
+        .pointer("/desktop/additional")
+        .and_then(Value::as_array)
+        .map(|adicionales| {
+            adicionales
+                .iter()
+                .any(|valor| matches!(valor.as_str(), Some("niri" | "hyprland")))
+        })
+        .unwrap_or(false)
 }
 
-fn aplicacion_derivada_o_interna(id: &str) -> bool {
-    matches!(
-        id,
-        "android-tools"
-            | "git"
-            | "just"
-            | "tree"
-            | "wget"
-            | "rar"
-            | "unrar"
-            | "xwayland-satellite"
-            | "pywalfox-native"
-            | "alacritty"
-            | "fish"
-            | "thunderbird"
-            | "gimp"
-            | "gnome-calculator"
-            | "gnome-calendar"
-            | "gnome-maps"
-            | "snapshot"
-            | "showtime"
-            | "gnome-music"
-            | "nautilus"
-            | "loupe"
-            | "papers"
-            | "gnome-text-editor"
-            | "file-roller"
-            | "nemo"
-            | "xviewer"
-            | "xreader"
-            | "xed"
-            | "dolphin"
-            | "gwenview"
-            | "okular"
-            | "haruna"
-            | "elisa"
-            | "merkuro"
-            | "marble"
-            | "kamoso"
-            | "kcalc"
-            | "ark"
-    )
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct UnidadActualizacion {
+    titulo: String,
+    detalle: String,
+    targets: Vec<String>,
 }
 
-fn categoria_aplicacion(id: &str) -> &'static str {
-    match id {
-        "firefox" | "google-chrome" | "vesktop" | "localsend" => "Internet y comunicación",
-        "onlyoffice-desktopeditors" | "libreoffice" | "polyglot" | "obsidian" => {
-            "Oficina y estudio"
+fn targets_presentes(objetivos: &[String], ids: &[&str]) -> Vec<String> {
+    ids.iter()
+        .filter(|id| objetivos.iter().any(|objetivo| objetivo.as_str() == **id))
+        .map(|id| (*id).to_string())
+        .collect()
+}
+
+fn unidades_actualizacion_humanas(
+    objetivos: &[String],
+    aplicaciones: &[String],
+    noctalia_relevante: bool,
+) -> Vec<UnidadActualizacion> {
+    let mut unidades = Vec::<UnidadActualizacion>::new();
+    let mut usados = Vec::<String>::new();
+
+    let juegos_instalados = aplicaciones
+        .iter()
+        .any(|id| matches!(id.as_str(), "genshin-impact" | "honkai-star-rail"));
+    let juegos = targets_presentes(objetivos, &["aagl", "aaglStable"]);
+    if juegos_instalados && !juegos.is_empty() {
+        usados.extend(juegos.iter().cloned());
+        unidades.push(UnidadActualizacion {
+            titulo: "Juegos instalados".to_string(),
+            detalle: "Actualiza los launchers y la compatibilidad que necesitan los juegos de anime instalados.".to_string(),
+            targets: juegos,
+        });
+    }
+
+    let spotify = targets_presentes(objetivos, &["spicetify-nix"]);
+    if aplicaciones.iter().any(|id| id == "spotify") && !spotify.is_empty() {
+        usados.extend(spotify.iter().cloned());
+        unidades.push(UnidadActualizacion {
+            titulo: "Spotify".to_string(),
+            detalle:
+                "Actualiza la integración funcional y visual que Korunix mantiene para Spotify."
+                    .to_string(),
+            targets: spotify,
+        });
+    }
+
+    let steam = targets_presentes(objetivos, &["millennium"]);
+    if aplicaciones.iter().any(|id| id == "steam") && !steam.is_empty() {
+        usados.extend(steam.iter().cloned());
+        unidades.push(UnidadActualizacion {
+            titulo: "Steam".to_string(),
+            detalle: "Actualiza la integración de Steam administrada junto con su instalación."
+                .to_string(),
+            targets: steam,
+        });
+    }
+
+    let noctalia = targets_presentes(objetivos, &["noctalia"]);
+    if noctalia_relevante && !noctalia.is_empty() {
+        usados.extend(noctalia.iter().cloned());
+        unidades.push(UnidadActualizacion {
+            titulo: "Noctalia".to_string(),
+            detalle: "Actualiza el panel y las integraciones utilizadas por Niri y Hyprland."
+                .to_string(),
+            targets: noctalia,
+        });
+    }
+
+    let sistema = objetivos
+        .iter()
+        .filter(|id| !usados.iter().any(|usado| usado == *id))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    if !sistema.is_empty() {
+        unidades.insert(
+            0,
+            UnidadActualizacion {
+                titulo: "Sistema y aplicaciones".to_string(),
+                detalle: "Actualiza NixOS y las aplicaciones que comparten su base. Korunix incluye automáticamente las piezas de compatibilidad necesarias.".to_string(),
+                targets: sistema,
+            },
+        );
+    }
+
+    unidades
+}
+
+fn targets_unidades_seleccionadas(unidades: &[(Vec<String>, gtk::CheckButton)]) -> Vec<String> {
+    let mut resultado = unidades
+        .iter()
+        .filter(|(_, check)| check.is_active())
+        .flat_map(|(targets, _)| targets.iter().cloned())
+        .collect::<Vec<_>>();
+
+    resultado.sort();
+    resultado.dedup();
+    resultado
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ResultadoAplicacionExterna {
+    id: String,
+    fuente: String,
+    nombre: String,
+    descripcion: String,
+}
+
+fn resultados_aplicaciones_externas(
+    datos: &Value,
+    fuente: &str,
+) -> Vec<ResultadoAplicacionExterna> {
+    let mut resultados = Vec::new();
+
+    if let Some(items) = datos.get("results").and_then(Value::as_array) {
+        for item in items.iter().take(40) {
+            let Some(id) = item.get("id").and_then(Value::as_str) else {
+                continue;
+            };
+
+            let nombre = item
+                .get("name")
+                .and_then(Value::as_str)
+                .filter(|valor| !valor.trim().is_empty())
+                .unwrap_or(id);
+
+            let descripcion = item
+                .get("description")
+                .and_then(Value::as_str)
+                .filter(|valor| !valor.trim().is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("Instala {nombre} como aplicación adicional."));
+
+            resultados.push(ResultadoAplicacionExterna {
+                id: id.to_string(),
+                fuente: fuente.to_string(),
+                nombre: nombre.to_string(),
+                descripcion,
+            });
         }
-        "birdfont" | "cohesion" | "darktable" | "figma-linux" | "fontforge" | "inkscape"
-        | "krita" | "rapidraw" => "Diseño",
-        "obs-studio" | "spotify" | "spotdl" | "vlc" | "kdenlive" => "Multimedia",
-        "steam" | "heroic" | "lutris" | "prismlauncher" | "genshin-impact" | "honkai-star-rail"
-        | "protonplus" => "Juegos",
-        "scrcpy" => "Dispositivos",
-        "vscode" => "Desarrollo",
-        "peazip" | "baobab" => "Archivos y utilidades",
-        _ => "Otras aplicaciones",
     }
-}
 
-fn objetivo_actualizacion_humano(id: &str) -> (String, String) {
-    let (titulo, detalle) = match id {
-        "nixpkgs" => (
-            "Sistema y aplicaciones",
-            "Base principal de NixOS y de las aplicaciones que comparten esa versión.",
-        ),
-        "nixpkgsStable" => (
-            "Compatibilidad estable",
-            "Base estable para componentes que necesitan una versión más conservadora.",
-        ),
-        "nix-flatpak" => (
-            "Aplicaciones Flatpak",
-            "Integración que mantiene las aplicaciones Flatpak administradas por Korunix.",
-        ),
-        "aagl" => (
-            "Juegos de anime",
-            "Lanzadores y compatibilidad de los juegos administrados mediante AAGL.",
-        ),
-        "aaglStable" => (
-            "Compatibilidad estable para juegos",
-            "Base estable utilizada cuando esos juegos necesitan una versión más conservadora.",
-        ),
-        "noctalia" => ("Noctalia", "Panel e integraciones de Niri y Hyprland."),
-        "hatter" => (
-            "Iconos Hatter",
-            "Paquete de iconos utilizado por la apariencia Everforest.",
-        ),
-        "spicetify-nix" => (
-            "Spotify personalizado",
-            "Integración visual y funcional que Korunix aplica a Spotify.",
-        ),
-        "millennium" => (
-            "Integración de Steam",
-            "Personalización administrada de Steam.",
-        ),
-        "alejandra" => (
-            "Herramientas internas de Korunix",
-            "Formato y comprobaciones que Korunix mantiene automáticamente.",
-        ),
-        _ => (
-            "Componente administrado por Korunix",
-            "Se actualizará únicamente cuando sea compatible con el resto del sistema.",
-        ),
-    };
+    if let Some(items) = datos.get("results").and_then(Value::as_object) {
+        for (id, item) in items.iter().take(40) {
+            let nombre = item
+                .get("pname")
+                .or_else(|| item.get("name"))
+                .and_then(Value::as_str)
+                .filter(|valor| !valor.trim().is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| {
+                    id.rsplit('.')
+                        .next()
+                        .unwrap_or(id)
+                        .replace('-', " ")
+                        .replace('_', " ")
+                });
 
-    (titulo.to_string(), detalle.to_string())
+            let descripcion = item
+                .get("description")
+                .and_then(Value::as_str)
+                .filter(|valor| !valor.trim().is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("Instala {nombre} como aplicación adicional."));
+
+            resultados.push(ResultadoAplicacionExterna {
+                id: id.clone(),
+                fuente: fuente.to_string(),
+                nombre,
+                descripcion,
+            });
+        }
+    }
+
+    resultados
 }
 
 fn nombre_escritorio_humano(id: &str) -> String {
@@ -9510,16 +9590,17 @@ fn variante_teclado_humana(valor: &str) -> String {
     }
 }
 
-fn fila_aplicacion(estado: Rc<Estado>, id: String, fuente: String, activa: bool) -> adw::ActionRow {
+fn fila_aplicacion(
+    estado: Rc<Estado>,
+    id: String,
+    fuente: String,
+    nombre: String,
+    descripcion: String,
+    activa: bool,
+) -> adw::ActionRow {
     let fila = adw::ActionRow::new();
-    let nombre = nombre_aplicacion_humano(&id);
     fila.set_title(&nombre);
-    fila.set_tooltip_text(Some(&id));
-    fila.set_subtitle(match fuente.as_str() {
-        "nixpkgs" => "Catálogo de NixOS",
-        "flatpak" => "Flatpak",
-        _ => "Disponible en Korunix",
-    });
+    fila.set_subtitle(&descripcion);
 
     let boton = gtk::Button::with_label(texto(
         estado.idioma,
@@ -9551,16 +9632,11 @@ fn fila_aplicacion(estado: Rc<Estado>, id: String, fuente: String, activa: bool)
         }
 
         let cuerpo = if activa {
-            format!("¿Retirar «{nombre}» de este equipo?")
-        } else {
             format!(
-                "¿Instalar «{nombre}» desde {}?",
-                match fuente.as_str() {
-                    "nixpkgs" => "el catálogo de NixOS",
-                    "flatpak" => "Flatpak",
-                    _ => "Korunix",
-                }
+                "¿Eliminar «{nombre}»? Korunix retirará esta aplicación de la configuración del equipo."
             )
+        } else {
+            format!("¿Instalar «{nombre}»? {descripcion}")
         };
 
         let dialogo = dialogo_accion(
@@ -9583,7 +9659,7 @@ fn fila_aplicacion(estado: Rc<Estado>, id: String, fuente: String, activa: bool)
                 return;
             }
 
-            let ejecucion = vec![
+            let ejecutar = vec![
                 "applications".to_string(),
                 "set".to_string(),
                 id_aplicar.clone(),
@@ -9594,7 +9670,7 @@ fn fila_aplicacion(estado: Rc<Estado>, id: String, fuente: String, activa: bool)
                 "--json".to_string(),
             ];
 
-            match ejecutar_json_owned(&estado_aplicar, &ejecucion)
+            match ejecutar_json_owned(&estado_aplicar, &ejecutar)
                 .and_then(|_| aplicar_configuracion_gui(&estado_aplicar))
             {
                 Ok(_) => {
@@ -9822,7 +9898,7 @@ fn agregar_roles_predeterminados(
         let browser = adw::ComboRow::new();
         browser.set_title(&localizar_visible(
             idioma_actual(),
-            "¿Qué navegador quieres usar por defecto?",
+            "Navegador predeterminado",
         ));
         browser.set_model(Some(&browser_modelo));
         browser.set_selected(browser_indice);
@@ -9875,7 +9951,7 @@ fn agregar_roles_predeterminados(
             let editor = adw::ComboRow::new();
             editor.set_title(&localizar_visible(
                 idioma_actual(),
-                "¿Qué editor de texto prefieres en Plasma?",
+                "Editor de texto en Plasma",
             ));
             editor.set_subtitle(&localizar_visible(
                 idioma_actual(),
@@ -10030,17 +10106,7 @@ fn pagina_aplicaciones(
 ) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
 
-    let seleccionados = datos
-        .get("selected")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|valor| valor.as_str().map(str::to_string))
-        .collect::<Vec<_>>();
-
-    agregar_roles_predeterminados(&pagina, Rc::clone(&estado), &seleccionados, predeterminados);
-
+    let seleccionados = ids_aplicaciones_seleccionadas(datos);
     let catalogo = datos
         .get("catalog")
         .and_then(Value::as_array)
@@ -10049,6 +10115,55 @@ fn pagina_aplicaciones(
         .into_iter()
         .filter_map(|valor| valor.as_str().map(str::to_string))
         .collect::<Vec<_>>();
+
+    // El buscador pertenece al inicio de Aplicaciones. Filtra el catálogo
+    // curado al escribir y solo consulta catálogos externos cuando la persona
+    // lo pide; la fuente concreta nunca se convierte en una pregunta.
+    let grupo_busqueda = adw::PreferencesGroup::new();
+    grupo_busqueda.set_title(&localizar_visible(idioma_actual(), "Buscar aplicaciones"));
+    grupo_busqueda.set_description(Some(&localizar_visible(
+        idioma_actual(),
+        "Escribe un nombre o una función. Korunix filtra primero sus aplicaciones recomendadas.",
+    )));
+
+    let caja_busqueda = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    let consulta = gtk::SearchEntry::new();
+    consulta.set_placeholder_text(Some(&localizar_visible(
+        idioma_actual(),
+        "Buscar una aplicación",
+    )));
+    consulta.set_size_request(-1, 38);
+
+    let buscar_mas = gtk::Button::with_label(&localizar_visible(
+        idioma_actual(),
+        "Buscar más aplicaciones",
+    ));
+    buscar_mas.set_sensitive(false);
+
+    caja_busqueda.append(&consulta);
+    caja_busqueda.append(&buscar_mas);
+    grupo_busqueda.add(&caja_busqueda);
+    pagina.add(&grupo_busqueda);
+
+    let grupo_externos = adw::PreferencesGroup::new();
+    grupo_externos.set_title(&localizar_visible(
+        idioma_actual(),
+        "Resultados adicionales",
+    ));
+    grupo_externos.set_description(Some(&localizar_visible(
+        idioma_actual(),
+        "Muestra opciones adicionales que Korunix puede instalar de forma compatible.",
+    )));
+    grupo_externos.set_visible(false);
+
+    let resultados_externos = gtk::Box::new(gtk::Orientation::Vertical, 4);
+    grupo_externos.add(&resultados_externos);
+    pagina.add(&grupo_externos);
+
+    agregar_roles_predeterminados(&pagina, Rc::clone(&estado), &seleccionados, predeterminados);
+
+    let mut grupos_filtrables =
+        Vec::<(adw::PreferencesGroup, Vec<(String, adw::ActionRow)>)>::new();
 
     for categoria in [
         "Internet y comunicación",
@@ -10059,127 +10174,158 @@ fn pagina_aplicaciones(
         "Dispositivos",
         "Desarrollo",
         "Archivos y utilidades",
-        "Otras aplicaciones",
+        "Utilidades",
     ] {
         let grupo_catalogo = adw::PreferencesGroup::new();
         grupo_catalogo.set_title(&localizar_visible(idioma_actual(), categoria));
 
-        let mut visibles = 0usize;
+        let mut filas = Vec::<(String, adw::ActionRow)>::new();
 
-        for id in catalogo
-            .iter()
-            .filter(|id| !aplicacion_derivada_o_interna(id))
-            .filter(|id| categoria_aplicacion(id) == categoria)
-        {
+        for id in &catalogo {
+            let Some(presentacion) = presentacion_aplicacion(datos, id) else {
+                continue;
+            };
+
+            if presentacion.categoria != categoria {
+                continue;
+            }
+
             let activa = seleccionados.iter().any(|actual| actual == id);
-            grupo_catalogo.add(&fila_aplicacion(
+            let huella = format!(
+                "{} {} {}",
+                presentacion.nombre, presentacion.descripcion, presentacion.categoria
+            )
+            .to_lowercase();
+
+            let fila = fila_aplicacion(
                 Rc::clone(&estado),
                 id.clone(),
                 "curated".to_string(),
+                localizar_visible(idioma_actual(), &presentacion.nombre),
+                localizar_visible(idioma_actual(), &presentacion.descripcion),
                 activa,
-            ));
-            visibles += 1;
+            );
+
+            grupo_catalogo.add(&fila);
+            filas.push((huella, fila));
         }
 
-        if visibles > 0 {
+        if !filas.is_empty() {
             pagina.add(&grupo_catalogo);
+            grupos_filtrables.push((grupo_catalogo, filas));
         }
     }
 
-    let grupo_busqueda = adw::PreferencesGroup::new();
-    grupo_busqueda.set_title(&localizar_visible(idioma_actual(), "Más aplicaciones"));
-    grupo_busqueda.set_description(Some(
-        "Si no encuentras una aplicación arriba, puedes buscarla en otros catálogos compatibles.",
-    ));
+    let grupos_filtrables = Rc::new(grupos_filtrables);
+    let grupos_busqueda = Rc::clone(&grupos_filtrables);
+    let externos_busqueda = grupo_externos.clone();
+    let resultados_busqueda = resultados_externos.clone();
+    let buscar_mas_busqueda = buscar_mas.clone();
 
-    let caja_busqueda = gtk::Box::new(gtk::Orientation::Vertical, 8);
-    let consulta = gtk::Entry::new();
-    consulta.set_placeholder_text(Some(&localizar_visible(
-        idioma_actual(),
-        "Nombre de la aplicación",
-    )));
+    consulta.connect_search_changed(move |entrada| {
+        let consulta = entrada.text().trim().to_lowercase();
 
-    let fuentes_modelo = gtk::StringList::new(&["Catálogo de NixOS", "Flatpak"]);
-    let fuente = adw::ComboRow::new();
-    fuente.set_title(&localizar_visible(idioma_actual(), "Origen"));
-    fuente.set_model(Some(&fuentes_modelo));
-    fuente.set_selected(0);
+        for (grupo, filas) in grupos_busqueda.iter() {
+            let mut visibles = 0usize;
 
-    let buscar = gtk::Button::with_label(texto(estado.idioma, "search"));
-    buscar.add_css_class("suggested-action");
+            for (huella, fila) in filas {
+                let visible = consulta.is_empty() || huella.contains(&consulta);
+                fila.set_visible(visible);
+                if visible {
+                    visibles += 1;
+                }
+            }
 
-    let resultados = gtk::Box::new(gtk::Orientation::Vertical, 4);
+            grupo.set_visible(visibles > 0);
+        }
 
-    caja_busqueda.append(&consulta);
-    caja_busqueda.append(&fuente);
-    caja_busqueda.append(&buscar);
-    caja_busqueda.append(&resultados);
-    grupo_busqueda.add(&caja_busqueda);
-    pagina.add(&grupo_busqueda);
+        buscar_mas_busqueda.set_sensitive(!consulta.is_empty());
+
+        while let Some(hijo) = resultados_busqueda.first_child() {
+            resultados_busqueda.remove(&hijo);
+        }
+        externos_busqueda.set_visible(false);
+    });
 
     let estado_buscar = Rc::clone(&estado);
+    let consulta_externa = consulta.clone();
     let seleccionados_buscar = seleccionados.clone();
 
-    buscar.connect_clicked(move |_| {
-        while let Some(hijo) = resultados.first_child() {
-            resultados.remove(&hijo);
+    buscar_mas.connect_clicked(move |_| {
+        while let Some(hijo) = resultados_externos.first_child() {
+            resultados_externos.remove(&hijo);
         }
 
-        let texto_busqueda = consulta.text().trim().to_string();
+        let texto_busqueda = consulta_externa.text().trim().to_string();
         if texto_busqueda.is_empty() {
+            grupo_externos.set_visible(false);
             return;
         }
 
-        let fuente_id = if fuente.selected() == 0 {
-            "nixpkgs"
-        } else {
-            "flatpak"
-        };
+        let mut encontrados = 0usize;
+        let mut fuentes_disponibles = 0usize;
+        let mut ultimo_error = None::<String>;
 
-        let args = [
-            "applications",
-            "search",
-            texto_busqueda.as_str(),
-            "--source",
-            fuente_id,
-            "--json",
-        ];
+        for fuente in ["nixpkgs", "flatpak"] {
+            let datos = ejecutar_json(
+                &estado_buscar,
+                &[
+                    "applications",
+                    "search",
+                    texto_busqueda.as_str(),
+                    "--source",
+                    fuente,
+                    "--json",
+                ],
+            );
 
-        let datos = match ejecutar_json(&estado_buscar, &args) {
-            Ok(datos) => datos,
-            Err(error) => {
-                mostrar_error(&estado_buscar, error);
-                return;
-            }
-        };
-
-        if let Some(items) = datos.get("results").and_then(Value::as_array) {
-            for item in items.iter().take(40) {
-                let Some(id) = item.get("id").and_then(Value::as_str) else {
+            let datos = match datos {
+                Ok(datos) => {
+                    fuentes_disponibles += 1;
+                    datos
+                }
+                Err(error) => {
+                    ultimo_error = Some(error);
                     continue;
-                };
-                let token = format!("{fuente_id}:{id}");
-                resultados.append(&fila_aplicacion(
+                }
+            };
+
+            for resultado in resultados_aplicaciones_externas(&datos, fuente) {
+                let token = format!("{}:{}", resultado.fuente, resultado.id);
+                let activa = seleccionados_buscar.iter().any(|actual| actual == &token);
+
+                resultados_externos.append(&fila_aplicacion(
                     Rc::clone(&estado_buscar),
-                    id.to_string(),
-                    fuente_id.to_string(),
-                    seleccionados_buscar.iter().any(|actual| actual == &token),
+                    resultado.id,
+                    resultado.fuente,
+                    resultado.nombre,
+                    resultado.descripcion,
+                    activa,
                 ));
+                encontrados += 1;
             }
+        }
+
+        if fuentes_disponibles == 0 {
+            if let Some(error) = ultimo_error {
+                mostrar_error(&estado_buscar, error);
+            }
+            grupo_externos.set_visible(false);
             return;
         }
 
-        if let Some(items) = datos.get("results").and_then(Value::as_object) {
-            for (id, _) in items.iter().take(40) {
-                let token = format!("{fuente_id}:{id}");
-                resultados.append(&fila_aplicacion(
-                    Rc::clone(&estado_buscar),
-                    id.clone(),
-                    fuente_id.to_string(),
-                    seleccionados_buscar.iter().any(|actual| actual == &token),
-                ));
-            }
+        if encontrados == 0 {
+            let vacio = gtk::Label::new(Some(&localizar_visible(
+                idioma_actual(),
+                "No encontramos más aplicaciones con esa búsqueda.",
+            )));
+            vacio.set_wrap(true);
+            vacio.set_xalign(0.0);
+            vacio.add_css_class("dim-label");
+            resultados_externos.append(&vacio);
         }
+
+        grupo_externos.set_visible(true);
     });
 
     pagina
@@ -10706,20 +10852,22 @@ fn pagina_actualizaciones(
     estado: Rc<Estado>,
     channel: &Value,
     plan_actualizacion: &Value,
+    aplicaciones: &[String],
+    noctalia_relevante: bool,
 ) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
 
     let grupo_todo = adw::PreferencesGroup::new();
     grupo_todo.set_title(texto(estado.idioma, "update_all"));
     grupo_todo.set_description(Some(
-        "Recomendado para la mayoría: actualiza conjuntamente las partes compatibles del sistema y las aplicaciones que Korunix administra.",
+        "Recomendado para la mayoría: Korunix actualiza el sistema y las aplicaciones compatibles como un conjunto coherente.",
     ));
 
     let fila_todo = adw::ActionRow::new();
     fila_todo.set_title(texto(estado.idioma, "update_all"));
-    fila_todo.set_subtitle(&frase_fuentes(
-        estado.idioma,
-        cantidad(plan_actualizacion, "/targets"),
+    fila_todo.set_subtitle(&localizar_visible(
+        idioma_actual(),
+        "Incluye automáticamente las piezas internas que cada actualización necesita.",
     ));
     let todo = gtk::Button::with_label(texto(estado.idioma, "update_all"));
     todo.add_css_class("suggested-action");
@@ -10730,15 +10878,15 @@ fn pagina_actualizaciones(
 
     let estado_todo = Rc::clone(&estado);
     todo.connect_clicked(move |boton| {
-        let plan = match ejecutar_json(&estado_todo, &["update", "--plan", "--json"]) {
-            Ok(plan) => plan,
-            Err(error) => {
-                mostrar_error(&estado_todo, error);
-                return;
-            }
-        };
+        if let Err(error) = ejecutar_json(&estado_todo, &["update", "--plan", "--json"]) {
+            mostrar_error(&estado_todo, error);
+            return;
+        }
 
-        let cuerpo = frase_confirmar_actualizacion(estado_todo.idioma, cantidad(&plan, "/targets"));
+        let cuerpo = localizar_visible(
+            idioma_actual(),
+            "¿Buscar y preparar ahora las actualizaciones compatibles? Korunix conservará el estado actual si la nueva combinación no supera la validación.",
+        );
         let dialogo = dialogo_accion(
             boton,
             &estado_todo,
@@ -10770,7 +10918,7 @@ fn pagina_actualizaciones(
     let grupo_personalizar = adw::PreferencesGroup::new();
     grupo_personalizar.set_title(texto(estado.idioma, "customize_updates"));
     grupo_personalizar.set_description(Some(
-        "Elige qué partes quieres actualizar. Cuando varias dependen de la misma base, Korunix las mantiene juntas para evitar combinaciones incompatibles.",
+        "Elige áreas reconocibles. Korunix mantendrá juntas las dependencias que no pueden actualizarse de forma independiente.",
     ));
 
     let objetivos = plan_actualizacion
@@ -10779,29 +10927,29 @@ fn pagina_actualizaciones(
         .cloned()
         .unwrap_or_default()
         .into_iter()
-        .filter_map(|v| v.as_str().map(str::to_string))
+        .filter_map(|valor| valor.as_str().map(str::to_string))
         .collect::<Vec<_>>();
 
-    let mut checks = Vec::<(String, gtk::CheckButton)>::new();
+    let unidades = unidades_actualizacion_humanas(&objetivos, aplicaciones, noctalia_relevante);
+    let mut checks = Vec::<(Vec<String>, gtk::CheckButton)>::new();
 
-    for objetivo in &objetivos {
+    for unidad in unidades {
         let row = adw::ActionRow::new();
-        let (titulo, detalle) = objetivo_actualizacion_humano(objetivo);
-        row.set_title(&localizar_visible(idioma_actual(), &titulo));
-        row.set_subtitle(&localizar_visible(idioma_actual(), &detalle));
-        row.set_tooltip_text(Some(objetivo));
+        row.set_title(&localizar_visible(idioma_actual(), &unidad.titulo));
+        row.set_subtitle(&localizar_visible(idioma_actual(), &unidad.detalle));
 
         let check = gtk::CheckButton::new();
         check.set_active(true);
         check.set_valign(gtk::Align::Center);
         row.add_suffix(&check);
         grupo_personalizar.add(&row);
-        checks.push((objetivo.clone(), check));
+        checks.push((unidad.targets, check));
     }
 
     let fila_personalizada = adw::ActionRow::new();
     fila_personalizada.set_title(&localizar_visible(idioma_actual(), "Actualizar selección"));
-    let personalizada = gtk::Button::with_label(texto(estado.idioma, "customize_updates"));
+    let personalizada =
+        gtk::Button::with_label(&localizar_visible(idioma_actual(), "Actualizar selección"));
     personalizada.set_valign(gtk::Align::Center);
     fila_personalizada.add_suffix(&personalizada);
     grupo_personalizar.add(&fila_personalizada);
@@ -10809,16 +10957,16 @@ fn pagina_actualizaciones(
 
     let estado_personalizar = Rc::clone(&estado);
     personalizada.connect_clicked(move |boton| {
-        let elegidos = checks
+        let elegidos = targets_unidades_seleccionadas(&checks);
+        let areas = checks
             .iter()
             .filter(|(_, check)| check.is_active())
-            .map(|(id, _)| id.clone())
-            .collect::<Vec<_>>();
+            .count();
 
         if elegidos.is_empty() {
             mostrar_error(
                 &estado_personalizar,
-                "Selecciona al menos una parte para actualizar.",
+                "Selecciona al menos un área para actualizar.",
             );
             return;
         }
@@ -10835,7 +10983,9 @@ fn pagina_actualizaciones(
         let dialogo = dialogo_accion(
             boton,
             &estado_personalizar,
-            &format!("¿Actualizar las {} partes seleccionadas?", elegidos.len()),
+            &format!(
+                "¿Actualizar las {areas} áreas seleccionadas? Korunix incluirá sus dependencias compatibles automáticamente."
+            ),
             "Actualizar selección",
             false,
         );
@@ -10961,9 +11111,19 @@ fn recargar(estado: Rc<Estado>) {
     let people = consultar(&estado, "users");
     mostrar_progreso(&estado, 16, "reading");
     let applications = ejecutar_json(&estado, &["applications", "--json"]);
+    let aplicaciones_actualizacion = applications
+        .as_ref()
+        .ok()
+        .map(ids_aplicaciones_seleccionadas)
+        .unwrap_or_default();
     let defaults = ejecutar_json(&estado, &["defaults", "--json"]);
     mostrar_progreso(&estado, 22, "reading");
     let desktop = ejecutar_json(&estado, &["desktop", "--json"]);
+    let noctalia_actualizacion = desktop
+        .as_ref()
+        .ok()
+        .map(escritorio_usa_noctalia)
+        .unwrap_or(false);
     mostrar_progreso(&estado, 28, "reading");
     let appearance = ejecutar_json(&estado, &["appearance", "--json"]);
     mostrar_progreso(&estado, 34, "reading");
@@ -11101,7 +11261,13 @@ fn recargar(estado: Rc<Estado>) {
             &estado.stack,
             "updates",
             texto(estado.idioma, "updates"),
-            &pagina_actualizaciones(Rc::clone(&estado), &canal, &plan),
+            &pagina_actualizaciones(
+                Rc::clone(&estado),
+                &canal,
+                &plan,
+                &aplicaciones_actualizacion,
+                noctalia_actualizacion,
+            ),
         ),
         (Err(error), _) | (_, Err(error)) => reemplazar_pagina(
             &estado.stack,
@@ -11821,45 +11987,141 @@ mod pruebas_roles_predeterminados_gui {
     }
 
     #[test]
-    fn piezas_tecnicas_no_se_presentan_como_aplicaciones() {
-        for id in [
-            "android-tools",
-            "xwayland-satellite",
-            "git",
-            "just",
-            "rar",
-            "unrar",
-            "gnome-calculator",
-            "loupe",
-            "papers",
-        ] {
-            assert!(aplicacion_derivada_o_interna(id), "{id}");
+    fn presentacion_curada_oculta_dependencias_y_describe_apps() {
+        let datos = serde_json::json!({
+            "presentation": {
+                "firefox": {
+                    "name": "Firefox",
+                    "description": "Navegador web para páginas y enlaces.",
+                    "category": "Internet y comunicación"
+                }
+            }
+        });
+
+        let firefox = presentacion_aplicacion(&datos, "firefox")
+            .expect("Firefox debe tener presentación humana");
+        assert_eq!(firefox.nombre, "Firefox");
+        assert!(!firefox.descripcion.trim().is_empty());
+        assert_eq!(firefox.categoria, "Internet y comunicación");
+
+        assert!(presentacion_aplicacion(&datos, "aagl").is_none());
+        assert!(presentacion_aplicacion(&datos, "kate").is_none());
+        assert!(presentacion_aplicacion(&datos, "android-tools").is_none());
+    }
+
+    #[test]
+    fn actualizaciones_agrupan_dependencias_sin_perder_targets() {
+        let objetivos = vec![
+            "aagl".to_string(),
+            "aaglStable".to_string(),
+            "alejandra".to_string(),
+            "hatter".to_string(),
+            "millennium".to_string(),
+            "nix-flatpak".to_string(),
+            "nixpkgs".to_string(),
+            "nixpkgsStable".to_string(),
+            "noctalia".to_string(),
+            "spicetify-nix".to_string(),
+        ];
+        let aplicaciones = vec![
+            "genshin-impact".to_string(),
+            "spotify".to_string(),
+            "steam".to_string(),
+        ];
+
+        let unidades = unidades_actualizacion_humanas(&objetivos, &aplicaciones, true);
+        let titulos = unidades
+            .iter()
+            .map(|unidad| unidad.titulo.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            titulos,
+            [
+                "Sistema y aplicaciones",
+                "Juegos instalados",
+                "Spotify",
+                "Steam",
+                "Noctalia"
+            ]
+        );
+
+        for titulo in &titulos {
+            assert!(![
+                "aagl",
+                "aaglStable",
+                "alejandra",
+                "hatter",
+                "millennium",
+                "nix-flatpak",
+                "nixpkgs",
+                "nixpkgsStable",
+                "spicetify-nix"
+            ]
+            .contains(titulo));
         }
 
-        assert!(!aplicacion_derivada_o_interna("firefox"));
-        assert!(!aplicacion_derivada_o_interna("steam"));
-        assert!(!aplicacion_derivada_o_interna("peazip"));
+        let mut reconstruidos = unidades
+            .into_iter()
+            .flat_map(|unidad| unidad.targets)
+            .collect::<Vec<_>>();
+        reconstruidos.sort();
+
+        let mut esperados = objetivos;
+        esperados.sort();
+
+        assert_eq!(reconstruidos, esperados);
     }
 
     #[test]
-    fn nombres_visibles_no_exponen_ids_del_catalogo() {
-        assert_eq!(nombre_aplicacion_humano("figma-linux"), "Figma");
+    fn aagl_no_se_convierte_en_fila_si_no_hay_juego_elegido() {
+        let objetivos = vec![
+            "aagl".to_string(),
+            "aaglStable".to_string(),
+            "nixpkgs".to_string(),
+        ];
+
+        let unidades = unidades_actualizacion_humanas(&objetivos, &[], false);
+        assert_eq!(unidades.len(), 1);
+        assert_eq!(unidades[0].titulo, "Sistema y aplicaciones");
+        assert_eq!(unidades[0].targets.len(), 3);
+    }
+
+    #[test]
+    fn noctalia_solo_es_unidad_visible_si_hay_niri_o_hyprland() {
+        let objetivos = vec!["nixpkgs".to_string(), "noctalia".to_string()];
+
+        let sin_noctalia = unidades_actualizacion_humanas(&objetivos, &[], false);
+        assert_eq!(sin_noctalia.len(), 1);
+        assert_eq!(sin_noctalia[0].titulo, "Sistema y aplicaciones");
+        assert_eq!(sin_noctalia[0].targets.len(), 2);
+
+        let con_noctalia = unidades_actualizacion_humanas(&objetivos, &[], true);
         assert_eq!(
-            nombre_aplicacion_humano("onlyoffice-desktopeditors"),
-            "ONLYOFFICE"
+            con_noctalia
+                .iter()
+                .map(|unidad| unidad.titulo.as_str())
+                .collect::<Vec<_>>(),
+            ["Sistema y aplicaciones", "Noctalia"]
         );
-        assert_eq!(nombre_aplicacion_humano("scrcpy"), "Controlar Android");
-        assert_eq!(nombre_escritorio_humano("plasma"), "KDE Plasma");
     }
 
     #[test]
-    fn actualizaciones_tienen_proposito_humano() {
-        let (titulo, detalle) = objetivo_actualizacion_humano("nixpkgs");
-        assert_eq!(titulo, "Sistema y aplicaciones");
-        assert!(detalle.contains("NixOS"));
+    fn resultados_externos_conservan_fuente_sin_usarla_como_nombre() {
+        let datos = serde_json::json!({
+            "results": {
+                "legacyPackages.x86_64-linux.demo": {
+                    "pname": "Demo",
+                    "description": "Aplicación de ejemplo"
+                }
+            }
+        });
 
-        let (titulo, _) = objetivo_actualizacion_humano("aagl");
-        assert_eq!(titulo, "Juegos de anime");
+        let resultados = resultados_aplicaciones_externas(&datos, "nixpkgs");
+        assert_eq!(resultados.len(), 1);
+        assert_eq!(resultados[0].nombre, "Demo");
+        assert_eq!(resultados[0].fuente, "nixpkgs");
+        assert_eq!(resultados[0].descripcion, "Aplicación de ejemplo");
     }
 
     #[test]

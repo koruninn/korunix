@@ -5073,6 +5073,7 @@ fn host_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
 fn applications_state_json(raiz: &Path) -> Result<String, String> {
     let seleccion = nix_config_json(raiz, "applications")?;
     let catalogo = nix_config_json(raiz, "internal.applicationCatalog")?;
+    let presentacion = nix_config_json(raiz, "internal.applicationPresentation")?;
 
     jq0(
         raiz,
@@ -5084,11 +5085,15 @@ fn applications_state_json(raiz: &Path) -> Result<String, String> {
             "--argjson".into(),
             "catalog".into(),
             catalogo,
+            "--argjson".into(),
+            "presentation".into(),
+            presentacion,
             r#"{
-              schemaVersion:1,
+              schemaVersion:2,
               kind:"korunix-applications-state",
               selected:$selected,
               catalog:$catalog,
+              presentation:$presentation,
               ownership:"korunix",
               sources:["curated","nixpkgs","flatpak"]
             }"#

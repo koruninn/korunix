@@ -87,6 +87,211 @@
 
   knownApplications = (builtins.attrNames packageMap) ++ specialApplications;
 
+  # La interfaz no inventa nombres, categorías ni propósitos. Esta tabla es la
+  # capa de presentación del catálogo curado. La ausencia de una aplicación en
+  # esta tabla significa que es una dependencia, un rol derivado o una pieza
+  # interna que no constituye una elección normal de catálogo.
+  applicationPresentation = {
+    firefox = {
+      name = "Firefox";
+      description = "Navegador web para páginas, enlaces y aplicaciones web.";
+      category = "Internet y comunicación";
+    };
+    "google-chrome" = {
+      name = "Google Chrome";
+      description = "Navegador web alternativo para páginas, enlaces y servicios web.";
+      category = "Internet y comunicación";
+    };
+    vesktop = {
+      name = "Vesktop";
+      description = "Cliente de Discord para conversaciones, llamadas y comunidades.";
+      category = "Internet y comunicación";
+    };
+    localsend = {
+      name = "LocalSend";
+      description = "Envía archivos entre dispositivos cercanos mediante la red local.";
+      category = "Internet y comunicación";
+    };
+
+    "onlyoffice-desktopeditors" = {
+      name = "ONLYOFFICE";
+      description = "Suite para crear y editar documentos, hojas de cálculo y presentaciones.";
+      category = "Oficina y estudio";
+    };
+    libreoffice = {
+      name = "LibreOffice";
+      description = "Suite ofimática compatible para documentos, hojas de cálculo y presentaciones.";
+      category = "Oficina y estudio";
+    };
+    obsidian = {
+      name = "Obsidian";
+      description = "Organiza notas en Markdown y bases personales de conocimiento.";
+      category = "Oficina y estudio";
+    };
+    polyglot = {
+      name = "Polyglot";
+      description = "Herramientas para diseñar, documentar y mantener lenguas construidas.";
+      category = "Oficina y estudio";
+    };
+    cohesion = {
+      name = "Cohesion";
+      description = "Cliente de escritorio no oficial para trabajar con Notion en Linux.";
+      category = "Oficina y estudio";
+    };
+
+    birdfont = {
+      name = "Birdfont";
+      description = "Crea y edita fuentes tipográficas.";
+      category = "Diseño";
+    };
+    darktable = {
+      name = "Darktable";
+      description = "Organiza y revela fotografías, especialmente archivos RAW.";
+      category = "Diseño";
+    };
+    "figma-linux" = {
+      name = "Figma";
+      description = "Cliente de escritorio para trabajar con diseños y prototipos de Figma.";
+      category = "Diseño";
+    };
+    fontforge = {
+      name = "FontForge";
+      description = "Crea, inspecciona y modifica tipografías.";
+      category = "Diseño";
+    };
+    inkscape = {
+      name = "Inkscape";
+      description = "Crea ilustraciones, diagramas y gráficos vectoriales.";
+      category = "Diseño";
+    };
+    krita = {
+      name = "Krita";
+      description = "Aplicación de dibujo, ilustración y pintura digital.";
+      category = "Diseño";
+    };
+    rapidraw = {
+      name = "RapidRAW";
+      description = "Revela y ajusta fotografías RAW mediante un flujo de edición visual.";
+      category = "Diseño";
+    };
+
+    kdenlive = {
+      name = "Kdenlive";
+      description = "Editor de vídeo multipista para montar y producir proyectos audiovisuales.";
+      category = "Multimedia";
+    };
+    vlc = {
+      name = "VLC";
+      description = "Reproductor multimedia opcional para una amplia variedad de formatos.";
+      category = "Multimedia";
+    };
+    "obs-studio" = {
+      name = "OBS Studio";
+      description = "Graba la pantalla, cámaras y otras fuentes, y permite realizar transmisiones.";
+      category = "Multimedia";
+    };
+    spotify = {
+      name = "Spotify";
+      description = "Cliente de Spotify con la integración funcional administrada por Korunix.";
+      category = "Multimedia";
+    };
+
+    heroic = {
+      name = "Heroic Games Launcher";
+      description = "Administra bibliotecas de juegos compatibles desde un lanzador de escritorio.";
+      category = "Juegos";
+    };
+    lutris = {
+      name = "Lutris";
+      description = "Organiza y ejecuta juegos de distintas fuentes y entornos de compatibilidad.";
+      category = "Juegos";
+    };
+    prismlauncher = {
+      name = "Prism Launcher";
+      description = "Administra instalaciones, perfiles e instancias de Minecraft.";
+      category = "Juegos";
+    };
+    protonplus = {
+      name = "ProtonPlus";
+      description = "Administra herramientas de compatibilidad como Proton para juegos y aplicaciones.";
+      category = "Juegos";
+    };
+    steam = {
+      name = "Steam";
+      description = "Instala Steam con Remote Play y soporte de servidor dedicado administrados por Korunix.";
+      category = "Juegos";
+    };
+    "genshin-impact" = {
+      name = "Genshin Impact";
+      description = "Instala el lanzador compatible de Genshin Impact; Korunix gestiona AAGL por debajo.";
+      category = "Juegos";
+    };
+    "honkai-star-rail" = {
+      name = "Honkai: Star Rail";
+      description = "Instala el lanzador compatible de Honkai: Star Rail; Korunix gestiona AAGL por debajo.";
+      category = "Juegos";
+    };
+
+    scrcpy = {
+      name = "Controlar Android";
+      description = "Muestra y controla un dispositivo Android conectado desde el equipo.";
+      category = "Dispositivos";
+    };
+    valent = {
+      name = "Valent";
+      description = "Conecta el teléfono con el escritorio para compartir funciones compatibles.";
+      category = "Dispositivos";
+    };
+
+    vscode = {
+      name = "Visual Studio Code";
+      description = "Editor de código con extensiones, terminal integrada y herramientas de desarrollo.";
+      category = "Desarrollo";
+    };
+
+    peazip = {
+      name = "PeaZip";
+      description = "Gestor avanzado para crear, abrir y convertir archivos comprimidos.";
+      category = "Archivos y utilidades";
+    };
+    baobab = {
+      name = "Uso del disco";
+      description = "Muestra qué carpetas y archivos están ocupando espacio en el equipo.";
+      category = "Archivos y utilidades";
+    };
+
+    "gnome-characters" = {
+      name = "Caracteres";
+      description = "Busca y copia símbolos, caracteres especiales y emoji.";
+      category = "Utilidades";
+    };
+    "gnome-clocks" = {
+      name = "Relojes";
+      description = "Ofrece relojes, alarmas, temporizadores y cronómetro.";
+      category = "Utilidades";
+    };
+    "gnome-disk-utility" = {
+      name = "Discos";
+      description = "Inspecciona unidades y permite realizar tareas avanzadas sobre discos y particiones.";
+      category = "Utilidades";
+    };
+    "gnome-font-viewer" = {
+      name = "Tipografías";
+      description = "Previsualiza archivos tipográficos antes de instalarlos o utilizarlos.";
+      category = "Utilidades";
+    };
+    "gnome-weather" = {
+      name = "Tiempo";
+      description = "Consulta el tiempo actual y el pronóstico de las ubicaciones elegidas.";
+      category = "Utilidades";
+    };
+    "simple-scan" = {
+      name = "Escáner";
+      description = "Digitaliza documentos e imágenes con escáneres compatibles.";
+      category = "Utilidades";
+    };
+  };
+
   isNixpkgsSelection = name: lib.hasPrefix "nixpkgs:" name;
   isFlatpakSelection = name: lib.hasPrefix "flatpak:" name;
 
@@ -493,8 +698,40 @@ in {
     description = "Catálogo Nix que consume el motor de Korunix.";
   };
 
+  options.korunix.internal.applicationPresentation = lib.mkOption {
+    type = lib.types.attrsOf (lib.types.submodule ({...}: {
+      options = {
+        name = lib.mkOption {
+          type = lib.types.str;
+          description = "Nombre humano de la aplicación.";
+        };
+
+        description = lib.mkOption {
+          type = lib.types.str;
+          description = "Explicación breve de qué instala y para qué sirve.";
+        };
+
+        category = lib.mkOption {
+          type = lib.types.str;
+          description = "Categoría humana utilizada por la interfaz.";
+        };
+      };
+    }));
+    readOnly = true;
+    internal = true;
+    default = applicationPresentation;
+    description = "Presentación humana del catálogo curado que consume la interfaz.";
+  };
+
   config = lib.mkIf config.korunix.enable {
     assertions = [
+      {
+        assertion =
+          lib.all
+          (name: lib.elem name knownApplications)
+          (builtins.attrNames applicationPresentation);
+        message = "La presentación humana contiene una aplicación que no pertenece al catálogo.";
+      }
       {
         assertion = unknownApplications == [];
         message =

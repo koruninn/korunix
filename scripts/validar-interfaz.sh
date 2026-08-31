@@ -30,10 +30,23 @@ grep -Fq 'fila.set_size_request(-1, 60)' "$interfaz"
 grep -Fq 'busqueda_global.set_size_request(-1, 38)' "$interfaz"
 
 # Las superficies normales deben presentar objetivos humanos.
-grep -Fq 'fn aplicacion_derivada_o_interna' "$interfaz"
-grep -Fq 'fn nombre_aplicacion_humano' "$interfaz"
-grep -Fq 'fn objetivo_actualizacion_humano' "$interfaz"
+grep -Fq 'fn presentacion_aplicacion' "$interfaz"
+grep -Fq 'fn unidades_actualizacion_humanas' "$interfaz"
+grep -Fq 'fn resultados_aplicaciones_externas' "$interfaz"
+grep -Fq 'Buscar más aplicaciones' "$interfaz"
+grep -Fq 'Navegador predeterminado' "$interfaz"
+grep -Fq 'Editor de texto en Plasma' "$interfaz"
 grep -Fq 'KDE Plasma' "$interfaz"
+
+if grep -Fq 'fuentes_modelo = gtk::StringList' "$interfaz"; then
+  echo "ERROR: Aplicaciones volvió a pedir una fuente técnica al usuario." >&2
+  exit 1
+fi
+
+if grep -Fq 'fila.set_subtitle(match fuente.as_str()' "$interfaz"; then
+  echo "ERROR: una fila de aplicación volvió a usar la fuente como descripción." >&2
+  exit 1
+fi
 grep -Fq 'Configuración actual' "$interfaz"
 grep -Fq 'grupo.set_visible(false)' "$interfaz"
 
@@ -58,5 +71,7 @@ echo "✓ búsqueda vive en la navegación lateral"
 echo "✓ adaptación recupera el breakpoint de 819 px"
 echo "✓ filas de navegación conservan 60 px"
 echo "✓ aplicaciones técnicas derivadas no son decisiones visibles"
-echo "✓ actualizaciones tienen propósito humano"
+echo "✓ catálogo describe qué instala cada aplicación y para qué sirve"
+echo "✓ buscador de aplicaciones vive arriba y oculta la fuente técnica"
+echo "✓ actualizaciones agrupan dependencias bajo decisiones humanas"
 echo "✓ localización muestra primero valores humanos"
