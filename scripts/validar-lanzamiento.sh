@@ -314,6 +314,19 @@ else
   fallo 'figma-linux-next se filtró al nombre visible del catálogo'
 fi
 
+if grep -Fq 'legacy_figma = "figma-linux.desktop"' "$personas" \
+   && grep -Fq 'current_figma = "figma-linux-next.desktop"' "$personas" \
+   && grep -Fq 'if len(matches) != 1:' "$personas" \
+   && grep -Fq 'backup_dir = state_home / "backups" / "mime"' "$personas" \
+   && grep -Fq 'os.fsync(directory)' "$personas" \
+   && grep -Fq 'Al migrar desde ese cliente histórico' spec.md \
+   && grep -Fq 'La migración es idempotente' spec.md
+then
+  ok 'migración de Figma conserva asociaciones personales'
+else
+  fallo 'la migración de Figma puede sobrescribir estado personal o perdió su contrato'
+fi
+
 if [[ -s spec.md ]] && grep -q '^# Korunix' spec.md; then
   ok 'especificación de producto'
 else

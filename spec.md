@@ -1536,6 +1536,16 @@ evaluable en `x86_64-linux` y `aarch64-linux`.
 El paquete histórico `figma-linux` de Nixpkgs no forma parte del catálogo
 curado mientras esta decisión esté vigente.
 
+Al migrar desde ese cliente histórico, Korunix debe reconciliar también el
+callback de autenticación personal. Si `~/.config/mimeapps.list` conserva como
+única asociación predeterminada de `x-scheme-handler/figma` el lanzador
+`figma-linux.desktop`, Korunix la sustituye por `figma-linux-next.desktop`.
+Antes de modificar el archivo debe crear un respaldo y conservar todas las demás
+asociaciones. Un handler distinto elegido por la persona no se modifica. Un
+archivo ambiguo con varias asociaciones predeterminadas para ese esquema tampoco
+se reinterpreta automáticamente. La migración es idempotente: una asociación ya
+correcta no se vuelve a escribir.
+
 Korunix no debe convertirse solamente en una tienda de aplicaciones. Aplicaciones es una sección dentro de un centro mayor de administración del sistema.
 
 ## 29. Propiedad de configuración

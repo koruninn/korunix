@@ -675,6 +675,136 @@
             raise
     PY
 
+    ${lib.optionalString (lib.elem "figma-linux-next" config.korunix.applications) ''
+      # El módulo de Figma Linux Next declara correctamente figma:// a nivel del
+      # sistema, pero una asociación personal heredada tiene prioridad. Korunix
+      # migra únicamente el valor exacto que dejó el cliente antiguo; cualquier
+      # elección distinta de la persona se conserva.
+      ${pkgs.python3}/bin/python3 - \
+        "$config_home/mimeapps.list" \
+        "$korunix_state" \
+        <<'PY'
+      from __future__ import annotations
+
+      import os
+      import re
+      import shutil
+      import sys
+      import tempfile
+      import time
+      from pathlib import Path
+
+      target = Path(sys.argv[1])
+      state_home = Path(sys.argv[2])
+      mime = "x-scheme-handler/figma"
+      legacy_figma = "figma-linux.desktop"
+      current_figma = "figma-linux-next.desktop"
+
+      if not target.is_file():
+          raise SystemExit(0)
+
+      source = target.read_text(encoding="utf-8")
+      header = re.compile(
+          r"^[ \t]*\[Default Applications\][ \t]*$",
+          re.M,
+      )
+      section = header.search(source)
+
+      if section is None:
+          raise SystemExit(0)
+
+      following = re.search(
+          r"(?m)^[ \t]*\[",
+          source[section.end():],
+      )
+      end = (
+          section.end() + following.start()
+          if following
+          else len(source)
+      )
+
+      before = source[:section.end()]
+      body = source[section.end():end]
+      after = source[end:]
+      lines = body.splitlines(keepends=True)
+
+      assignment = re.compile(
+          r"^([ \t]*)([^#;\s][^=]*?)[ \t]*=(.*)$"
+      )
+
+      matches: list[tuple[int, re.Match[str], str, str]] = []
+
+      for index, line in enumerate(lines):
+          raw = line.rstrip("\r\n")
+          match = assignment.match(raw)
+
+          if match is None:
+              continue
+
+          key = match.group(2).strip()
+          if key != mime:
+              continue
+
+          raw_value = match.group(3).strip()
+          semicolon = ";" if raw_value.endswith(";") else ""
+          normalized = raw_value[:-1].strip() if semicolon else raw_value
+
+          matches.append((index, match, normalized, semicolon))
+
+      # Un archivo ambiguo o personalizado no se reinterpreta automáticamente.
+      if len(matches) != 1:
+          raise SystemExit(0)
+
+      index, match, normalized, semicolon = matches[0]
+
+      if normalized != legacy_figma:
+          raise SystemExit(0)
+
+      newline = "\r\n" if lines[index].endswith("\r\n") else "\n"
+      lines[index] = (
+          f"{match.group(1)}{mime}={current_figma}{semicolon}{newline}"
+      )
+
+      migrated = before + "".join(lines) + after
+
+      if migrated == source:
+          raise SystemExit(0)
+
+      backup_dir = state_home / "backups" / "mime"
+      backup_dir.mkdir(parents=True, exist_ok=True)
+      stamp = f"{time.time_ns()}-{os.getpid()}"
+      shutil.copy2(
+          target,
+          backup_dir / f"mimeapps.list.figma-legacy.{stamp}",
+      )
+
+      descriptor, temporary_name = tempfile.mkstemp(
+          prefix=".mimeapps.list.korunix-figma-",
+          dir=target.parent,
+          text=True,
+      )
+      temporary = Path(temporary_name)
+
+      try:
+          with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+              output.write(migrated)
+              output.flush()
+              os.fsync(output.fileno())
+
+          os.chmod(temporary, target.stat().st_mode)
+          os.replace(temporary, target)
+
+          directory = os.open(target.parent, os.O_RDONLY)
+          try:
+              os.fsync(directory)
+          finally:
+              os.close(directory)
+      except BaseException:
+          temporary.unlink(missing_ok=True)
+          raise
+      PY
+    ''}
+
     ${lib.optionalString (lib.elem "spotify" config.korunix.applications) ''
       # Una implementación anterior creó un lanzador personal que apuntaba a
       # ~/.local/share/korunix/spotify. Los archivos personales tienen prioridad
