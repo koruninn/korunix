@@ -291,6 +291,11 @@ Korunix no está obligado a ser una ventana estrecha.
 - Ambos deben adaptarse a tamaños razonables de pantalla.
 - Debe existir un ancho de contenido máximo para evitar líneas absurdamente largas en pantallas grandes.
 - Debe funcionar correctamente en resoluciones comunes como 1366×768 sin recortes.
+- El panel cotidiano debe seguir siendo utilizable aproximadamente desde 360×520 px. Esa referencia compacta no autoriza clipping, títulos ilegibles ni controles que queden fuera de la ventana.
+- Al entrar en modo compacto, la navegación lateral pasa a una superficie superpuesta o equivalente y el contenido se recompone en una sola columna.
+- Los controles horizontales que ya no quepan deben apilarse, reducir texto secundario o adoptar una presentación compacta antes que forzar un ancho mínimo mayor.
+- Una página alta puede desplazarse verticalmente; una página no debe exigir desplazamiento horizontal para completar una operación normal.
+- La validación visual debe comprobar al menos modo amplio, 1366×768 y una ventana compacta cercana a 360×520.
 
 ### 7.4. Componentes base
 
@@ -428,9 +433,20 @@ GTK repintará internamente los widgets cuando sea necesario, pero la experienci
 Modelo conceptual:
 
 ```text
-appearance.style = default | everforest
+appearance.style = default | dynamic | everforest
 appearance.mode  = light | dark | auto
 ```
+
+`style` y `mode` son ejes diferentes:
+
+- **Predeterminado** utiliza la apariencia natural y coherente del escritorio;
+- **Dinámico** utiliza la integración visual dinámica disponible para ese escritorio, por ejemplo Noctalia en Niri/Hyprland;
+- **Everforest** aplica la identidad Everforest administrada por Korunix;
+- **Claro**, **Oscuro** y **Automático** determinan el modo luminoso dentro del estilo elegido.
+
+“Dinámico” no es sinónimo de “Automático”. El primero describe de dónde proviene y cómo evoluciona la apariencia; el segundo describe la selección claro/oscuro.
+
+La disponibilidad de un estilo se calcula sobre todos los escritorios seleccionados. Korunix no debe ofrecer como elección global una apariencia que no pueda sostener de forma coherente en el conjunto instalado. Si un estilo solo está implementado en algunos escritorios, debe aparecer como no disponible para esa combinación y explicar qué escritorio limita la elección, en vez de aplicar silenciosamente resultados distintos.
 
 Un gestor global de apariencia debe alimentar toda la aplicación. Ninguna página debe mantener su propia lógica de tema.
 
@@ -456,15 +472,17 @@ Las decisiones visuales deben tener respuesta visual inmediata.
 
 Si se cambia:
 
-- Adwaita → Everforest;
-- claro → oscuro;
-- escritorio seleccionado;
+- Predeterminado → Dinámico → Everforest;
+- Claro → Oscuro → Automático;
+- escritorio previsualizado;
 
 Korunix debe cambiar los previews correspondientes en la misma vista, preferentemente con crossfade.
 
+Las capturas de esta sección son recursos visuales de previsualización. No constituyen una función separada ni una preferencia de “capturas” que deba aparecer como destino propio en la búsqueda global.
+
 ### 11.1. Capturas base
 
-Para cada escritorio y estilo deben mantenerse capturas comparables con una escena de referencia consistente:
+Para cada escritorio y cada estilo disponible deben mantenerse capturas comparables con una escena de referencia consistente:
 
 - misma resolución de captura;
 - composición comparable;
@@ -472,7 +490,19 @@ Para cada escritorio y estilo deben mantenerse capturas comparables con una esce
 - hora y contenido controlados;
 - misma intención visual.
 
-Para `Automático` se puede construir una composición a partir de la captura clara y oscura en lugar de mantener una tercera captura redundante.
+La matriz conceptual de preview es:
+
+```text
+escritorio
+× Predeterminado | Dinámico | Everforest
+× Claro | Oscuro | Automático
+```
+
+No todas las combinaciones tienen que estar disponibles si el escritorio no implementa realmente ese estilo. Una combinación inexistente se marca como no disponible; no se simula con una captura que no represente el resultado real.
+
+Para `Automático` se puede construir una composición a partir de la captura clara y oscura del mismo escritorio y estilo, en lugar de mantener una tercera captura redundante.
+
+Las capturas deben representar el resultado que obtendrá la persona después de aplicar la configuración, no solamente el tema de la propia ventana de Korunix.
 
 ### 11.2. Múltiples escritorios
 
@@ -487,6 +517,8 @@ La selección se realiza mediante tarjetas visuales que contienen:
 No se deben etiquetar escritorios como “para expertos” de forma que expulse innecesariamente a un usuario.
 
 Cuando haya varios escritorios seleccionados, la vista principal mantiene una única captura grande y permite cambiar entre ellos mediante pestañas o controles equivalentes.
+
+La elección de estilo y modo se mantiene mientras se cambia el escritorio previsualizado para que la persona pueda comprobar cómo queda la misma decisión en cada sesión instalada. La disponibilidad de estilos se obtiene de la intersección de capacidades de todos los escritorios seleccionados cuando la decisión vaya a aplicarse globalmente.
 
 Debe distinguirse entre:
 
@@ -533,6 +565,30 @@ Ejemplo:
 Cuando Bluetooth esté habilitado, Korunix puede incluir de forma preventiva soporte de bajo coste para mandos Xbox mediante `xpadneo`, evitando que una persona tenga que descubrir e instalar ese soporte después.
 
 La misma filosofía se aplica a otras capacidades de compatibilidad: si el coste, riesgo y mantenimiento son bajos y evitan fricción recurrente, Korunix puede activarlas como parte de la experiencia recomendada.
+
+
+### 12.2. Firmware
+
+La página de firmware debe estar curada por función de producto y no ser un volcado de `fwupd`.
+
+La vista normal debe mostrar primero un único estado comprensible, por ejemplo:
+
+- “El firmware está al día”;
+- “Hay una actualización de firmware disponible”;
+- “No se pudo comprobar el firmware” acompañado de una acción útil.
+
+Consultar si existen actualizaciones es una operación de lectura y no necesita un diálogo de confirmación destructiva. Puede mostrar progreso si la consulta tarda o necesita actualizar metadatos.
+
+Solo cuando exista una actualización aplicable se muestran los datos necesarios para decidir:
+
+- dispositivo afectado;
+- versión actual y nueva;
+- propósito o cambios relevantes cuando estén disponibles;
+- si será necesario reiniciar o apagar el equipo.
+
+El inventario técnico completo queda detrás de detalles opcionales. Almacenamiento masivo, unidades USB, SSD, HDD o NVMe no se duplican en Firmware si ya pertenecen a la página Almacenamiento.
+
+Aplicar firmware sí debe pasar por propuesta, advertencias y autorización apropiadas.
 
 ## 13. Arranque, UEFI, BIOS y Windows
 
@@ -1354,6 +1410,18 @@ Korunix debe ofrecer un catálogo curado basado inicialmente en las aplicaciones
 
 La GUI debe mostrar qué aplicaciones ya están instaladas cuando pueda detectarlo.
 
+Cada aplicación visible debe explicar como mínimo:
+
+- nombre humano;
+- qué instala o qué capacidad añade;
+- para qué sirve en una frase breve;
+- si está instalada;
+- la acción disponible: instalar, eliminar o configurar cuando corresponda.
+
+Subtítulos vacíos de significado como “Disponible en Korunix” no sustituyen una descripción de la aplicación.
+
+El buscador de aplicaciones pertenece a la parte superior de la página **Aplicaciones**. Mientras la persona escribe, busca primero en el catálogo curado y puede ampliar resultados a los catálogos compatibles cuando sea necesario. No debe esconderse al final de una lista larga.
+
 Debe permitir:
 
 - instalar;
@@ -1362,7 +1430,13 @@ Debe permitir:
 - buscar aplicaciones de Nixpkgs cuando no estén en el catálogo;
 - utilizar Flatpak cuando sea la fuente apropiada.
 
-Las dependencias técnicas no se presentan como elecciones separadas si el usuario no necesita decidir sobre ellas.
+La fuente concreta es una decisión de implementación de Korunix salvo que exista una razón real para que la persona elija entre variantes con consecuencias distintas. La vista normal no debe exigir escoger “Nixpkgs” o “Flatpak” ni mostrar un selector de origen por rutina. Korunix puede conservar la fuente en su modelo interno y mostrarla en detalles avanzados.
+
+Las dependencias técnicas no se presentan como elecciones separadas si el usuario no necesita decidir sobre ellas. Lo mismo se aplica a aplicaciones que Korunix instala únicamente para satisfacer un rol ya elegido para el escritorio: no deben duplicarse como otra decisión normal del catálogo.
+
+AAGL se trata como infraestructura coordinada. La interfaz presenta los launchers o juegos que la persona puede decidir instalar, no `aagl`, `aaglStable` u otras piezas internas como aplicaciones normales. Los launchers de AAGL permanecen desactivados por defecto y una opción incompatible con la arquitectura actual no debe presentarse como instalable.
+
+Las categorías deben ser humanas, estables y sin aplicaciones repetidas. “Diseño” es una sola categoría. Sunshine pertenece únicamente a Transmisión. Polyglot pertenece a Oficina y estudio.
 
 Korunix no debe convertirse solamente en una tienda de aplicaciones. Aplicaciones es una sección dentro de un centro mayor de administración del sistema.
 
@@ -1577,7 +1651,17 @@ Korunix puede recordar localmente qué consejos ya se mostraron para evitar repe
 
 Korunix debe presentar las generaciones de NixOS en lenguaje humano.
 
-La interfaz normal muestra las tres generaciones recientes útiles para recuperación, evitando abrumar al usuario.
+La interfaz normal muestra las tres generaciones recientes útiles para recuperación, evitando abrumar al usuario. Para cada una debe priorizar fecha, relación con la versión actual y una descripción humana del cambio que la originó cuando esa información exista. Los identificadores técnicos de generación quedan en detalles.
+
+La página Mantenimiento debe permitir comprender de un vistazo:
+
+- qué versión está en uso;
+- cuál inicia normalmente;
+- qué versiones recientes están disponibles para recuperación;
+- cuánto puede limpiar Korunix cuando exista una estimación real;
+- qué conservará cada nivel de limpieza.
+
+En modo compacto estas filas y acciones deben apilarse antes de forzar un ancho superior al mínimo soportado.
 
 La política de presentación y la política de limpieza deben distinguirse:
 
@@ -1600,6 +1684,8 @@ Korunix debe permitir:
 - crear una copia automática antes de migraciones importantes;
 - restaurar una configuración desde la interfaz;
 - combinar recuperación de configuración con rollback de NixOS cuando corresponda.
+
+La página **Copias e historial** debe mostrar el estado de la copia portable más reciente cuando Korunix pueda conocerlo, ofrecer crear/exportar una nueva copia y dejar clara la ruta de restauración. Una caja vacía no debe ser la única representación del historial.
 
 Las credenciales nunca se incluyen en una copia portable normal.
 
@@ -1718,6 +1804,35 @@ Será necesario cerrar sesión al finalizar.
 
 “Ver detalles” puede mostrar información técnica adicional.
 
+
+### 38.5. Presentación humana de actualizaciones
+
+La unidad que ve la persona no es necesariamente el input o dependencia que cambia internamente.
+
+La página normal no debe crear filas independientes para piezas como:
+
+- `nixpkgsStable`;
+- `aaglStable`;
+- `alejandra`;
+- `nix-flatpak`;
+- Hatter cuando solo acompaña a la apariencia;
+- Millennium cuando solo acompaña a Steam;
+- Spicetify cuando forma parte de Spotify.
+
+Esas piezas siguen existiendo en el plan técnico, pero se agrupan bajo la decisión que las necesita.
+
+La personalización debe mostrar objetos reconocibles:
+
+- sistema y controladores;
+- escritorios e interfaz cuando tengan una actualización identificable;
+- aplicaciones instaladas con nombre humano y versiones cuando el backend pueda obtenerlas honestamente;
+- Korunix;
+- componentes externos reconocibles como Noctalia cuando sea útil tratarlos de manera separada.
+
+Si varias aplicaciones dependen del mismo snapshot y no pueden actualizarse de forma independiente, Korunix debe decirlo sin convertir el nombre del input en una opción de usuario. Una aplicación acoplada puede indicar “se actualizará junto con el sistema” en lugar de fingir un checkbox independiente.
+
+AAGL y sus referencias compatibles se actualizan detrás de los launchers/juegos que lo necesitan o detrás de la base del sistema; no aparecen como una aplicación genérica llamada AAGL en la vista normal.
+
 ## 39. Migraciones y compatibilidad
 
 Korunix debe mantener un contrato de compatibilidad de su configuración.
@@ -1751,6 +1866,8 @@ Korunix debe mantener un historial comprensible de acciones relevantes, por ejem
 - actualizaste Firefox 145 → 146;
 - restauraste una generación anterior.
 
+La vista normal muestra primero las acciones recientes con fecha y resultado humano, permite ampliar el historial cuando exista más contenido y utiliza un estado vacío específico únicamente cuando todavía no se haya registrado ninguna acción.
+
 No debe convertirse en un log técnico. Los detalles pueden desplegarse cuando sean útiles para diagnóstico.
 
 Nunca se registran contraseñas ni secretos.
@@ -1762,7 +1879,7 @@ Una exportación avanzada puede permitir incluir una copia del historial para di
 
 ## 41. Centro de salud del sistema
 
-Korunix puede disponer de una vista de estado general con mensajes como:
+Korunix debe disponer de una vista de estado general que funcione como centro de salud del equipo, con mensajes como:
 
 - Todo está correcto;
 - Hay actualizaciones disponibles;
@@ -1771,7 +1888,16 @@ Korunix puede disponer de una vista de estado general con mensajes como:
 - Una integración dejó de ser compatible;
 - Se detectó una configuración externa en conflicto.
 
-La vista debe priorizar acciones útiles y evitar convertir avisos inocuos en alarmas.
+**Resumen** debe priorizar:
+
+1. estado general;
+2. asuntos que necesitan atención;
+3. recomendaciones útiles todavía vigentes;
+4. acciones directas hacia la página que resuelve cada asunto.
+
+Datos como modelo del equipo, canal o cantidad de personas pueden aparecer como contexto secundario, pero no sustituyen el estado de salud.
+
+Cuando no exista ningún problema, la página debe decirlo de forma explícita y seguir ofreciendo contexto útil sin llenar la pantalla de avisos inocuos.
 
 ## 42. Diagnóstico humano
 
@@ -1795,9 +1921,10 @@ Ejemplos:
 - Firefox;
 - idioma;
 - teclado;
-- capturas;
 - actualizaciones;
 - fondo;
+- Everforest;
+- escritorio;
 - usuario.
 
 La búsqueda debe llevar a la configuración correspondiente sin exigir conocer la estructura técnica del sistema.
@@ -2052,6 +2179,8 @@ Korunix no debe declarar “completado” mientras todavía exista trabajo indis
 
 Korunix debe ofrecer un asistente de transferencias para operaciones donde la finalización real del guardado sea importante, especialmente archivos grandes, ISOs y almacenamiento USB.
 
+La página **Almacenamiento** debe ofrecer una entrada clara a este asistente cuando exista una unidad extraíble adecuada. La opción humana debe explicar que Korunix esperará a que los datos estén realmente guardados antes de declarar la transferencia terminada; no debe presentarse como un interruptor técnico ambiguo.
+
 No pretende sustituir a Nautilus, Nemo o Dolphin como gestor general de archivos.
 
 Flujo humano:
@@ -2096,6 +2225,8 @@ Si la persona activa esta comodidad, Korunix debe configurar de manera segura el
 Si el dispositivo necesita desbloqueo o autenticación, Korunix debe explicar la consecuencia en lenguaje humano y utilizar mecanismos seguros para evitar prompts repetitivos solo cuando la persona haya autorizado esa automatización.
 
 La opción debe poder activarse, modificarse o retirarse más tarde desde el panel de almacenamiento; no pertenece exclusivamente al asistente inicial.
+
+Por cada unidad de datos adicional adecuada, Almacenamiento debe indicar de forma comprensible si está disponible al iniciar sesión y permitir cambiar esa decisión sin hablar de “montaje” como acción primaria.
 
 Korunix nunca debe almacenar una clave de cifrado en el repositorio o en un perfil portable.
 
@@ -2277,14 +2408,16 @@ esa decisión.
 Korunix debe presentar cámaras integradas, USB y virtuales cuando puedan
 identificarse.
 
-Una prueba de cámara puede mostrar:
+Una prueba de cámara debe priorizar:
 
 - nombre y tipo;
 - disponibilidad;
 - vista previa;
-- resoluciones disponibles;
-- frecuencias de imagen disponibles;
-- combinación usada durante la prueba.
+- resolución utilizada por la prueba cuando aporte contexto.
+
+La lista completa de resoluciones, frecuencias de imagen y formatos V4L2 no debe ocupar la vista normal. Sigue disponible en detalles técnicos cuando sea útil para diagnóstico o selección avanzada.
+
+La explicación de privacidad se presenta una sola vez en la sección de prueba: Korunix puede abrir una vista temporal para comprobar la cámara, no conserva la grabación y libera el dispositivo al cerrar la prueba. Esa misma advertencia no debe repetirse en cada cámara.
 
 La cámara solo debe activarse como consecuencia de una acción explícita del
 usuario y debe liberarse al abandonar la prueba.
