@@ -70,6 +70,36 @@ Antes de una operación importante Korunix debe explicar:
 
 Ninguna ventana de contraseña, Polkit o privilegios elevados debe aparecer sin un aviso previo de Korunix.
 
+Una operación lógica debe cruzar la frontera de privilegios el menor número de
+veces posible. En particular, previsualizar una aplicación de configuración no
+debe solicitar privilegios administrativos solo para después volver a pedirlos
+al activar exactamente esa misma generación. La previsualización debe usar
+información que pueda obtenerse sin modificar el sistema y la activación real
+debe concentrar la autorización necesaria.
+
+Las operaciones potencialmente largas deben comunicar su fase actual antes de
+empezar y seguir dando señales de actividad mientras trabajan. Un flujo normal
+de aplicación distingue como mínimo:
+
+```text
+Validando
+Construyendo
+Esperando autorización
+Activando
+Verificando
+Finalizado
+```
+
+La ausencia de porcentaje exacto no justifica una interfaz muda. Cuando Nix no
+ofrezca una medida fiable, Korunix debe mostrar la fase y una señal periódica de
+actividad sin inventar porcentajes de trabajo completado.
+
+En modo estructurado, stdout se reserva para el resultado JSON final. El
+progreso viaja por un canal separado que la GUI puede consumir sin contaminar
+ese documento. Cuando el mismo comando se ejecuta directamente en una terminal,
+ese progreso debe expresarse con lenguaje humano y no como identificadores
+internos.
+
 ### 2.4. Todo cambio importante debe poder previsualizarse
 
 La persona debe poder explorar opciones libremente antes de modificar el sistema.

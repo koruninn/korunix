@@ -209,6 +209,33 @@ fi
 
 printf '\n%s\n' '→ Producto y contrato'
 
+if rg -q 'fn build_candidate\(raiz: &Path, json: bool\)' sistema/programa/operaciones.rs \
+   && rg -q 'Nix sigue construyendo' sistema/programa/operaciones.rs \
+   && rg -q 'authorization_required' sistema/programa/operaciones.rs \
+   && rg -q 'validate_quiet\(raiz\)' sistema/programa/operaciones.rs
+then
+  ok 'apply comunica validación, construcción y autorización'
+else
+  fallo 'apply volvió a quedar sin fases humanas o contaminó el modo JSON'
+fi
+
+if rg -q 'La previsualización no necesita privilegios' sistema/programa/operaciones.rs \
+   && ! rg -q 'dry-activate' sistema/programa/operaciones.rs
+then
+  ok 'previsualización no cruza Polkit'
+else
+  fallo 'previsualización volvió a solicitar privilegios'
+fi
+
+if grep -Fq 'Una operación lógica debe cruzar la frontera de privilegios el menor número de' spec.md \
+   && grep -Fq 'stdout se reserva para el resultado JSON final' spec.md \
+   && grep -Fq 'La ausencia de porcentaje exacto no justifica una interfaz muda' spec.md
+then
+  ok 'especificación protege autorización única y progreso visible'
+else
+  fallo 'la especificación perdió el contrato de autorización/progreso'
+fi
+
 personas='sistema/personas.nix'
 escritorio='sistema/escritorio.nix'
 

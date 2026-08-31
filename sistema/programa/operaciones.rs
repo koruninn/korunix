@@ -9,7 +9,7 @@
 
 use super::*;
 use std::collections::BTreeSet;
-use std::io::Write;
+use std::io::{Read, Write};
 
 fn args_texto(args: &[OsString]) -> Vec<String> {
     args.iter()
@@ -1487,12 +1487,66 @@ fn clean_plan_json(raiz: &Path, aggressive: bool) -> Result<String, String> {
     ))
 }
 
+fn texto_progreso_cli(etapa: &str) -> &'static str {
+    match etapa {
+        "preparing" => "Preparando…",
+        "changing_channel" => "Cambiando el canal del sistema…",
+        "updating_catalog" => "Actualizando el catálogo de software…",
+        "validating" => "Validando la configuración…",
+        "building_system" => "Construyendo la nueva configuración…",
+        "authorization_required" => "Esperando autorización…",
+        "verifying_activation" => "Verificando la activación…",
+        "cleaning_versions" => "Eliminando versiones antiguas del sistema…",
+        "garbage_collect" => "Liberando espacio que ya no se usa…",
+        "optimising_store" => "Optimizando el almacenamiento del sistema…",
+        "saving_data" => "Terminando de guardar los datos pendientes…",
+        "unmounting" => "Desconectando los sistemas de archivos…",
+        "powering_off" => "Apagando la unidad…",
+        "refreshing_firmware" => "Comprobando actualizaciones de firmware…",
+        "installing_firmware" => "Instalando firmware…",
+        "scheduling_recovery" => "Preparando la recuperación…",
+        "testing_sound" => "Probando la salida de sonido…",
+        "recording_mic" => "Grabando una prueba temporal del micrófono…",
+        "playing_mic" => "Reproduciendo la prueba del micrófono…",
+        "done" => "Listo.",
+        _ => "Korunix sigue trabajando…",
+    }
+}
+
 fn emitir_progreso(json: bool, porcentaje: u8, etapa: &str) {
     if !json {
         return;
     }
 
-    eprintln!("KORUNIX_PROGRESS\t{}\t{}", porcentaje.min(100), etapa);
+    let porcentaje = porcentaje.min(100);
+
+    if io::stderr().is_terminal() {
+        eprintln!("→ {}", texto_progreso_cli(etapa));
+    } else {
+        // La GUI consume este canal estructurado. stdout queda reservado para
+        // el documento JSON final de la operación.
+        eprintln!("KORUNIX_PROGRESS\t{porcentaje}\t{etapa}");
+    }
+
+    let _ = io::stderr().flush();
+}
+
+fn emitir_fase(json: bool, porcentaje: u8, etapa: &str, mensaje: &str) {
+    if json {
+        emitir_progreso(true, porcentaje, etapa);
+    } else {
+        eprintln!("→ {mensaje}");
+        let _ = io::stderr().flush();
+    }
+}
+
+fn emitir_pulso_construccion(json: bool, segundos: u64) {
+    if json && !io::stderr().is_terminal() {
+        emitir_progreso(true, 35, "building_system");
+        return;
+    }
+
+    eprintln!("  {segundos} s transcurridos · Nix sigue construyendo…");
     let _ = io::stderr().flush();
 }
 
@@ -2242,27 +2296,97 @@ fn update(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn build_candidate(raiz: &Path) -> Result<PathBuf, String> {
+fn build_candidate(raiz: &Path, json: bool) -> Result<PathBuf, String> {
     let host = resolver_equipo(raiz)?;
-    let out = capture(
-        raiz,
-        "nix",
-        &[
-            "build".into(),
-            format!(".#nixosConfigurations.{host}.config.system.build.toplevel"),
-            "--no-link".into(),
-            "--print-out-paths".into(),
-            "--show-trace".into(),
-        ],
-    )?;
+
+    let target = format!(".#nixosConfigurations.{host}.config.system.build.toplevel");
+
+    let mut child = Command::new(tool("nix"))
+        .args([
+            "build",
+            target.as_str(),
+            "--no-link",
+            "--print-out-paths",
+            "--show-trace",
+        ])
+        .current_dir(raiz)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("No pude iniciar la construcción de NixOS: {error}"))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "No pude leer el resultado de la construcción.".to_string())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "No pude leer los detalles de la construcción.".to_string())?;
+
+    let lector_stdout = std::thread::spawn(move || {
+        let mut texto = String::new();
+        let mut lector = stdout;
+        let resultado = lector.read_to_string(&mut texto);
+        (resultado, texto)
+    });
+
+    let lector_stderr = std::thread::spawn(move || {
+        let mut texto = String::new();
+        let mut lector = stderr;
+        let resultado = lector.read_to_string(&mut texto);
+        (resultado, texto)
+    });
+
+    let inicio = std::time::Instant::now();
+    let mut siguiente_pulso = 10_u64;
+
+    let status = loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|error| format!("No pude consultar la construcción: {error}"))?
+        {
+            break status;
+        }
+
+        let transcurridos = inicio.elapsed().as_secs();
+        if transcurridos >= siguiente_pulso {
+            emitir_pulso_construccion(json, transcurridos);
+            siguiente_pulso += 10;
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    };
+
+    let (stdout_result, out) = lector_stdout
+        .join()
+        .map_err(|_| "Falló la lectura del resultado de Nix.".to_string())?;
+    stdout_result.map_err(|error| format!("No pude leer el resultado de Nix: {error}"))?;
+
+    let (stderr_result, error) = lector_stderr
+        .join()
+        .map_err(|_| "Falló la lectura de los detalles de Nix.".to_string())?;
+    stderr_result.map_err(|error| format!("No pude leer los detalles de Nix: {error}"))?;
+
+    if !status.success() {
+        return Err(if error.trim().is_empty() {
+            "La construcción de NixOS terminó con error.".to_string()
+        } else {
+            error.trim().to_string()
+        });
+    }
+
     let path = out
         .lines()
         .last()
         .map(PathBuf::from)
         .ok_or_else(|| "Nix no devolvió la candidata.".to_string())?;
+
     if !path.exists() {
-        return Err(format!("La candidata no existe: {}", path.display()));
+        return Err(format!("La candidata no existe: {}.", path.display()));
     }
+
     Ok(path)
 }
 
@@ -2387,6 +2511,7 @@ fn cycle_json(
 fn prepare_cycle(
     raiz: &Path,
     preview: bool,
+    json: bool,
 ) -> Result<(PathBuf, PathBuf, String, String, String), String> {
     let current_text = current_system();
     let current = if current_text.is_empty() {
@@ -2394,7 +2519,7 @@ fn prepare_cycle(
     } else {
         PathBuf::from(current_text)
     };
-    let candidate = build_candidate(raiz)?;
+    let candidate = build_candidate(raiz, json)?;
 
     let diff = if preview && current.exists() {
         let (code, out, err) = capture_status(
@@ -2417,16 +2542,8 @@ fn prepare_cycle(
     };
 
     let activation = if preview {
-        let activator = candidate.join("bin/switch-to-configuration");
-        if !activator.is_file() {
-            return Err("La candidata no contiene switch-to-configuration.".into());
-        }
-        privileged(
-            raiz,
-            &activator.display().to_string(),
-            &["dry-activate".into()],
-            false,
-        )?
+        "La previsualización no necesita privilegios. La activación real se ejecutará solo después de confirmar y autorizar una vez."
+            .to_string()
     } else {
         String::new()
     };
@@ -2454,13 +2571,34 @@ fn change_cycle(raiz: &Path, command: &str, args: &[String]) -> Result<ExitCode,
     }
 
     if command == "apply" {
-        validate(raiz)?;
+        emitir_fase(json, 5, "validating", "Validando la configuración…");
+
+        if json {
+            // stdout queda reservado para el JSON final. Las fases viajan por
+            // stderr y la GUI las recibe mediante KORUNIX_PROGRESS.
+            validate_quiet(raiz)?;
+        } else {
+            validate(raiz)?;
+        }
+
+        emitir_fase(json, 15, "validating", "Validación completada.");
     }
 
+    emitir_fase(
+        json,
+        25,
+        "building_system",
+        "Construyendo la nueva configuración…",
+    );
+
     let previewed = command != "build";
-    let (current, candidate, diff, activation, impact) = prepare_cycle(raiz, previewed)?;
+    let (current, candidate, diff, activation, impact) = prepare_cycle(raiz, previewed, json)?;
+
+    emitir_fase(json, 70, "building_system", "Construcción completada.");
 
     if command == "build" {
+        emitir_fase(json, 100, "done", "Construcción completada.");
+
         if json {
             println!(
                 "{}",
@@ -2476,6 +2614,13 @@ fn change_cycle(raiz: &Path, command: &str, args: &[String]) -> Result<ExitCode,
     }
 
     if command == "preview" {
+        emitir_fase(
+            json,
+            85,
+            "preparing",
+            "Preparando la previsualización sin solicitar privilegios…",
+        );
+
         if json {
             println!(
                 "{}",
@@ -2501,6 +2646,8 @@ fn change_cycle(raiz: &Path, command: &str, args: &[String]) -> Result<ExitCode,
             println!("\nImpacto: {}", jq_texto(raiz, &impact, ".classification")?);
             println!("✓ PREVISUALIZACIÓN COMPLETA");
         }
+
+        emitir_fase(json, 100, "done", "Previsualización completada.");
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -2509,12 +2656,34 @@ fn change_cycle(raiz: &Path, command: &str, args: &[String]) -> Result<ExitCode,
     }
 
     let activator = candidate.join("bin/switch-to-configuration");
+    if !activator.is_file() {
+        return Err("La candidata no contiene switch-to-configuration.".into());
+    }
+
+    emitir_fase(
+        json,
+        82,
+        "authorization_required",
+        "Esperando autorización para activar el sistema…",
+    );
+
+    // Esta es la única frontera privilegiada del ciclo apply. La
+    // previsualización ya ocurrió sin Polkit, así que una aplicación lógica no
+    // puede abrir dos solicitudes consecutivas de autenticación.
     let _ = privileged(
         raiz,
         &activator.display().to_string(),
         &["switch".into()],
         true,
     )?;
+
+    emitir_fase(
+        json,
+        94,
+        "verifying_activation",
+        "Verificando la activación…",
+    );
+
     let verified = current_system() == candidate.display().to_string();
 
     let _ = Command::new(tool("systemctl"))
@@ -2524,6 +2693,8 @@ fn change_cycle(raiz: &Path, command: &str, args: &[String]) -> Result<ExitCode,
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
+
+    emitir_fase(json, 100, "done", "Configuración aplicada.");
 
     if json {
         println!(
