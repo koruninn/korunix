@@ -4997,6 +4997,7 @@ fn fila_navegacion(titulo: &str, icono: &str) -> gtk::ListBoxRow {
     let fila = gtk::ListBoxRow::new();
     fila.set_activatable(true);
     fila.set_selectable(true);
+    fila.set_size_request(-1, 60);
 
     let contenido = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     contenido.set_margin_top(8);
@@ -5011,6 +5012,7 @@ fn fila_navegacion(titulo: &str, icono: &str) -> gtk::ListBoxRow {
     let etiqueta = gtk::Label::new(Some(&titulo));
     etiqueta.set_xalign(0.0);
     etiqueta.set_hexpand(true);
+    etiqueta.set_ellipsize(gtk::pango::EllipsizeMode::End);
 
     contenido.append(&imagen);
     contenido.append(&etiqueta);
@@ -5228,10 +5230,9 @@ fn pagina_resumen(
 ) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
     let grupo = adw::PreferencesGroup::new();
-
-    grupo.add(&fila(
-        texto(estado.idioma, "host"),
-        valor(hardware, "/hostId"),
+    grupo.set_title(&localizar_visible(
+        idioma_actual(),
+        "Lo esencial de este equipo en un solo lugar.",
     ));
 
     let vendor = valor(hardware, "/machine/vendor");
@@ -5239,9 +5240,8 @@ fn pagina_resumen(
     let modelo = modelo_humano(&vendor, &model);
 
     grupo.add(&fila(texto(estado.idioma, "model"), modelo));
-
     grupo.add(&fila(
-        texto(estado.idioma, "channel"),
+        &localizar_visible(idioma_actual(), "Canal del sistema"),
         valor(channel, "/label"),
     ));
 
@@ -5312,9 +5312,53 @@ fn pagina_localizacion(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPag
         teclado_humano(estado.idioma, &actual_teclado),
     );
 
-    grupo.set_description(Some(&format!(
-        "{resumen}. Estas decisiones son independientes: idioma, formatos, zona horaria y teclado no se fuerzan entre sí."
+    let grupo_actual = adw::PreferencesGroup::new();
+    grupo_actual.set_title(&localizar_visible(idioma_actual(), "Configuración actual"));
+    grupo_actual.set_description(Some(&localizar_visible(
+        idioma_actual(),
+        "Idioma, región, hora y teclado son decisiones independientes.",
     )));
+    grupo_actual.add(&fila(
+        "Idioma del sistema",
+        idioma_humano(estado.idioma, &actual_idioma),
+    ));
+    grupo_actual.add(&fila(
+        "País o región",
+        region_humana(estado.idioma, &actual_region),
+    ));
+    grupo_actual.add(&fila(
+        "Hora local",
+        zona_horaria_humana(estado.idioma, &actual_zona),
+    ));
+
+    let variante_actual = datos
+        .pointer("/declared/keyboard/variant")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let teclado_visible = format!(
+        "{} · {}",
+        teclado_humano(estado.idioma, &actual_teclado),
+        variante_teclado_humana(variante_actual),
+    );
+    grupo_actual.add(&fila("Teclado", teclado_visible));
+
+    let personalizar_fila = adw::ActionRow::new();
+    personalizar_fila.set_title(&localizar_visible(idioma_actual(), "Personalizar"));
+    personalizar_fila.set_subtitle(&localizar_visible(
+        idioma_actual(),
+        "Cambia idioma, formatos, zona horaria o teclado por separado.",
+    ));
+    let personalizar = gtk::Button::with_label(&localizar_visible(idioma_actual(), "Personalizar"));
+    personalizar.set_valign(gtk::Align::Center);
+    personalizar_fila.add_suffix(&personalizar);
+    grupo_actual.add(&personalizar_fila);
+    pagina.add(&grupo_actual);
+
+    grupo.set_title(&localizar_visible(idioma_actual(), "Personalizar"));
+    grupo.set_description(Some(&format!(
+        "{resumen}. Los identificadores técnicos solo se muestran aquí porque esta edición avanzada todavía trabaja directamente con los valores del sistema."
+    )));
+    grupo.set_visible(false);
 
     let idioma = adw::EntryRow::new();
     idioma.set_title(&localizar_visible(idioma_actual(), "Idioma del sistema"));
@@ -5395,6 +5439,16 @@ fn pagina_localizacion(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPag
     grupo.add(&fila_guardar);
 
     pagina.add(&grupo);
+
+    let grupo_personalizar = grupo.clone();
+    personalizar.connect_clicked(move |boton| {
+        let visible = !grupo_personalizar.is_visible();
+        grupo_personalizar.set_visible(visible);
+        boton.set_label(&localizar_visible(
+            idioma_actual(),
+            if visible { "Ocultar" } else { "Personalizar" },
+        ));
+    });
 
     let estado_guardar = Rc::clone(&estado);
     guardar.connect_clicked(move |boton| {
@@ -9234,13 +9288,237 @@ fn indice(valor: &str, opciones: &[String]) -> u32 {
         .unwrap_or(0) as u32
 }
 
+fn terminos_busqueda_pagina(nombre: &str) -> &'static str {
+    match nombre {
+        "summary" => {
+            "resumen inicio estado configuración configuracion equipo ordenador computadora sistema"
+        }
+        "updates" => {
+            "actualizaciones actualizar sistema software versiones canal estable inestable update"
+        }
+        "hardware" => {
+            "hardware equipo ordenador computadora procesador cpu memoria ram gráficos graficos gpu red controlador"
+        }
+        "media" => {
+            "sonido audio altavoces auriculares micrófono microfono cámara camara webcam vídeo video"
+        }
+        "storage" => {
+            "almacenamiento disco discos unidad unidades usb expulsar extraíble extraible guardar datos"
+        }
+        "firmware" => {
+            "firmware dispositivos actualizaciones bios uefi placa hardware"
+        }
+        "applications" => {
+            "aplicaciones programas software navegador browser firefox chrome correo thunderbird editor texto kwrite kate oficina juegos diseño multimedia flatpak"
+        }
+        "appearance" => {
+            "apariencia tema claro oscuro automático automatico everforest escritorio niri hyprland plasma cinnamon fondo iconos"
+        }
+        "localization" => {
+            "idioma región region país pais formatos zona horaria hora teclado distribución distribucion variante entrada"
+        }
+        "people" => {
+            "personas persona usuario usuarios cuenta cuentas contraseña contrasena avatar administrador estándar estandar"
+        }
+        "backups" => {
+            "copias copia seguridad exportar restaurar restauración restauracion historial backup"
+        }
+        "maintenance" => {
+            "mantenimiento limpiar limpieza recuperación recuperacion versiones reinicio rollback"
+        }
+        _ => "",
+    }
+}
+
+fn nombre_desde_id(id: &str) -> String {
+    id.split(|c| c == '-' || c == '_')
+        .filter(|parte| !parte.is_empty())
+        .map(|parte| {
+            let mut caracteres = parte.chars();
+            match caracteres.next() {
+                Some(primero) => primero.to_uppercase().collect::<String>() + caracteres.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn nombre_aplicacion_humano(id: &str) -> String {
+    match id {
+        "baobab" => "Uso del disco".to_string(),
+        "birdfont" => "Birdfont".to_string(),
+        "cohesion" => "Cohesion".to_string(),
+        "darktable" => "Darktable".to_string(),
+        "figma-linux" => "Figma".to_string(),
+        "firefox" => "Firefox".to_string(),
+        "fontforge" => "FontForge".to_string(),
+        "genshin-impact" => "Genshin Impact".to_string(),
+        "google-chrome" => "Google Chrome".to_string(),
+        "heroic" => "Heroic Games Launcher".to_string(),
+        "honkai-star-rail" => "Honkai: Star Rail".to_string(),
+        "inkscape" => "Inkscape".to_string(),
+        "kdenlive" => "Kdenlive".to_string(),
+        "krita" => "Krita".to_string(),
+        "localsend" => "LocalSend".to_string(),
+        "lutris" => "Lutris".to_string(),
+        "obs-studio" => "OBS Studio".to_string(),
+        "obsidian" => "Obsidian".to_string(),
+        "onlyoffice-desktopeditors" => "ONLYOFFICE".to_string(),
+        "peazip" => "PeaZip".to_string(),
+        "polyglot" => "Polyglot".to_string(),
+        "prismlauncher" => "Prism Launcher".to_string(),
+        "protonplus" => "ProtonPlus".to_string(),
+        "rapidraw" => "RapidRAW".to_string(),
+        "scrcpy" => "Controlar Android".to_string(),
+        "spotdl" => "spotDL".to_string(),
+        "spotify" => "Spotify".to_string(),
+        "steam" => "Steam".to_string(),
+        "vesktop" => "Vesktop".to_string(),
+        "vlc" => "VLC".to_string(),
+        "vscode" => "Visual Studio Code".to_string(),
+        _ => nombre_desde_id(id),
+    }
+}
+
+fn aplicacion_derivada_o_interna(id: &str) -> bool {
+    matches!(
+        id,
+        "android-tools"
+            | "git"
+            | "just"
+            | "tree"
+            | "wget"
+            | "rar"
+            | "unrar"
+            | "xwayland-satellite"
+            | "pywalfox-native"
+            | "alacritty"
+            | "fish"
+            | "thunderbird"
+            | "gimp"
+            | "gnome-calculator"
+            | "gnome-calendar"
+            | "gnome-maps"
+            | "snapshot"
+            | "showtime"
+            | "gnome-music"
+            | "nautilus"
+            | "loupe"
+            | "papers"
+            | "gnome-text-editor"
+            | "file-roller"
+            | "nemo"
+            | "xviewer"
+            | "xreader"
+            | "xed"
+            | "dolphin"
+            | "gwenview"
+            | "okular"
+            | "haruna"
+            | "elisa"
+            | "merkuro"
+            | "marble"
+            | "kamoso"
+            | "kcalc"
+            | "ark"
+    )
+}
+
+fn categoria_aplicacion(id: &str) -> &'static str {
+    match id {
+        "firefox" | "google-chrome" | "vesktop" | "localsend" => "Internet y comunicación",
+        "onlyoffice-desktopeditors" | "libreoffice" | "polyglot" | "obsidian" => {
+            "Oficina y estudio"
+        }
+        "birdfont" | "cohesion" | "darktable" | "figma-linux" | "fontforge" | "inkscape"
+        | "krita" | "rapidraw" => "Diseño",
+        "obs-studio" | "spotify" | "spotdl" | "vlc" | "kdenlive" => "Multimedia",
+        "steam" | "heroic" | "lutris" | "prismlauncher" | "genshin-impact" | "honkai-star-rail"
+        | "protonplus" => "Juegos",
+        "scrcpy" => "Dispositivos",
+        "vscode" => "Desarrollo",
+        "peazip" | "baobab" => "Archivos y utilidades",
+        _ => "Otras aplicaciones",
+    }
+}
+
+fn objetivo_actualizacion_humano(id: &str) -> (String, String) {
+    let (titulo, detalle) = match id {
+        "nixpkgs" => (
+            "Sistema y aplicaciones",
+            "Base principal de NixOS y de las aplicaciones que comparten esa versión.",
+        ),
+        "nixpkgsStable" => (
+            "Compatibilidad estable",
+            "Base estable para componentes que necesitan una versión más conservadora.",
+        ),
+        "nix-flatpak" => (
+            "Aplicaciones Flatpak",
+            "Integración que mantiene las aplicaciones Flatpak administradas por Korunix.",
+        ),
+        "aagl" => (
+            "Juegos de anime",
+            "Lanzadores y compatibilidad de los juegos administrados mediante AAGL.",
+        ),
+        "aaglStable" => (
+            "Compatibilidad estable para juegos",
+            "Base estable utilizada cuando esos juegos necesitan una versión más conservadora.",
+        ),
+        "noctalia" => ("Noctalia", "Panel e integraciones de Niri y Hyprland."),
+        "hatter" => (
+            "Iconos Hatter",
+            "Paquete de iconos utilizado por la apariencia Everforest.",
+        ),
+        "spicetify-nix" => (
+            "Spotify personalizado",
+            "Integración visual y funcional que Korunix aplica a Spotify.",
+        ),
+        "millennium" => (
+            "Integración de Steam",
+            "Personalización administrada de Steam.",
+        ),
+        "alejandra" => (
+            "Herramientas internas de Korunix",
+            "Formato y comprobaciones que Korunix mantiene automáticamente.",
+        ),
+        _ => (
+            "Componente administrado por Korunix",
+            "Se actualizará únicamente cuando sea compatible con el resto del sistema.",
+        ),
+    };
+
+    (titulo.to_string(), detalle.to_string())
+}
+
+fn nombre_escritorio_humano(id: &str) -> String {
+    match id {
+        "niri" => "Niri".to_string(),
+        "hyprland" => "Hyprland".to_string(),
+        "plasma" => "KDE Plasma".to_string(),
+        "cinnamon" => "Cinnamon".to_string(),
+        _ => nombre_desde_id(id),
+    }
+}
+
+fn variante_teclado_humana(valor: &str) -> String {
+    match valor {
+        "" => "Predeterminada".to_string(),
+        "deadtilde" => "Tildes mediante tecla muerta".to_string(),
+        "nodeadkeys" => "Sin teclas muertas".to_string(),
+        _ => nombre_desde_id(valor),
+    }
+}
+
 fn fila_aplicacion(estado: Rc<Estado>, id: String, fuente: String, activa: bool) -> adw::ActionRow {
     let fila = adw::ActionRow::new();
-    fila.set_title(&id);
+    let nombre = nombre_aplicacion_humano(&id);
+    fila.set_title(&nombre);
+    fila.set_tooltip_text(Some(&id));
     fila.set_subtitle(match fuente.as_str() {
-        "nixpkgs" => "Nixpkgs",
+        "nixpkgs" => "Catálogo de NixOS",
         "flatpak" => "Flatpak",
-        _ => "Catálogo de Korunix",
+        _ => "Disponible en Korunix",
     });
 
     let boton = gtk::Button::with_label(texto(
@@ -9273,14 +9551,14 @@ fn fila_aplicacion(estado: Rc<Estado>, id: String, fuente: String, activa: bool)
         }
 
         let cuerpo = if activa {
-            format!("¿Retirar «{id}» de la configuración administrada por Korunix?")
+            format!("¿Retirar «{nombre}» de este equipo?")
         } else {
             format!(
-                "¿Instalar «{id}» desde {}?",
+                "¿Instalar «{nombre}» desde {}?",
                 match fuente.as_str() {
-                    "nixpkgs" => "Nixpkgs",
+                    "nixpkgs" => "el catálogo de NixOS",
                     "flatpak" => "Flatpak",
-                    _ => "el catálogo de Korunix",
+                    _ => "Korunix",
                 }
             )
         };
@@ -9458,6 +9736,8 @@ fn agregar_roles_predeterminados(
         return;
     }
 
+    let varias_personas = personas.len() > 1;
+
     for persona in personas {
         let Some(persona_id) = persona
             .get("id")
@@ -9490,14 +9770,19 @@ fn agregar_roles_predeterminados(
         let mostrar_editor = editor_pendiente || editor_actual.is_some();
 
         let grupo = adw::PreferencesGroup::new();
-        grupo.set_title(&format!(
-            "{} · {}",
-            localizar_visible(idioma_actual(), "Aplicaciones predeterminadas"),
-            persona_id
-        ));
+        let titulo_roles = if varias_personas {
+            format!(
+                "{} · {}",
+                localizar_visible(idioma_actual(), "Aplicaciones predeterminadas"),
+                persona_id
+            )
+        } else {
+            localizar_visible(idioma_actual(), "Aplicaciones predeterminadas")
+        };
+        grupo.set_title(&titulo_roles);
         grupo.set_description(Some(&localizar_visible(
             idioma_actual(),
-            "Estas elecciones pertenecen al perfil portable. Korunix genera las asociaciones MIME a partir del rol y las activa al aplicar la configuración.",
+            "Elige qué aplicaciones quieres usar normalmente para navegar y editar texto.",
         )));
 
         let (browser_ids, browser_indice) =
@@ -9550,17 +9835,17 @@ fn agregar_roles_predeterminados(
         let browser_subtitulo = if browser_pendiente && navegadores_instalados == 1 {
             localizar_visible(
                 idioma_actual(),
-                "Solo hay un navegador candidato instalado. Korunix lo propone, pero debes confirmarlo explícitamente.",
+                "Solo hay un navegador instalado. Korunix no decidirá por ti: confirma cuál quieres usar.",
             )
         } else if browser_pendiente {
             localizar_visible(
                 idioma_actual(),
-                "La elección está pendiente. Instalar un navegador no lo convierte automáticamente en predeterminado.",
+                "Elige el navegador que debe abrir enlaces y páginas web.",
             )
         } else {
             localizar_visible(
                 idioma_actual(),
-                "El navegador solo recibe web y enlaces; no se apropia de imágenes ni PDF.",
+                "Abrirá enlaces y páginas web. Las imágenes y los PDF seguirán usando sus propios visores.",
             )
         };
 
@@ -9577,11 +9862,10 @@ fn agregar_roles_predeterminados(
                 .iter()
                 .map(|id| match id.as_str() {
                     "" => localizar_visible(idioma_actual(), "Elige una opción"),
-                    "kwrite" => localizar_visible(idioma_actual(), "KWrite — ligero y directo"),
-                    "kate" => localizar_visible(
-                        idioma_actual(),
-                        "Kate — proyectos y herramientas avanzadas",
-                    ),
+                    "kwrite" => localizar_visible(idioma_actual(), "KWrite — sencillo y ligero"),
+                    "kate" => {
+                        localizar_visible(idioma_actual(), "Kate — proyectos y trabajo avanzado")
+                    }
                     otro => otro.to_string(),
                 })
                 .collect::<Vec<_>>();
@@ -9595,7 +9879,7 @@ fn agregar_roles_predeterminados(
             ));
             editor.set_subtitle(&localizar_visible(
                 idioma_actual(),
-                "KWrite prioriza la edición ligera y directa. Kate añade proyectos, sesiones, paneles y herramientas avanzadas.",
+                "KWrite es sencillo y ligero para editar archivos de texto. Kate está pensado para muchos archivos, proyectos y herramientas de desarrollo.",
             ));
             editor.set_model(Some(&modelo));
             editor.set_selected(seleccionado);
@@ -9612,7 +9896,7 @@ fn agregar_roles_predeterminados(
         ));
         fila_guardar.set_subtitle(&localizar_visible(
             idioma_actual(),
-            "Korunix prepara primero un plan, guarda el perfil portable y aplica la configuración solo después de tu confirmación.",
+            "Korunix te mostrará el cambio antes de aplicarlo. No cambiará otras aplicaciones predeterminadas.",
         ));
 
         let guardar = gtk::Button::with_label(texto(estado.idioma, "save_apply"));
@@ -9672,10 +9956,7 @@ fn agregar_roles_predeterminados(
                 editor_despues.as_deref(),
                 true,
             ) else {
-                mostrar_exito(
-                    &estado_guardar,
-                    texto(estado_guardar.idioma, "no_change"),
-                );
+                mostrar_exito(&estado_guardar, texto(estado_guardar.idioma, "no_change"));
                 return;
             };
 
@@ -9692,10 +9973,7 @@ fn agregar_roles_predeterminados(
                 editor_despues.as_deref(),
                 false,
             ) else {
-                mostrar_exito(
-                    &estado_guardar,
-                    texto(estado_guardar.idioma, "no_change"),
-                );
+                mostrar_exito(&estado_guardar, texto(estado_guardar.idioma, "no_change"));
                 return;
             };
 
@@ -9703,12 +9981,12 @@ fn agregar_roles_predeterminados(
                 "{} «{}». {}",
                 localizar_visible(
                     idioma_actual(),
-                    "Korunix guardará estas elecciones en el perfil portable de",
+                    "Korunix guardará estas aplicaciones predeterminadas para",
                 ),
                 persona_guardar,
                 localizar_visible(
                     idioma_actual(),
-                    "Después validará y aplicará la configuración. Las asociaciones MIME se derivan de los roles y no se modifican por separado.",
+                    "Después comprobará la configuración y aplicará únicamente estas decisiones.",
                 )
             );
 
@@ -9772,43 +10050,58 @@ fn pagina_aplicaciones(
         .filter_map(|valor| valor.as_str().map(str::to_string))
         .collect::<Vec<_>>();
 
-    let grupo_catalogo = adw::PreferencesGroup::new();
-    grupo_catalogo.set_title(&localizar_visible(idioma_actual(), "Catálogo curado"));
-    grupo_catalogo.set_description(Some(
-        "Las aplicaciones administradas por Korunix se aplican mediante la misma transacción NixOS.",
-    ));
+    for categoria in [
+        "Internet y comunicación",
+        "Oficina y estudio",
+        "Diseño",
+        "Multimedia",
+        "Juegos",
+        "Dispositivos",
+        "Desarrollo",
+        "Archivos y utilidades",
+        "Otras aplicaciones",
+    ] {
+        let grupo_catalogo = adw::PreferencesGroup::new();
+        grupo_catalogo.set_title(&localizar_visible(idioma_actual(), categoria));
 
-    for id in catalogo {
-        let activa = seleccionados.iter().any(|actual| actual == &id);
-        grupo_catalogo.add(&fila_aplicacion(
-            Rc::clone(&estado),
-            id,
-            "curated".to_string(),
-            activa,
-        ));
+        let mut visibles = 0usize;
+
+        for id in catalogo
+            .iter()
+            .filter(|id| !aplicacion_derivada_o_interna(id))
+            .filter(|id| categoria_aplicacion(id) == categoria)
+        {
+            let activa = seleccionados.iter().any(|actual| actual == id);
+            grupo_catalogo.add(&fila_aplicacion(
+                Rc::clone(&estado),
+                id.clone(),
+                "curated".to_string(),
+                activa,
+            ));
+            visibles += 1;
+        }
+
+        if visibles > 0 {
+            pagina.add(&grupo_catalogo);
+        }
     }
 
-    pagina.add(&grupo_catalogo);
-
     let grupo_busqueda = adw::PreferencesGroup::new();
-    grupo_busqueda.set_title(&localizar_visible(
-        idioma_actual(),
-        "Buscar fuera del catálogo",
-    ));
+    grupo_busqueda.set_title(&localizar_visible(idioma_actual(), "Más aplicaciones"));
     grupo_busqueda.set_description(Some(
-        "Busca en Nixpkgs o Flatpak cuando una aplicación no está en el catálogo curado.",
+        "Si no encuentras una aplicación arriba, puedes buscarla en otros catálogos compatibles.",
     ));
 
     let caja_busqueda = gtk::Box::new(gtk::Orientation::Vertical, 8);
     let consulta = gtk::Entry::new();
     consulta.set_placeholder_text(Some(&localizar_visible(
         idioma_actual(),
-        "Nombre o identificador de la aplicación",
+        "Nombre de la aplicación",
     )));
 
-    let fuentes_modelo = gtk::StringList::new(&["Nixpkgs", "Flatpak"]);
+    let fuentes_modelo = gtk::StringList::new(&["Catálogo de NixOS", "Flatpak"]);
     let fuente = adw::ComboRow::new();
-    fuente.set_title(&localizar_visible(idioma_actual(), "Fuente"));
+    fuente.set_title(&localizar_visible(idioma_actual(), "Origen"));
     fuente.set_model(Some(&fuentes_modelo));
     fuente.set_selected(0);
 
@@ -10029,10 +10322,17 @@ fn pagina_escritorio_apariencia(
     let grupo_escritorio = adw::PreferencesGroup::new();
     grupo_escritorio.set_title(&localizar_visible(idioma_actual(), "Escritorios"));
     grupo_escritorio.set_description(Some(
-        "El escritorio principal y los adicionales se guardan juntos para evitar configuraciones contradictorias.",
+        "Elige un escritorio principal y, si quieres, deja otros disponibles para iniciar sesión con ellos.",
     ));
 
-    let catalogo_refs = catalogo.iter().map(String::as_str).collect::<Vec<_>>();
+    let catalogo_humano = catalogo
+        .iter()
+        .map(|id| nombre_escritorio_humano(id))
+        .collect::<Vec<_>>();
+    let catalogo_refs = catalogo_humano
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
     let modelo_escritorios = gtk::StringList::new(&catalogo_refs);
     let principal = adw::ComboRow::new();
     principal.set_title(&localizar_visible(idioma_actual(), "Escritorio principal"));
@@ -10040,17 +10340,60 @@ fn pagina_escritorio_apariencia(
     principal.set_selected(indice(&escritorio_actual, &catalogo));
     grupo_escritorio.add(&principal);
 
-    let mut checks = Vec::<(String, gtk::CheckButton)>::new();
-    for id in &catalogo {
-        let row = adw::ActionRow::new();
-        row.set_title(id);
-        let check = gtk::CheckButton::new();
-        check.set_active(adicionales_actuales.iter().any(|actual| actual == id));
-        check.set_valign(gtk::Align::Center);
-        row.add_suffix(&check);
-        grupo_escritorio.add(&row);
-        checks.push((id.clone(), check));
-    }
+    let checks = Rc::new(
+        catalogo
+            .iter()
+            .map(|id| {
+                let row = adw::ActionRow::new();
+                row.set_title(&nombre_escritorio_humano(id));
+
+                let check = gtk::CheckButton::new();
+                let es_principal = id == &escritorio_actual;
+                check.set_active(
+                    es_principal || adicionales_actuales.iter().any(|actual| actual == id),
+                );
+                check.set_sensitive(!es_principal);
+                check.set_valign(gtk::Align::Center);
+
+                if es_principal {
+                    row.set_subtitle(&localizar_visible(idioma_actual(), "Principal"));
+                }
+
+                row.add_suffix(&check);
+                grupo_escritorio.add(&row);
+                (id.clone(), check, row)
+            })
+            .collect::<Vec<_>>(),
+    );
+
+    let principal_actual = Rc::new(RefCell::new(escritorio_actual.clone()));
+    let checks_principal = Rc::clone(&checks);
+    let catalogo_principal = catalogo.clone();
+    let principal_actual_cambio = Rc::clone(&principal_actual);
+
+    principal.connect_selected_notify(move |selector| {
+        let Some(nuevo) = catalogo_principal.get(selector.selected() as usize) else {
+            return;
+        };
+
+        let anterior = principal_actual_cambio.borrow().clone();
+
+        for (id, check, row) in checks_principal.iter() {
+            if id == nuevo {
+                check.set_active(true);
+                check.set_sensitive(false);
+                row.set_subtitle(&localizar_visible(idioma_actual(), "Principal"));
+            } else {
+                if id == &anterior {
+                    check.set_active(false);
+                }
+                check.set_sensitive(true);
+                row.set_subtitle("");
+            }
+        }
+
+        *principal_actual_cambio.borrow_mut() = nuevo.clone();
+    });
 
     pagina.add(&grupo_escritorio);
 
@@ -10089,8 +10432,8 @@ fn pagina_escritorio_apariencia(
 
         let additional = checks
             .iter()
-            .filter(|(id, check)| check.is_active() && id != &desktop)
-            .map(|(id, _)| id.clone())
+            .filter(|(id, check, _)| check.is_active() && id != &desktop)
+            .map(|(id, _, _)| id.clone())
             .collect::<Vec<_>>()
             .join(",");
 
@@ -10369,7 +10712,7 @@ fn pagina_actualizaciones(
     let grupo_todo = adw::PreferencesGroup::new();
     grupo_todo.set_title(texto(estado.idioma, "update_all"));
     grupo_todo.set_description(Some(
-        "Recomendado: actualiza conjuntamente las unidades compatibles que Korunix administra.",
+        "Recomendado para la mayoría: actualiza conjuntamente las partes compatibles del sistema y las aplicaciones que Korunix administra.",
     ));
 
     let fila_todo = adw::ActionRow::new();
@@ -10427,7 +10770,7 @@ fn pagina_actualizaciones(
     let grupo_personalizar = adw::PreferencesGroup::new();
     grupo_personalizar.set_title(texto(estado.idioma, "customize_updates"));
     grupo_personalizar.set_description(Some(
-        "Selecciona unidades reales del lock de Nix. Korunix no finge actualizaciones independientes cuando comparten fuente.",
+        "Elige qué partes quieres actualizar. Cuando varias dependen de la misma base, Korunix las mantiene juntas para evitar combinaciones incompatibles.",
     ));
 
     let objetivos = plan_actualizacion
@@ -10443,7 +10786,11 @@ fn pagina_actualizaciones(
 
     for objetivo in &objetivos {
         let row = adw::ActionRow::new();
-        row.set_title(objetivo);
+        let (titulo, detalle) = objetivo_actualizacion_humano(objetivo);
+        row.set_title(&localizar_visible(idioma_actual(), &titulo));
+        row.set_subtitle(&localizar_visible(idioma_actual(), &detalle));
+        row.set_tooltip_text(Some(objetivo));
+
         let check = gtk::CheckButton::new();
         check.set_active(true);
         check.set_valign(gtk::Align::Center);
@@ -10469,7 +10816,10 @@ fn pagina_actualizaciones(
             .collect::<Vec<_>>();
 
         if elegidos.is_empty() {
-            mostrar_error(&estado_personalizar, "Selecciona al menos una unidad.");
+            mostrar_error(
+                &estado_personalizar,
+                "Selecciona al menos una parte para actualizar.",
+            );
             return;
         }
 
@@ -10485,10 +10835,7 @@ fn pagina_actualizaciones(
         let dialogo = dialogo_accion(
             boton,
             &estado_personalizar,
-            &format!(
-                "¿Actualizar {} unidades seleccionadas del catálogo?",
-                elegidos.len()
-            ),
+            &format!("¿Actualizar las {} partes seleccionadas?", elegidos.len()),
             "Actualizar selección",
             false,
         );
@@ -10520,7 +10867,7 @@ fn pagina_actualizaciones(
     let grupo_avanzado = adw::PreferencesGroup::new();
     grupo_avanzado.set_title(texto(estado.idioma, "advanced"));
     grupo_avanzado.set_description(Some(
-        "El canal es una política de sistema. Los pines individuales solo se ofrecerán cuando la arquitectura pueda sostenerlos.",
+        "Estable prioriza versiones más probadas. Inestable ofrece versiones más recientes y cambia con mayor frecuencia.",
     ));
 
     let actual = channel
@@ -11227,22 +11574,65 @@ fn construir_ventana(app: &adw::Application, raiz: PathBuf, motor: PathBuf) {
     cabecera_lateral.set_title_widget(Some(&titulo));
     barra_lateral.add_top_bar(&cabecera_lateral);
 
+    let busqueda_global = gtk::SearchEntry::new();
+    busqueda_global.set_placeholder_text(Some(texto(idioma, "global_search")));
+    busqueda_global.set_tooltip_text(Some(&localizar_visible(
+        idioma_actual(),
+        "Buscar ajustes y áreas",
+    )));
+    busqueda_global.set_can_focus(true);
+    busqueda_global.set_hexpand(true);
+    busqueda_global.set_size_request(-1, 38);
+    busqueda_global.set_margin_top(12);
+    busqueda_global.set_margin_start(12);
+    busqueda_global.set_margin_end(12);
+
     let lista = gtk::ListBox::new();
     lista.add_css_class("navigation-sidebar");
     lista.set_selection_mode(gtk::SelectionMode::Single);
-    lista.set_margin_top(12);
+    lista.set_margin_top(8);
     lista.set_margin_bottom(12);
     lista.set_margin_start(12);
     lista.set_margin_end(12);
 
-    for (_, clave, icono) in paginas {
-        lista.append(&fila_navegacion(texto(idioma, clave), icono));
+    let mut filas_busqueda = Vec::<(gtk::ListBoxRow, String)>::new();
+
+    for (nombre, clave, icono) in paginas {
+        let fila = fila_navegacion(texto(idioma, clave), icono);
+        let terminos = format!(
+            "{} {}",
+            texto(idioma, clave),
+            terminos_busqueda_pagina(nombre)
+        )
+        .to_lowercase();
+
+        lista.append(&fila);
+        filas_busqueda.push((fila, terminos));
     }
+
+    let busqueda_vacia = gtk::Label::new(Some(&localizar_visible(
+        idioma_actual(),
+        "No encontramos un área con ese nombre.",
+    )));
+    busqueda_vacia.set_wrap(true);
+    busqueda_vacia.set_justify(gtk::Justification::Center);
+    busqueda_vacia.add_css_class("dim-label");
+    busqueda_vacia.set_margin_top(28);
+    busqueda_vacia.set_margin_bottom(28);
+    busqueda_vacia.set_margin_start(18);
+    busqueda_vacia.set_margin_end(18);
+    busqueda_vacia.set_visible(false);
 
     let desplazamiento_lateral = gtk::ScrolledWindow::new();
     desplazamiento_lateral.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
+    desplazamiento_lateral.set_vexpand(true);
     desplazamiento_lateral.set_child(Some(&lista));
-    barra_lateral.set_content(Some(&desplazamiento_lateral));
+
+    let contenido_lateral = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    contenido_lateral.append(&busqueda_global);
+    contenido_lateral.append(&busqueda_vacia);
+    contenido_lateral.append(&desplazamiento_lateral);
+    barra_lateral.set_content(Some(&contenido_lateral));
 
     let pagina_lateral = adw::NavigationPage::new(&barra_lateral, "Korunix");
 
@@ -11260,12 +11650,6 @@ fn construir_ventana(app: &adw::Application, raiz: PathBuf, motor: PathBuf) {
     });
 
     cabecera_contenido.pack_start(&menu_secciones);
-
-    let busqueda_global = gtk::SearchEntry::new();
-    busqueda_global.set_placeholder_text(Some(texto(idioma, "global_search")));
-    busqueda_global.set_tooltip_text(Some(texto(idioma, "global_search")));
-    busqueda_global.set_can_focus(true);
-    cabecera_contenido.pack_start(&busqueda_global);
 
     let refresh = gtk::Button::from_icon_name("view-refresh-symbolic");
     refresh.set_tooltip_text(Some(texto(idioma, "refresh")));
@@ -11310,120 +11694,46 @@ fn construir_ventana(app: &adw::Application, raiz: PathBuf, motor: PathBuf) {
     let split_clon = split.clone();
     let pagina_contenido_clon = pagina_contenido.clone();
 
+    let filas_busqueda = Rc::new(filas_busqueda);
+
     {
         let lista_busqueda = lista.clone();
-        busqueda_global.connect_activate(move |entrada| {
-            let consulta = entrada.text().to_ascii_lowercase();
-            let consulta = consulta.trim();
+        let filas_busqueda = Rc::clone(&filas_busqueda);
+        let busqueda_vacia = busqueda_vacia.clone();
 
-            if consulta.is_empty() {
-                return;
+        busqueda_global.connect_search_changed(move |entrada| {
+            let consulta = entrada.text().trim().to_lowercase();
+            let mut primera_visible = None::<gtk::ListBoxRow>;
+
+            for (fila, terminos) in filas_busqueda.iter() {
+                let visible = consulta.is_empty() || terminos.contains(&consulta);
+                fila.set_visible(visible);
+
+                if visible && primera_visible.is_none() {
+                    primera_visible = Some(fila.clone());
+                }
             }
 
-            let destino = if [
-                "firefox",
-                "chrome",
-                "navegador",
-                "browser",
-                "editor",
-                "kwrite",
-                "kate",
-                "aplic",
-                "programa",
-                "software",
-                "flatpak",
-                "nixpkgs",
-            ]
-            .iter()
-            .any(|clave| consulta.contains(clave))
-            {
-                "applications"
-            } else if [
-                "apariencia",
-                "tema",
-                "claro",
-                "oscuro",
-                "autom",
-                "everforest",
-                "escritorio",
-                "niri",
-                "hyprland",
-                "plasma",
-                "cinnamon",
-            ]
-            .iter()
-            .any(|clave| consulta.contains(clave))
-            {
-                "appearance"
-            } else if [
-                "idioma",
-                "región",
-                "region",
-                "teclado",
-                "zona horaria",
-                "locale",
-                "keyboard",
-            ]
-            .iter()
-            .any(|clave| consulta.contains(clave))
-            {
-                "localization"
-            } else if ["persona", "usuario", "cuenta", "contraseña", "avatar"]
-                .iter()
-                .any(|clave| consulta.contains(clave))
-            {
-                "people"
-            } else if ["copia", "backup", "restaur", "historial"]
-                .iter()
-                .any(|clave| consulta.contains(clave))
-            {
-                "backups"
-            } else if ["actualiz", "canal", "estable", "inestable", "update"]
-                .iter()
-                .any(|clave| consulta.contains(clave))
-            {
-                "updates"
-            } else if [
-                "sonido",
-                "audio",
-                "micrófono",
-                "microfono",
-                "cámara",
-                "camara",
-            ]
-            .iter()
-            .any(|clave| consulta.contains(clave))
-            {
-                "media"
-            } else if ["disco", "usb", "almacen", "expuls", "storage"]
-                .iter()
-                .any(|clave| consulta.contains(clave))
-            {
-                "storage"
-            } else if consulta.contains("firmware") {
-                "firmware"
-            } else if ["hardware", "cpu", "memoria", "gpu"]
-                .iter()
-                .any(|clave| consulta.contains(clave))
-            {
-                "hardware"
-            } else if ["limpiar", "mantenimiento", "recuper", "rollback"]
-                .iter()
-                .any(|clave| consulta.contains(clave))
-            {
-                "maintenance"
-            } else {
-                "summary"
-            };
+            busqueda_vacia.set_visible(primera_visible.is_none());
 
-            if let Some((indice, _)) = paginas
-                .iter()
-                .enumerate()
-                .find(|(_, (nombre, _, _))| *nombre == destino)
-            {
-                if let Some(fila) = lista_busqueda.row_at_index(indice as i32) {
-                    lista_busqueda.select_row(Some(&fila));
-                }
+            let seleccion_visible = lista_busqueda
+                .selected_row()
+                .map(|fila| fila.is_visible())
+                .unwrap_or(false);
+
+            if !seleccion_visible {
+                lista_busqueda.select_row(primera_visible.as_ref());
+            }
+        });
+    }
+
+    {
+        let split_busqueda = split.clone();
+        let lista_busqueda = lista.clone();
+
+        busqueda_global.connect_activate(move |_| {
+            if lista_busqueda.selected_row().is_some() && split_busqueda.is_collapsed() {
+                split_busqueda.set_show_sidebar(false);
             }
         });
     }
@@ -11450,7 +11760,7 @@ fn construir_ventana(app: &adw::Application, raiz: PathBuf, motor: PathBuf) {
         lista.select_row(Some(&fila));
     }
 
-    let condicion = adw::BreakpointCondition::parse("max-width: 700px")
+    let condicion = adw::BreakpointCondition::parse("max-width: 819px")
         .expect("La condición adaptable de Korunix debe ser válida.");
     let breakpoint = adw::Breakpoint::new(condicion);
 
@@ -11500,6 +11810,57 @@ fn construir_ventana(app: &adw::Application, raiz: PathBuf, motor: PathBuf) {
 #[cfg(test)]
 mod pruebas_roles_predeterminados_gui {
     use super::*;
+
+    #[test]
+    fn busqueda_global_encuentra_decisiones_humanas() {
+        assert!(terminos_busqueda_pagina("applications").contains("firefox"));
+        assert!(terminos_busqueda_pagina("applications").contains("navegador"));
+        assert!(terminos_busqueda_pagina("localization").contains("teclado"));
+        assert!(terminos_busqueda_pagina("storage").contains("usb"));
+        assert!(terminos_busqueda_pagina("hardware").contains("memoria"));
+    }
+
+    #[test]
+    fn piezas_tecnicas_no_se_presentan_como_aplicaciones() {
+        for id in [
+            "android-tools",
+            "xwayland-satellite",
+            "git",
+            "just",
+            "rar",
+            "unrar",
+            "gnome-calculator",
+            "loupe",
+            "papers",
+        ] {
+            assert!(aplicacion_derivada_o_interna(id), "{id}");
+        }
+
+        assert!(!aplicacion_derivada_o_interna("firefox"));
+        assert!(!aplicacion_derivada_o_interna("steam"));
+        assert!(!aplicacion_derivada_o_interna("peazip"));
+    }
+
+    #[test]
+    fn nombres_visibles_no_exponen_ids_del_catalogo() {
+        assert_eq!(nombre_aplicacion_humano("figma-linux"), "Figma");
+        assert_eq!(
+            nombre_aplicacion_humano("onlyoffice-desktopeditors"),
+            "ONLYOFFICE"
+        );
+        assert_eq!(nombre_aplicacion_humano("scrcpy"), "Controlar Android");
+        assert_eq!(nombre_escritorio_humano("plasma"), "KDE Plasma");
+    }
+
+    #[test]
+    fn actualizaciones_tienen_proposito_humano() {
+        let (titulo, detalle) = objetivo_actualizacion_humano("nixpkgs");
+        assert_eq!(titulo, "Sistema y aplicaciones");
+        assert!(detalle.contains("NixOS"));
+
+        let (titulo, _) = objetivo_actualizacion_humano("aagl");
+        assert_eq!(titulo, "Juegos de anime");
+    }
 
     #[test]
     fn un_navegador_instalado_no_se_asume() {
