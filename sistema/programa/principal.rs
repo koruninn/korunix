@@ -33,6 +33,7 @@ Uso:
   korunix applications [operación]
   korunix desktop [operación]
   korunix appearance [operación]
+  korunix defaults [--json | set --person <id> [--browser firefox|google-chrome] [--plasma-text-editor kwrite|kate] [--plan] [--yes] [--json]]
   korunix hardware [--json]
   korunix localization [operación]
   korunix backup [operación]

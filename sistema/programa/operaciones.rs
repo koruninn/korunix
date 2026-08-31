@@ -1005,25 +1005,40 @@ fn structure(raiz: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn validate(raiz: &Path) -> Result<(), String> {
-    structure(raiz)?;
+fn validate_with_output(raiz: &Path, human_output: bool) -> Result<(), String> {
+    if human_output {
+        structure(raiz)?;
+    } else {
+        for path in ["configuracion", "sistema", "generado"] {
+            if !raiz.join(path).is_dir() {
+                return Err(format!("Falta {path}/."));
+            }
+        }
+    }
 
     if raiz.join(".git").exists() {
-        visible(raiz, "git", &["diff".into(), "--check".into()])?;
-    } else {
+        let args = ["diff".into(), "--check".into()];
+        if human_output {
+            visible(raiz, "git", &args)?;
+        } else {
+            let _ = capture(raiz, "git", &args)?;
+        }
+    } else if human_output {
         println!("✓ distribución sin metadatos Git; se valida como producto");
     }
 
-    visible(
-        raiz,
-        "nix",
-        &[
-            "flake".into(),
-            "check".into(),
-            "--no-build".into(),
-            "--show-trace".into(),
-        ],
-    )?;
+    let flake_args = [
+        "flake".into(),
+        "check".into(),
+        "--no-build".into(),
+        "--show-trace".into(),
+    ];
+
+    if human_output {
+        visible(raiz, "nix", &flake_args)?;
+    } else {
+        let _ = capture(raiz, "nix", &flake_args)?;
+    }
 
     for id in equipos_disponibles(raiz)? {
         let drv = capture(
@@ -1041,8 +1056,19 @@ fn validate(raiz: &Path) -> Result<(), String> {
         }
     }
 
-    println!("✓ VALIDACIÓN COMPLETA");
+    if human_output {
+        println!("✓ VALIDACIÓN COMPLETA");
+    }
+
     Ok(())
+}
+
+fn validate(raiz: &Path) -> Result<(), String> {
+    validate_with_output(raiz, true)
+}
+
+fn validate_quiet(raiz: &Path) -> Result<(), String> {
+    validate_with_output(raiz, false)
 }
 
 fn collect_nix(path: &Path, out: &mut Vec<PathBuf>) {
@@ -4226,6 +4252,464 @@ fn appearance_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, String
     Ok(ExitCode::SUCCESS)
 }
 
+fn default_roles_state_json(raiz: &Path) -> Result<String, String> {
+    let host = resolver_equipo(raiz)?;
+    flake_raw(
+        raiz,
+        &format!(
+            "nixosConfigurations.{host}.config.environment.etc.\"korunix/default-roles.json\".text"
+        ),
+    )
+}
+
+fn default_roles_block_end(lineas: &[String], inicio: usize) -> Result<usize, String> {
+    let mut nivel = 0isize;
+
+    for (i, linea) in lineas.iter().enumerate().skip(inicio) {
+        nivel += linea.chars().filter(|c| *c == '{').count() as isize;
+        nivel -= linea.chars().filter(|c| *c == '}').count() as isize;
+
+        if i > inicio && nivel == 0 {
+            return Ok(i);
+        }
+    }
+
+    Err("El bloque defaultRoles no tiene cierre reconocible.".to_string())
+}
+
+fn default_roles_set_line(
+    lineas: &mut Vec<String>,
+    inicio: usize,
+    clave: &str,
+    valor: &str,
+) -> Result<(), String> {
+    let fin = default_roles_block_end(lineas, inicio)?;
+    let prefijo = format!("    {clave} = ");
+
+    let posiciones = (inicio + 1..fin)
+        .filter(|i| lineas[*i].starts_with(&prefijo))
+        .collect::<Vec<_>>();
+
+    if posiciones.len() > 1 {
+        return Err(format!(
+            "El perfil contiene más de una elección {clave}; Korunix no sobrescribirá una de forma arbitraria."
+        ));
+    }
+
+    let nueva = format!("    {clave} = {};", json_texto(valor));
+
+    if let Some(&posicion) = posiciones.first() {
+        lineas[posicion] = nueva;
+    } else {
+        lineas.insert(fin, nueva);
+    }
+
+    Ok(())
+}
+
+fn default_roles_profile_text(
+    texto: &str,
+    browser: Option<&str>,
+    plasma_text_editor: Option<&str>,
+) -> Result<String, String> {
+    if browser.is_none() && plasma_text_editor.is_none() {
+        return Err("No se indicó ningún rol predeterminado.".to_string());
+    }
+
+    let mut lineas = texto.lines().map(ToString::to_string).collect::<Vec<_>>();
+
+    let bloques = lineas
+        .iter()
+        .enumerate()
+        .filter_map(|(i, linea)| (linea.trim() == "defaultRoles = {").then_some(i))
+        .collect::<Vec<_>>();
+
+    if bloques.len() > 1 {
+        return Err(
+            "El perfil contiene más de un bloque defaultRoles; Korunix no elegirá uno de forma arbitraria."
+                .to_string(),
+        );
+    }
+
+    let inicio = if let Some(&inicio) = bloques.first() {
+        if lineas[inicio] != "  defaultRoles = {" {
+            return Err(
+                "El bloque defaultRoles existe con una estructura manual que Korunix no puede editar con seguridad."
+                    .to_string(),
+            );
+        }
+        inicio
+    } else {
+        if texto.lines().any(|linea| linea.contains("defaultRoles")) {
+            return Err(
+                "El perfil menciona defaultRoles con una estructura no reconocida; Korunix conservará el archivo intacto."
+                    .to_string(),
+            );
+        }
+
+        let ancla = lineas
+            .iter()
+            .position(|linea| linea == "  capabilities = [")
+            .or_else(|| {
+                lineas
+                    .iter()
+                    .position(|linea| linea.starts_with("  avatar ="))
+            })
+            .or_else(|| lineas.iter().rposition(|linea| linea == "}"))
+            .ok_or_else(|| {
+                "No encontré un punto seguro para insertar defaultRoles en el perfil.".to_string()
+            })?;
+
+        let mut bloque = vec![
+            "  # Aplicaciones predeterminadas que acompañan a esta persona.".to_string(),
+            "  defaultRoles = {".to_string(),
+        ];
+
+        if let Some(valor) = browser {
+            bloque.push(format!("    browser = {};", json_texto(valor)));
+        }
+
+        if let Some(valor) = plasma_text_editor {
+            bloque.push(format!("    plasmaTextEditor = {};", json_texto(valor)));
+        }
+
+        bloque.push("  };".to_string());
+        bloque.push(String::new());
+
+        for (offset, linea) in bloque.into_iter().enumerate() {
+            lineas.insert(ancla + offset, linea);
+        }
+
+        return Ok(lineas.join("\n") + "\n");
+    };
+
+    if let Some(valor) = browser {
+        default_roles_set_line(&mut lineas, inicio, "browser", valor)?;
+    }
+
+    if let Some(valor) = plasma_text_editor {
+        default_roles_set_line(&mut lineas, inicio, "plasmaTextEditor", valor)?;
+    }
+
+    Ok(lineas.join("\n") + "\n")
+}
+
+fn aplicar_configuracion_persona(
+    raiz: &Path,
+    persona: &str,
+    nuevo: &str,
+) -> Result<PathBuf, String> {
+    if !id_valido(persona) {
+        return Err("Identificador de persona inválido.".to_string());
+    }
+
+    let ruta = raiz
+        .join("configuracion/personas")
+        .join(format!("{persona}.nix"));
+
+    if !ruta.is_file() {
+        return Err(format!("No existe configuracion/personas/{persona}.nix."));
+    }
+
+    let metadata = fs::symlink_metadata(&ruta)
+        .map_err(|e| format!("No pude inspeccionar {}: {e}", ruta.display()))?;
+
+    if metadata.file_type().is_symlink() {
+        return Err(
+            "Korunix no modifica perfiles portables que sean enlaces simbólicos.".to_string(),
+        );
+    }
+
+    let anterior = fs::read(&ruta).map_err(|e| format!("No pude leer {}: {e}", ruta.display()))?;
+
+    let backup = backup_dir("default-roles")?;
+    fs::write(backup.join("persona.nix"), &anterior)
+        .map_err(|e| format!("No pude guardar el respaldo del perfil: {e}"))?;
+
+    let transaction = files_transaction_begin(raiz, std::slice::from_ref(&ruta))?;
+
+    if let Err(error) = atomic_write(&ruta, nuevo.as_bytes()) {
+        let _ = rollback_pending_transaction(raiz);
+        return Err(error);
+    }
+
+    if let Err(error) = validate_quiet(raiz) {
+        let recovery = rollback_pending_transaction(raiz);
+
+        return match recovery {
+            Ok(_) => Err(format!(
+                "La elección propuesta no pasó la validación y el perfil fue restaurado. {error}"
+            )),
+            Err(recovery_error) => Err(format!(
+                "La elección propuesta no pasó la validación ({error}) y la recuperación automática también falló: {recovery_error}"
+            )),
+        };
+    }
+
+    transaction_commit(Some(&transaction))?;
+    Ok(backup)
+}
+
+fn defaults_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
+    if args.is_empty() {
+        pretty(raiz, &default_roles_state_json(raiz)?)?;
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    if args == ["--json"] {
+        println!("{}", default_roles_state_json(raiz)?);
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    if args.first().map(String::as_str) != Some("set") {
+        return Err(
+            "Uso: korunix defaults [--json] | set --person <id> [--browser firefox|google-chrome] [--plasma-text-editor kwrite|kate] [--plan] [--yes] [--json]."
+                .to_string(),
+        );
+    }
+
+    let mut persona = None::<String>;
+    let mut browser = None::<String>;
+    let mut plasma_text_editor = None::<String>;
+    let mut plan_only = false;
+    let mut yes = false;
+    let mut json = false;
+
+    let mut i = 1usize;
+
+    while i < args.len() {
+        match args[i].as_str() {
+            "--person" => {
+                if persona.is_some() {
+                    return Err("--person se indicó más de una vez.".to_string());
+                }
+
+                i += 1;
+                persona = Some(
+                    args.get(i)
+                        .cloned()
+                        .ok_or_else(|| "Falta el identificador de persona.".to_string())?,
+                );
+            }
+            "--browser" => {
+                if browser.is_some() {
+                    return Err("--browser se indicó más de una vez.".to_string());
+                }
+
+                i += 1;
+                browser = Some(
+                    args.get(i)
+                        .cloned()
+                        .ok_or_else(|| "Falta el navegador.".to_string())?,
+                );
+            }
+            "--plasma-text-editor" => {
+                if plasma_text_editor.is_some() {
+                    return Err("--plasma-text-editor se indicó más de una vez.".to_string());
+                }
+
+                i += 1;
+                plasma_text_editor = Some(
+                    args.get(i)
+                        .cloned()
+                        .ok_or_else(|| "Falta el editor de Plasma.".to_string())?,
+                );
+            }
+            "--plan" => plan_only = true,
+            "--yes" => yes = true,
+            "--json" => json = true,
+            otro => {
+                return Err(format!(
+                    "Opción de aplicaciones predeterminadas desconocida: {otro}"
+                ))
+            }
+        }
+
+        i += 1;
+    }
+
+    let persona = persona.ok_or_else(|| "Falta --person.".to_string())?;
+
+    if !id_valido(&persona) {
+        return Err("Identificador de persona inválido.".to_string());
+    }
+
+    if browser.is_none() && plasma_text_editor.is_none() {
+        return Err("Indica --browser, --plasma-text-editor o ambas elecciones.".to_string());
+    }
+
+    if let Some(valor) = browser.as_deref() {
+        if !matches!(valor, "firefox" | "google-chrome") {
+            return Err("El navegador debe ser firefox o google-chrome.".to_string());
+        }
+    }
+
+    if let Some(valor) = plasma_text_editor.as_deref() {
+        if !matches!(valor, "kwrite" | "kate") {
+            return Err("El editor de Plasma debe ser kwrite o kate.".to_string());
+        }
+    }
+
+    let estado_raw = default_roles_state_json(raiz)?;
+    let estado: serde_json::Value = serde_json::from_str(&estado_raw).map_err(|e| e.to_string())?;
+
+    let personas = estado
+        .get("people")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "El contrato de roles predeterminados no contiene personas.".to_string())?;
+
+    let actual = personas
+        .iter()
+        .find(|entrada| {
+            entrada.get("id").and_then(serde_json::Value::as_str) == Some(persona.as_str())
+        })
+        .ok_or_else(|| {
+            format!(
+                "{persona} no está asignada al host actual; Korunix no modificará un perfil ajeno."
+            )
+        })?;
+
+    let before_browser = actual
+        .pointer("/requested/browser")
+        .and_then(serde_json::Value::as_str)
+        .map(ToString::to_string);
+
+    let before_plasma = actual
+        .pointer("/requested/plasmaTextEditor")
+        .and_then(serde_json::Value::as_str)
+        .map(ToString::to_string);
+
+    let after_browser = browser.clone().or_else(|| before_browser.clone());
+    let after_plasma = plasma_text_editor.clone().or_else(|| before_plasma.clone());
+
+    let changed = before_browser != after_browser || before_plasma != after_plasma;
+
+    let aplicaciones_raw = nix_config_json(raiz, "applications")?;
+    let aplicaciones: Vec<String> =
+        serde_json::from_str(&aplicaciones_raw).map_err(|e| e.to_string())?;
+
+    let browser_effective = after_browser
+        .as_ref()
+        .filter(|valor| aplicaciones.contains(valor))
+        .cloned();
+
+    let browser_deferred = after_browser.is_some() && browser_effective.is_none();
+
+    let relative_profile = format!("configuracion/personas/{persona}.nix");
+
+    let plan_value = serde_json::json!({
+        "schemaVersion": 1,
+        "kind": "korunix-default-roles-change-plan",
+        "person": persona,
+        "profilePath": relative_profile,
+        "portableProfile": true,
+        "before": {
+            "browser": before_browser,
+            "plasmaTextEditor": before_plasma
+        },
+        "after": {
+            "browser": after_browser,
+            "plasmaTextEditor": after_plasma
+        },
+        "effectiveOnCurrentHostAfterApply": {
+            "browser": browser_effective,
+            "browserDeferred": browser_deferred
+        },
+        "changed": changed,
+        "effects": {
+            "writesPortableProfile": changed,
+            "writesMimeFilesNow": false,
+            "changesLiveDefaults": false,
+            "requiresSystemApply": changed,
+            "buildsGeneration": false,
+            "appliesGeneration": false
+        }
+    });
+
+    let plan = serde_json::to_string(&plan_value).map_err(|e| e.to_string())?;
+
+    if let Some(code) = salida_plan_o_confirmacion(
+        raiz,
+        &plan,
+        plan_only,
+        yes,
+        json,
+        "¿Guardar estas aplicaciones predeterminadas en el perfil portable?",
+    )? {
+        return Ok(code);
+    }
+
+    if !changed {
+        if json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "schemaVersion": 1,
+                    "kind": "korunix-default-roles-change-result",
+                    "person": persona,
+                    "changed": false,
+                    "nothingToDo": true,
+                    "requiresSystemApply": false,
+                    "writesMimeFilesNow": false,
+                    "changesLiveDefaults": false
+                })
+            );
+        } else {
+            println!("✓ esas aplicaciones predeterminadas ya están elegidas");
+        }
+
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    let ruta = raiz
+        .join("configuracion/personas")
+        .join(format!("{persona}.nix"));
+
+    let texto =
+        fs::read_to_string(&ruta).map_err(|e| format!("No pude leer {}: {e}", ruta.display()))?;
+
+    let nuevo =
+        default_roles_profile_text(&texto, browser.as_deref(), plasma_text_editor.as_deref())?;
+
+    let backup = aplicar_configuracion_persona(raiz, &persona, &nuevo)?;
+
+    let mut cambios = Vec::<String>::new();
+
+    if let Some(valor) = browser.as_deref() {
+        cambios.push(format!("navegador {valor}"));
+    }
+
+    if let Some(valor) = plasma_text_editor.as_deref() {
+        cambios.push(format!("editor de Plasma {valor}"));
+    }
+
+    history_record(
+        "default-roles-prepared",
+        &format!("Preparaste para {persona}: {}", cambios.join(" y ")),
+    )?;
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "schemaVersion": 1,
+                "kind": "korunix-default-roles-change-result",
+                "person": persona,
+                "changed": true,
+                "nothingToDo": false,
+                "requiresSystemApply": true,
+                "writesMimeFilesNow": false,
+                "changesLiveDefaults": false,
+                "backup": backup.display().to_string()
+            })
+        );
+    } else {
+        println!("✓ aplicaciones predeterminadas preparadas; falta aplicar la configuración");
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
 fn application_selection_token(source: &str, id: &str) -> Result<String, String> {
     if id.trim().is_empty() || id.chars().any(char::is_whitespace) {
         return Err("Identificador de aplicación inválido.".to_string());
@@ -6895,7 +7379,7 @@ fn product_status(raiz: &Path, json: bool) -> Result<ExitCode, String> {
         "capabilities": {
             "localWithoutNetwork": [
                 "status", "hardware", "localization", "users", "applications",
-                "desktop", "appearance", "backup", "history", "rollback",
+                "desktop", "appearance", "defaults", "backup", "history", "rollback",
                 "storage", "media", "validate"
             ],
             "networkWhenRefreshing": ["update", "firmware refresh"],
@@ -7859,6 +8343,7 @@ pub(super) fn ejecutar_operacion(
         "applications" => applications_operation(raiz, &args),
         "desktop" => desktop_operation(raiz, &args),
         "appearance" => appearance_operation(raiz, &args),
+        "defaults" => defaults_operation(raiz, &args),
         "backup" => backup_operation(raiz, &args),
         "history" => history_operation(raiz, &args),
         "status" if args.is_empty() => {
@@ -8055,6 +8540,62 @@ mod tests {
         assert!(nuevo.contains(r#"style = "everforest";"#));
         assert!(nuevo.contains(r#"mode = "light";"#));
         assert_eq!(nuevo.matches("appearance = {").count(), 1);
+    }
+
+    #[test]
+    fn roles_portables_se_insertan_sin_borrar_preferencias() {
+        let original = r#"# ESTE ARCHIVO SE PUEDE CAMBIAR.
+{
+  accountName = "ana";
+  fullName = "Ana";
+  language = "es";
+
+  inputMethods = [];
+
+  # Esta capacidad debe sobrevivir.
+  capabilities = [
+    "printing"
+  ];
+
+  avatar = null;
+}
+"#;
+
+        let nuevo = default_roles_profile_text(original, Some("firefox"), Some("kate"))
+            .expect("perfil editable");
+
+        assert!(nuevo.contains("defaultRoles = {"));
+        assert!(nuevo.contains(r#"browser = "firefox";"#));
+        assert!(nuevo.contains(r#"plasmaTextEditor = "kate";"#));
+        assert!(nuevo.contains("# Esta capacidad debe sobrevivir."));
+        assert!(nuevo.contains(r#""printing""#));
+        assert!(nuevo.contains("avatar = null;"));
+        assert_eq!(nuevo.matches("defaultRoles = {").count(), 1);
+    }
+
+    #[test]
+    fn roles_portables_actualizan_una_eleccion_y_conservan_la_otra() {
+        let original = r#"{
+  accountName = "ana";
+
+  defaultRoles = {
+    # El comentario humano se conserva.
+    browser = "firefox";
+    plasmaTextEditor = "kwrite";
+  };
+
+  capabilities = [];
+}
+"#;
+
+        let nuevo = default_roles_profile_text(original, Some("google-chrome"), None)
+            .expect("perfil editable");
+
+        assert!(nuevo.contains("# El comentario humano se conserva."));
+        assert!(nuevo.contains(r#"browser = "google-chrome";"#));
+        assert!(nuevo.contains(r#"plasmaTextEditor = "kwrite";"#));
+        assert!(!nuevo.contains(r#"browser = "firefox";"#));
+        assert_eq!(nuevo.matches("defaultRoles = {").count(), 1);
     }
 
     #[test]
