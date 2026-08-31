@@ -867,7 +867,8 @@ a cualquier otro navegador instalado como alternativa.
 
 La terminal predeterminada de Korunix es Alacritty en todos los escritorios soportados.
 
-La shell predeterminada del perfil Korunix es Fish.
+La shell predeterminada del perfil Korunix es Fish en Niri, Hyprland, Cinnamon
+y KDE Plasma. La elección de escritorio no cambia la shell del perfil Korunix.
 
 `fetch` forma parte de la experiencia de terminal y utiliza Fastfetch como dependencia. Fastfetch no necesita presentarse como una elección independiente cuando solo existe para satisfacer esa dependencia.
 
@@ -973,7 +974,7 @@ extensiones permanecen intactas.
 
 - Niri → Nautilus;
 - Hyprland → Nautilus;
-- Cinnamon → explorador nativo del escritorio;
+- Cinnamon → Nemo;
 - Plasma → Dolphin.
 
 Cuando exista una acción “Abrir terminal aquí”, debe abrir Alacritty.
@@ -1018,14 +1019,21 @@ El editor de texto también respeta la aplicación natural de cada experiencia:
 
 - Niri y Hyprland con Noctalia → GNOME Text Editor;
 - Cinnamon → Xed;
-- Plasma → KWrite o Kate.
+- Plasma → elección explícita entre KWrite y Kate.
 
 GNOME Text Editor pertenece a la experiencia Noctalia y no debe aparecer como
 editor propio de Plasma. Korunix debe aislar su visibilidad a Niri/Hyprland.
 
-En Plasma, KWrite puede satisfacer el rol como editor ligero. Si Kate está
-seleccionada por la persona, Kate también puede satisfacer ese mismo rol sin
-obligar a mantener KWrite como una segunda elección visible innecesaria.
+En Plasma, Korunix debe preguntar cuál de los dos enfoques prefiere la persona y
+explicar la diferencia antes de elegir:
+
+- KWrite → editor ligero y directo para abrir y modificar archivos de texto;
+- Kate → editor más completo, con herramientas orientadas a múltiples
+  documentos, proyectos y flujos de trabajo avanzados.
+
+Ninguno debe presentarse simplemente como una versión “mejor” del otro. Elegir
+Kate permite que Kate satisfaga el rol sin obligar a mantener KWrite como una
+segunda elección visible innecesaria, y viceversa.
 
 La decisión humana es el rol “editor de texto”; las aplicaciones concretas son
 implementaciones del escritorio y no deben contaminar los menús de otras
@@ -1037,14 +1045,112 @@ Se modela el rol “suite ofimática”. La implementación preferida puede depe
 
 Para x86_64 la opción preferida definida es OnlyOffice. Cuando no esté disponible o no sea compatible en otra arquitectura, Korunix debe ofrecer el fallback curado definido para esa plataforma, como LibreOffice.
 
-### 22.10. Regla superior
+### 22.10. Cliente de correo
+
+Thunderbird satisface el rol de cliente de correo en Niri, Hyprland, Cinnamon y
+KDE Plasma.
+
+El cliente de correo es independiente del navegador. Elegir Firefox o Chrome
+como navegador predeterminado no cambia esta decisión.
+
+### 22.11. Editor de fotografías
+
+GIMP satisface el rol de edición fotográfica avanzada en los cuatro escritorios
+soportados.
+
+GIMP no sustituye al visor de imágenes. Instalarlo no debe convertirlo
+automáticamente en la aplicación predeterminada para abrir imágenes cuando el
+rol de visor corresponde a Loupe, Xviewer o Gwenview.
+
+### 22.12. Reproducción de vídeo
+
+Korunix utiliza una aplicación de vídeo coherente con cada experiencia:
+
+- Niri y Hyprland con Noctalia → GNOME Video Player (Showtime);
+- Cinnamon → Celluloid;
+- Plasma → Haruna.
+
+VLC puede permanecer disponible como aplicación opcional, pero instalarlo no
+debe secuestrar automáticamente el rol de reproducción de vídeo.
+
+### 22.13. Música
+
+Korunix utiliza para el rol de música:
+
+- Niri y Hyprland con Noctalia → GNOME Music;
+- Cinnamon → Rhythmbox;
+- Plasma → Elisa.
+
+Instalar otro reproductor no cambia silenciosamente esta asociación.
+
+### 22.14. Calendario, mapas, cámara y calculadora
+
+Cuando el escritorio ofrece una aplicación natural para una función cotidiana,
+Korunix debe utilizarla. Cuando Niri/Hyprland o Cinnamon no tengan una solución
+propia adecuada, se utiliza el equivalente GNOME coherente con la experiencia.
+
+Mapa definido:
+
+- calendario:
+  - Niri y Hyprland → GNOME Calendar;
+  - Cinnamon → GNOME Calendar;
+  - Plasma → Merkuro Calendar;
+- mapas:
+  - Niri y Hyprland → GNOME Maps;
+  - Cinnamon → GNOME Maps;
+  - Plasma → Marble;
+- cámara:
+  - Niri y Hyprland → GNOME Camera/Snapshot;
+  - Cinnamon → GNOME Camera/Snapshot;
+  - Plasma → Kamoso;
+- calculadora:
+  - Niri y Hyprland → GNOME Calculator;
+  - Cinnamon → GNOME Calculator;
+  - Plasma → KCalc.
+
+KOrganizer puede ofrecerse en Plasma como alternativa avanzada de gestión
+personal, pero Merkuro Calendar es la implementación predeterminada del rol de
+calendario de Korunix.
+
+### 22.15. Archivos comprimidos
+
+El rol de archivos comprimidos respeta la integración del explorador de cada
+escritorio:
+
+- Niri y Hyprland → File Roller integrado con Nautilus;
+- Cinnamon → File Roller con la integración correspondiente de Nemo;
+- Plasma → Ark.
+
+PeaZip permanece como aplicación opcional avanzada de la categoría Archivos y
+no es necesario para satisfacer este rol.
+
+Herramientas como `rar`, `unrar`, 7-Zip u otros backends técnicos pueden
+instalarse cuando sean necesarios para formatos soportados, pero no se presentan
+como aplicaciones predeterminadas separadas si la persona no necesita elegirlas.
+
+### 22.16. Regla superior
 
 > Usar primero la solución natural del escritorio; sustituirla únicamente cuando Korunix haya establecido explícitamente una experiencia común.
 
-Alacritty/Fish es una excepción deliberada. Nautilus en Niri/Hyprland también.
+Para un rol todavía no enumerado explícitamente, Korunix aplica esta prioridad:
 
-Las asociaciones de navegador, imágenes, PDF y editor de texto son roles
-independientes. Elegir una aplicación para un rol no debe secuestrar otro.
+1. aplicación o integración natural del escritorio;
+2. integración funcional de Noctalia, si Noctalia realmente proporciona esa
+   capacidad en Niri/Hyprland;
+3. equivalente GNOME cuando no exista una opción propia adecuada.
+
+Alacritty/Fish es una excepción deliberada común a todos los escritorios.
+Nautilus en Niri/Hyprland, Thunderbird como correo y GIMP como editor
+fotográfico también son decisiones comunes explícitas de Korunix.
+
+La existencia de varias aplicaciones capaces de abrir un tipo MIME no las
+convierte automáticamente en candidatas al rol predeterminado. Korunix decide
+primero qué aplicación satisface el rol y el escritorio activo y deriva después
+las asociaciones MIME correspondientes.
+
+Las asociaciones de navegador, imágenes, PDF, editor de texto, vídeo, música,
+correo y otros roles son independientes. Elegir o instalar una aplicación para
+un rol no debe secuestrar otro.
 
 ## 23. Atajos: registro semántico y prevención de conflictos
 
@@ -2060,7 +2166,7 @@ Esta especificación fija la dirección, pero los siguientes puntos requieren un
 - integración exacta de avatar entre Korunix, AccountsService, GDM y Noctalia;
 - contrato final de captura en los cuatro escritorios y de grabación de pantalla únicamente en Niri/Hyprland mediante Noctalia, con sus bindings correspondientes;
 - lista real de idiomas soportados por la versión de Noctalia utilizada;
-- aplicaciones nativas concretas de Cinnamon y Plasma para cada rol en la versión de NixOS soportada;
+- disponibilidad, nombres de paquete, archivos `.desktop` e integración técnica exacta de las aplicaciones elegidas para cada rol en la versión de NixOS soportada;
 - política de soporte de releases stable a medida que cambien NixOS y dependencias como AAGL;
 - fuente de verdad para el modo de apariencia automático en cada escritorio;
 - forma de obtener porcentajes y ETA reales del backend de Nix sin presentar progreso ficticio;
