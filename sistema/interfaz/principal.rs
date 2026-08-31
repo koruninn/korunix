@@ -20,7 +20,7 @@ use std::sync::{
     Arc, Mutex,
 };
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const APPLICATION_ID: &str = "io.github.koruninn.Korunix";
 
@@ -2380,6 +2380,8 @@ struct Estado {
     motor: PathBuf,
     idioma: Idioma,
     stack: gtk::Stack,
+    navegacion: gtk::ListBox,
+    pagina_contenido: adw::NavigationPage,
     toast: adw::ToastOverlay,
     progreso: gtk::Revealer,
     progreso_barra: gtk::ProgressBar,
@@ -5222,25 +5224,264 @@ fn pagina_error(idioma: Idioma, detalle: &str) -> adw::PreferencesPage {
     pagina
 }
 
+fn ahora_epoch() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+fn tiempo_relativo_desde(timestamp: u64, ahora: u64) -> String {
+    let diferencia = ahora.saturating_sub(timestamp);
+
+    if diferencia < 60 {
+        "Ahora".to_string()
+    } else if diferencia < 3600 {
+        format!("Hace {} min", diferencia / 60)
+    } else if diferencia < 86_400 {
+        format!("Hace {} h", diferencia / 3600)
+    } else {
+        let dias = diferencia / 86_400;
+        if dias == 1 {
+            "Hace 1 día".to_string()
+        } else {
+            format!("Hace {dias} días")
+        }
+    }
+}
+
+fn tiempo_relativo(timestamp: u64) -> String {
+    tiempo_relativo_desde(timestamp, ahora_epoch())
+}
+
+fn ultima_copia_portable(historial: &Value) -> Option<u64> {
+    historial
+        .get("entries")
+        .and_then(Value::as_array)?
+        .iter()
+        .rev()
+        .find(|entrada| entrada.get("kind").and_then(Value::as_str) == Some("backup-export"))
+        .and_then(|entrada| entrada.get("timestamp"))
+        .and_then(Value::as_u64)
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct AsuntoResumen {
+    titulo: String,
+    detalle: String,
+    destino: &'static str,
+}
+
+fn asuntos_resumen(
+    historial: Option<&Value>,
+    firmware: Option<&Value>,
+    privilegios: Option<&Value>,
+    ahora: u64,
+) -> Vec<AsuntoResumen> {
+    let mut asuntos = Vec::new();
+
+    match historial {
+        Some(historial) => match ultima_copia_portable(historial) {
+            Some(timestamp) => {
+                let dias = ahora.saturating_sub(timestamp) / 86_400;
+                if dias >= 30 {
+                    asuntos.push(AsuntoResumen {
+                        titulo: "Copia de seguridad".to_string(),
+                        detalle: format!(
+                            "La última copia portable tiene {dias} días. Conviene crear una nueva."
+                        ),
+                        destino: "backups",
+                    });
+                }
+            }
+            None => asuntos.push(AsuntoResumen {
+                titulo: "Copia de seguridad".to_string(),
+                detalle: "Todavía no has creado una copia portable de esta configuración."
+                    .to_string(),
+                destino: "backups",
+            }),
+        },
+        None => asuntos.push(AsuntoResumen {
+            titulo: "Copias e historial".to_string(),
+            detalle: "Korunix no pudo comprobar el estado de las copias.".to_string(),
+            destino: "backups",
+        }),
+    }
+
+    match firmware {
+        Some(firmware) => {
+            let disponibles = cantidad(firmware, "/devices");
+            if disponibles > 0 {
+                asuntos.push(AsuntoResumen {
+                    titulo: "Firmware".to_string(),
+                    detalle: if disponibles == 1 {
+                        "Hay una actualización de firmware disponible.".to_string()
+                    } else {
+                        format!("Hay {disponibles} actualizaciones de firmware disponibles.")
+                    },
+                    destino: "firmware",
+                });
+            }
+        }
+        None => asuntos.push(AsuntoResumen {
+            titulo: "Firmware".to_string(),
+            detalle: "Korunix no pudo comprobar el estado del firmware.".to_string(),
+            destino: "firmware",
+        }),
+    }
+
+    match privilegios {
+        Some(privilegios) => {
+            if privilegios.get("guiUsable").and_then(Value::as_bool) == Some(false) {
+                asuntos.push(AsuntoResumen {
+                    titulo: "Permisos".to_string(),
+                    detalle:
+                        "Korunix no puede solicitar los permisos necesarios para modificar el sistema."
+                            .to_string(),
+                    destino: "maintenance",
+                });
+            }
+        }
+        None => asuntos.push(AsuntoResumen {
+            titulo: "Permisos".to_string(),
+            detalle: "Korunix no pudo comprobar si podrá autorizar cambios del sistema."
+                .to_string(),
+            destino: "maintenance",
+        }),
+    }
+
+    asuntos
+}
+
+fn indice_pagina(nombre: &str) -> Option<i32> {
+    match nombre {
+        "summary" => Some(0),
+        "updates" => Some(1),
+        "hardware" => Some(2),
+        "media" => Some(3),
+        "storage" => Some(4),
+        "firmware" => Some(5),
+        "applications" => Some(6),
+        "appearance" => Some(7),
+        "localization" => Some(8),
+        "people" => Some(9),
+        "backups" => Some(10),
+        "maintenance" => Some(11),
+        _ => None,
+    }
+}
+
+fn clave_titulo_pagina(nombre: &str) -> &'static str {
+    match nombre {
+        "updates" => "updates",
+        "hardware" => "hardware",
+        "media" => "media",
+        "storage" => "storage",
+        "firmware" => "firmware_updates",
+        "applications" => "applications",
+        "appearance" => "appearance_desktops",
+        "localization" => "localization",
+        "people" => "people",
+        "backups" => "backups_history",
+        "maintenance" => "maintenance",
+        _ => "summary",
+    }
+}
+
+fn navegar_a(estado: &Estado, nombre: &'static str) {
+    estado.stack.set_visible_child_name(nombre);
+    estado
+        .pagina_contenido
+        .set_title(texto(estado.idioma, clave_titulo_pagina(nombre)));
+
+    if let Some(indice) = indice_pagina(nombre) {
+        if let Some(fila) = estado.navegacion.row_at_index(indice) {
+            estado.navegacion.select_row(Some(&fila));
+        }
+    }
+}
+
 fn pagina_resumen(
-    estado: &Estado,
+    estado: Rc<Estado>,
     hardware: &Value,
     people: &Value,
     channel: &Value,
+    historial: Option<&Value>,
+    firmware: Option<&Value>,
+    privilegios: Option<&Value>,
 ) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
-    let grupo = adw::PreferencesGroup::new();
-    grupo.set_title(&localizar_visible(
-        idioma_actual(),
-        "Lo esencial de este equipo en un solo lugar.",
-    ));
+    let asuntos = asuntos_resumen(historial, firmware, privilegios, ahora_epoch());
+
+    let grupo_estado = adw::PreferencesGroup::new();
+    grupo_estado.set_title(&localizar_visible(idioma_actual(), "Estado del equipo"));
+
+    let estado_general = adw::ActionRow::new();
+    if asuntos.is_empty() {
+        estado_general.set_title(&localizar_visible(idioma_actual(), "Todo está bien"));
+        estado_general.set_subtitle(&localizar_visible(
+            idioma_actual(),
+            "Korunix no detectó asuntos que requieran atención en las comprobaciones disponibles.",
+        ));
+    } else {
+        estado_general.set_title(&localizar_visible(
+            idioma_actual(),
+            if asuntos.len() == 1 {
+                "Hay un asunto que revisar"
+            } else {
+                "Hay asuntos que revisar"
+            },
+        ));
+        estado_general.set_subtitle(&localizar_visible(
+            idioma_actual(),
+            &format!(
+                "{} {} requieren tu atención.",
+                asuntos.len(),
+                if asuntos.len() == 1 {
+                    "área"
+                } else {
+                    "áreas"
+                }
+            ),
+        ));
+    }
+    grupo_estado.add(&estado_general);
+    pagina.add(&grupo_estado);
+
+    if !asuntos.is_empty() {
+        let grupo_asuntos = adw::PreferencesGroup::new();
+        grupo_asuntos.set_title(&localizar_visible(idioma_actual(), "Necesita atención"));
+
+        for asunto in asuntos {
+            let row = adw::ActionRow::new();
+            row.set_title(&localizar_visible(idioma_actual(), &asunto.titulo));
+            row.set_subtitle(&localizar_visible(idioma_actual(), &asunto.detalle));
+
+            let boton = gtk::Button::with_label(&localizar_visible(idioma_actual(), "Revisar"));
+            boton.set_valign(gtk::Align::Center);
+            row.add_suffix(&boton);
+            grupo_asuntos.add(&row);
+
+            let estado_navegar = Rc::clone(&estado);
+            boton.connect_clicked(move |_| {
+                navegar_a(&estado_navegar, asunto.destino);
+            });
+        }
+
+        pagina.add(&grupo_asuntos);
+    }
+
+    let grupo_contexto = adw::PreferencesGroup::new();
+    grupo_contexto.set_title(&localizar_visible(idioma_actual(), "Este equipo"));
 
     let vendor = valor(hardware, "/machine/vendor");
     let model = valor(hardware, "/machine/model");
-    let modelo = modelo_humano(&vendor, &model);
+    grupo_contexto.add(&fila(
+        texto(estado.idioma, "model"),
+        modelo_humano(&vendor, &model),
+    ));
 
-    grupo.add(&fila(texto(estado.idioma, "model"), modelo));
-    grupo.add(&fila(
+    grupo_contexto.add(&fila(
         &localizar_visible(idioma_actual(), "Canal del sistema"),
         valor(channel, "/label"),
     ));
@@ -5251,9 +5492,9 @@ fn pagina_resumen(
         .map(Vec::len)
         .unwrap_or(0);
 
-    grupo.add(&fila(texto(estado.idioma, "people"), personas.to_string()));
+    grupo_contexto.add(&fila(texto(estado.idioma, "people"), personas.to_string()));
 
-    pagina.add(&grupo);
+    pagina.add(&grupo_contexto);
     pagina
 }
 
@@ -5970,141 +6211,24 @@ fn etiqueta_version_recuperacion(
     }
 }
 
-fn pagina_mantenimiento(
+fn fila_recuperacion(
     estado: Rc<Estado>,
-    recuperacion: &Value,
-    limpieza: &Value,
-    limpieza_total: &Value,
-    privilegios: &Value,
-) -> adw::PreferencesPage {
-    let pagina = adw::PreferencesPage::new();
+    id: u32,
+    titulo: String,
+    detalle: String,
+    actual: bool,
+) -> adw::ActionRow {
+    let row = adw::ActionRow::new();
+    row.set_title(&localizar_visible(idioma_actual(), &titulo));
+    row.set_subtitle(&localizar_visible(idioma_actual(), &detalle));
 
-    let grupo_recuperacion = adw::PreferencesGroup::new();
-    grupo_recuperacion.set_title(texto(estado.idioma, "recovery"));
-
-    let actual = recuperacion
-        .get("generations")
-        .and_then(Value::as_array)
-        .and_then(|generaciones| {
-            generaciones
-                .iter()
-                .find(|generacion| generacion.get("current").and_then(Value::as_bool) == Some(true))
-        })
-        .and_then(|generacion| generacion.get("id"))
-        .and_then(Value::as_u64)
-        .and_then(|id| u32::try_from(id).ok());
-
-    let predeterminada = recuperacion
-        .get("defaultGeneration")
-        .and_then(Value::as_u64)
-        .and_then(|id| u32::try_from(id).ok());
-
-    let conservadas = generaciones_conservadas(limpieza);
-
-    grupo_recuperacion.add(&fila(
-        texto(estado.idioma, "current_generation"),
-        actual
-            .map(|id| {
-                texto_version_actual(
-                    estado.idioma,
-                    conservadas.contains(&id) || Some(id) == predeterminada,
-                )
-            })
-            .unwrap_or_else(|| "—".to_string()),
-    ));
-
-    let detalle_inicio = match predeterminada {
-        Some(id) if Some(id) == actual => texto_version_actual(estado.idioma, true),
-        Some(id) => {
-            etiqueta_version_recuperacion(estado.idioma, 0, false, true, conservadas.contains(&id))
-        }
-        None => "—".to_string(),
-    };
-
-    grupo_recuperacion.add(&fila(
-        texto(estado.idioma, "default_generation"),
-        detalle_inicio,
-    ));
-
-    let generaciones = recuperacion
-        .get("generations")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-
-    let mut ids = Vec::<u32>::new();
-    let mut etiquetas = Vec::<String>::new();
-    let mut numero_anterior = 0_usize;
-
-    for generacion in generaciones.iter().rev() {
-        let Some(id) = generacion
-            .get("id")
-            .and_then(Value::as_u64)
-            .and_then(|id| u32::try_from(id).ok())
-        else {
-            continue;
-        };
-
-        let actual_marca = generacion.get("current").and_then(Value::as_bool) == Some(true);
-        let inicio_marca = Some(id) == predeterminada;
-
-        if !actual_marca {
-            numero_anterior += 1;
-        }
-
-        let conservada = actual_marca || inicio_marca || conservadas.contains(&id);
-
-        ids.push(id);
-        etiquetas.push(etiqueta_version_recuperacion(
-            estado.idioma,
-            numero_anterior,
-            actual_marca,
-            inicio_marca,
-            conservada,
-        ));
-    }
-
-    if !ids.is_empty() {
-        let selector = adw::ComboRow::new();
-        selector.set_title(texto(estado.idioma, "generations"));
-        selector.set_model(Some(&modelo_cadenas(&etiquetas)));
-
-        let indice_actual = actual
-            .and_then(|id| ids.iter().position(|candidato| *candidato == id))
-            .unwrap_or(0) as u32;
-
-        selector.set_selected(indice_actual);
-        grupo_recuperacion.add(&selector);
-
-        let fila_accion = adw::ActionRow::new();
-        fila_accion.set_title(texto(estado.idioma, "use_once"));
-
+    if !actual {
         let boton = gtk::Button::with_label(texto(estado.idioma, "use_once"));
         boton.set_valign(gtk::Align::Center);
-        boton.set_sensitive(ids.get(indice_actual as usize).copied() != actual);
-        fila_accion.add_suffix(&boton);
-        grupo_recuperacion.add(&fila_accion);
-
-        let ids = Rc::new(ids);
-        let ids_selector = Rc::clone(&ids);
-        let boton_selector = boton.clone();
-
-        selector.connect_selected_notify(move |selector| {
-            let id = ids_selector.get(selector.selected() as usize).copied();
-            boton_selector.set_sensitive(id.is_some() && id != actual);
-        });
+        row.add_suffix(&boton);
 
         let estado_recuperacion = Rc::clone(&estado);
         boton.connect_clicked(move |boton| {
-            let Some(id) = ids.get(selector.selected() as usize).copied() else {
-                return;
-            };
-
-            if Some(id) == actual {
-                boton.set_sensitive(false);
-                return;
-            }
-
             let id_texto = id.to_string();
 
             if let Err(error) = ejecutar_json(
@@ -6130,84 +6254,7 @@ fn pagina_mantenimiento(
                     return;
                 }
 
-                let id_texto = id.to_string();
                 match ejecutar_json(&estado_aplicar, &["rollback", &id_texto, "--yes", "--json"]) {
-                    Ok(_) => mostrar_exito(
-                        &estado_aplicar,
-                        texto(estado_aplicar.idioma, "operation_done"),
-                    ),
-                    Err(error) => mostrar_error(&estado_aplicar, error),
-                }
-            });
-
-            dialogo.present();
-        });
-    }
-
-    pagina.add(&grupo_recuperacion);
-
-    let grupo_limpieza = adw::PreferencesGroup::new();
-    grupo_limpieza.set_title(texto(estado.idioma, "cleanup"));
-
-    for (plan, agresiva) in [(limpieza, false), (limpieza_total, true)] {
-        let conservar = cantidad(plan, "/keep");
-        let eliminar = cantidad(plan, "/delete");
-        let fila_limpieza = adw::ActionRow::new();
-
-        fila_limpieza.set_title(texto(
-            estado.idioma,
-            if agresiva {
-                "deep_cleanup"
-            } else {
-                "normal_cleanup"
-            },
-        ));
-
-        fila_limpieza.set_subtitle(&frase_generaciones(estado.idioma, conservar, eliminar));
-
-        let boton = gtk::Button::with_label(texto(
-            estado.idioma,
-            if agresiva { "clean_all" } else { "clean_now" },
-        ));
-
-        boton.set_valign(gtk::Align::Center);
-        boton.set_sensitive(eliminar > 0);
-
-        if agresiva {
-            boton.add_css_class("destructive-action");
-        }
-
-        fila_limpieza.add_suffix(&boton);
-        grupo_limpieza.add(&fila_limpieza);
-
-        let estado_limpieza = Rc::clone(&estado);
-        boton.connect_clicked(move |boton| {
-            let cuerpo = frase_confirmar_limpieza(estado_limpieza.idioma, eliminar, agresiva);
-
-            let dialogo = dialogo_confirmacion(
-                boton,
-                estado_limpieza.idioma,
-                &cuerpo,
-                texto(
-                    estado_limpieza.idioma,
-                    if agresiva { "clean_all" } else { "clean_now" },
-                ),
-                agresiva,
-            );
-
-            let estado_aplicar = Rc::clone(&estado_limpieza);
-            dialogo.connect_response(None, move |_, respuesta| {
-                if respuesta != "apply" {
-                    return;
-                }
-
-                let argumentos = if agresiva {
-                    ["clean-all", "--yes", "--json"]
-                } else {
-                    ["clean", "--yes", "--json"]
-                };
-
-                match ejecutar_json(&estado_aplicar, &argumentos) {
                     Ok(_) => {
                         mostrar_exito(
                             &estado_aplicar,
@@ -6223,43 +6270,234 @@ fn pagina_mantenimiento(
         });
     }
 
+    row
+}
+
+fn conectar_limpieza(estado: Rc<Estado>, boton: &gtk::Button, agresiva: bool, eliminables: usize) {
+    let boton = boton.clone();
+
+    boton.connect_clicked(move |boton| {
+        let cuerpo = if agresiva {
+            format!(
+                "¿Hacer una limpieza profunda? Korunix conservará las versiones protegidas y retirará {eliminables} versiones antiguas que no lo están."
+            )
+        } else {
+            format!(
+                "¿Limpiar el sistema? Korunix conservará los puntos de recuperación recientes y retirará {eliminables} versiones antiguas."
+            )
+        };
+
+        let dialogo = dialogo_accion(
+            boton,
+            &estado,
+            &cuerpo,
+            if agresiva {
+                "Limpieza profunda"
+            } else {
+                "Limpiar"
+            },
+            agresiva,
+        );
+
+        let estado_aplicar = Rc::clone(&estado);
+        dialogo.connect_response(None, move |_, respuesta| {
+            if respuesta != "apply" {
+                return;
+            }
+
+            let argumentos = if agresiva {
+                ["clean-all", "--yes", "--json"]
+            } else {
+                ["clean", "--yes", "--json"]
+            };
+
+            match ejecutar_json(&estado_aplicar, &argumentos) {
+                Ok(_) => {
+                    mostrar_exito(
+                        &estado_aplicar,
+                        texto(estado_aplicar.idioma, "operation_done"),
+                    );
+                    recargar(Rc::clone(&estado_aplicar));
+                }
+                Err(error) => mostrar_error(&estado_aplicar, error),
+            }
+        });
+
+        dialogo.present();
+    });
+}
+
+fn pagina_mantenimiento(
+    estado: Rc<Estado>,
+    recuperacion: &Value,
+    limpieza: &Value,
+    limpieza_total: &Value,
+    privilegios: &Value,
+) -> adw::PreferencesPage {
+    let pagina = adw::PreferencesPage::new();
+
+    let grupo_recuperacion = adw::PreferencesGroup::new();
+    grupo_recuperacion.set_title(&localizar_visible(
+        idioma_actual(),
+        "Versiones para recuperación",
+    ));
+    grupo_recuperacion.set_description(Some(&localizar_visible(
+        idioma_actual(),
+        "Korunix muestra las tres versiones recientes más útiles. Puedes preparar una anterior para el próximo arranque sin cambiar la sesión actual.",
+    )));
+
+    let predeterminada = recuperacion
+        .get("defaultGeneration")
+        .and_then(Value::as_u64)
+        .and_then(|id| u32::try_from(id).ok());
+
+    let conservadas = generaciones_conservadas(limpieza);
+    let generaciones = recuperacion
+        .get("generations")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let mut mostradas = 0usize;
+    let mut anteriores = 0usize;
+
+    for generacion in generaciones.iter().rev() {
+        if mostradas >= 3 {
+            break;
+        }
+
+        let Some(id) = generacion
+            .get("id")
+            .and_then(Value::as_u64)
+            .and_then(|id| u32::try_from(id).ok())
+        else {
+            continue;
+        };
+
+        let actual = generacion.get("current").and_then(Value::as_bool) == Some(true);
+        let inicio = Some(id) == predeterminada;
+
+        if !actual {
+            anteriores += 1;
+        }
+
+        let titulo = if actual {
+            "Sistema actual".to_string()
+        } else if inicio {
+            "Inicio predeterminado".to_string()
+        } else if anteriores == 1 {
+            "Versión anterior".to_string()
+        } else {
+            format!("Versión anterior {anteriores}")
+        };
+
+        let version = generacion
+            .get("nixosVersion")
+            .and_then(Value::as_str)
+            .filter(|valor| !valor.trim().is_empty())
+            .unwrap_or("NixOS");
+
+        let protegida = actual || inicio || conservadas.contains(&id);
+        let detalle = if protegida {
+            format!("{version} · Conservada para recuperación")
+        } else {
+            format!("{version} · Disponible hasta la próxima limpieza")
+        };
+
+        grupo_recuperacion.add(&fila_recuperacion(
+            Rc::clone(&estado),
+            id,
+            titulo,
+            detalle,
+            actual,
+        ));
+        mostradas += 1;
+    }
+
+    if mostradas == 0 {
+        grupo_recuperacion.add(&fila(
+            "Estado",
+            "Korunix no encontró versiones de NixOS para recuperación.",
+        ));
+    }
+
+    pagina.add(&grupo_recuperacion);
+
+    let grupo_limpieza = adw::PreferencesGroup::new();
+    grupo_limpieza.set_title(texto(estado.idioma, "cleanup"));
+    grupo_limpieza.set_description(Some(&localizar_visible(
+        idioma_actual(),
+        "Korunix puede contar las versiones que retirará, pero Nix no informa con precisión cuánto espacio se liberará antes de ejecutar la limpieza.",
+    )));
+
+    let normal_eliminar = limpieza
+        .get("delete")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+    let normal_conservar = limpieza
+        .get("keep")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+
+    let normal = adw::ActionRow::new();
+    normal.set_title(&localizar_visible(idioma_actual(), "Limpieza recomendada"));
+    normal.set_subtitle(&localizar_visible(
+        idioma_actual(),
+        &format!(
+            "Conserva {normal_conservar} versiones útiles para recuperación y puede retirar {normal_eliminar} versiones antiguas. También recoge referencias sin uso y optimiza el almacén de Nix."
+        ),
+    ));
+    let limpiar = gtk::Button::with_label(&localizar_visible(idioma_actual(), "Limpiar"));
+    limpiar.add_css_class("suggested-action");
+    limpiar.set_valign(gtk::Align::Center);
+    normal.add_suffix(&limpiar);
+    grupo_limpieza.add(&normal);
+
+    let profunda_eliminar = limpieza_total
+        .get("delete")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+    let profunda_conservar = limpieza_total
+        .get("keep")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+
+    let profunda = adw::ActionRow::new();
+    profunda.set_title(&localizar_visible(idioma_actual(), "Limpieza profunda"));
+    profunda.set_subtitle(&localizar_visible(
+        idioma_actual(),
+        &format!(
+            "Conserva {profunda_conservar} versiones protegidas y puede retirar {profunda_eliminar} versiones antiguas adicionales."
+        ),
+    ));
+    let limpiar_profundo =
+        gtk::Button::with_label(&localizar_visible(idioma_actual(), "Limpieza profunda"));
+    limpiar_profundo.add_css_class("destructive-action");
+    limpiar_profundo.set_valign(gtk::Align::Center);
+    profunda.add_suffix(&limpiar_profundo);
+    grupo_limpieza.add(&profunda);
+
+    conectar_limpieza(Rc::clone(&estado), &limpiar, false, normal_eliminar);
+    conectar_limpieza(
+        Rc::clone(&estado),
+        &limpiar_profundo,
+        true,
+        profunda_eliminar,
+    );
+
     pagina.add(&grupo_limpieza);
 
     if privilegios.get("guiUsable").and_then(Value::as_bool) == Some(false) {
         let grupo_privilegios = adw::PreferencesGroup::new();
-        grupo_privilegios.set_title(texto(estado.idioma, "privileges"));
-
-        let detalle = match estado.idioma {
-            Idioma::Ingles => "Korunix cannot request the permissions required for system changes.",
-            Idioma::BelarusLatino => "Korunix nje moža zapytac dazvoły, njeabchodnyja dłja zmjeny sistemy.",
-            Idioma::Belarus => "Korunix не можа запытаць дазволы, неабходныя для змены сістэмы.",
-            Idioma::Catalan => "Korunix no pot sol·licitar els permisos necessaris per als canvis del sistema.",
-            Idioma::Checo => "Korunix nemůže požadovat oprávnění potřebná pro systémové změny.",
-            Idioma::Aleman => "Korunix kann die für Systemänderungen erforderlichen Berechtigungen nicht anfordern.",
-            Idioma::Frances => "Korunix ne peut pas demander les autorisations requises pour les modifications du système.",
-            Idioma::Gallego => "Korunix non pode solicitar os permisos necesarios para os cambios no sistema.",
-            Idioma::Italiano => "Korunix non può richiedere le autorizzazioni necessarie per le modifiche al sistema.",
-            Idioma::Coreano => "Korunix는 시스템 변경에 필요한 권한을 요청할 수 없습니다.",
-            Idioma::Kurdo => "Korunix nikare destûrên ku ji bo guhertinên pergalê hewce ne bixwaze.",
-            Idioma::Neerlandes => "Korunix kan de benodigde machtigingen voor systeemwijzigingen niet opvragen.",
-            Idioma::NoruegoNynorsk => "Korunix kan ikke be om tillatelsene som kreves for systemendringer.",
-            Idioma::Polaco => "Korunix nie może zażądać uprawnień wymaganych do zmian systemowych.",
-            Idioma::PortuguesBrasil => "Korunix não pode solicitar as permissões necessárias para alterações no sistema.",
-            Idioma::Ruso => "Korunix не может запросить разрешения, необходимые для внесения изменений в систему.",
-            Idioma::Sueco => "Korunix kan inte begära de behörigheter som krävs för systemändringar.",
-            Idioma::Turco => "Korunix sistem değişiklikleri için gerekli izinleri isteyemez.",
-            Idioma::Ucraniano => "Korunix не може запитувати дозволи, необхідні для системних змін.",
-            Idioma::Vietnamita => "Korunix không thể yêu cầu các quyền cần thiết để thay đổi hệ thống.",
-            Idioma::ChinoSimplificado => "Korunix 无法请求系统更改所需的权限。",
-            Idioma::Hungaro => {
-                "A Korunix nem tudja elkérni a rendszermódosításokhoz szükséges engedélyeket."
-            }
-            Idioma::Espanol => {
-                "Korunix no puede solicitar los permisos necesarios para modificar el sistema."
-            }
-        };
-
-        grupo_privilegios.add(&fila(texto(estado.idioma, "status"), detalle));
+        grupo_privilegios.set_title(&localizar_visible(idioma_actual(), "Permisos"));
+        grupo_privilegios.add(&fila(
+            "Korunix necesita atención",
+            "La interfaz no puede solicitar los permisos necesarios para aplicar cambios del sistema.",
+        ));
         pagina.add(&grupo_privilegios);
     }
 
@@ -6287,26 +6525,47 @@ fn tamano_almacenamiento_humano(valor: &str) -> String {
 fn pagina_almacenamiento(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
 
-    let opciones = adw::PreferencesGroup::new();
-    let pesada = adw::SwitchRow::new();
-    pesada.set_title(texto(estado.idioma, "heavy_transfer"));
-    pesada.set_subtitle(texto(estado.idioma, "heavy_transfer_detail"));
-    opciones.add(&pesada);
-    pagina.add(&opciones);
-
-    let grupo = adw::PreferencesGroup::new();
-    grupo.set_title(texto(estado.idioma, "storage"));
-
     let dispositivos = datos
         .get("devices")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
 
+    let hay_extraibles = dispositivos.iter().any(|dispositivo| {
+        dispositivo
+            .get("removable")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    });
+
+    let pesada = adw::SwitchRow::new();
+    pesada.set_title(&localizar_visible(
+        idioma_actual(),
+        "Expulsión después de archivos grandes",
+    ));
+    pesada.set_subtitle(&localizar_visible(
+        idioma_actual(),
+        "Actívalo antes de expulsar una unidad si acabas de copiar una ISO u otros archivos grandes. Korunix esperará a que los datos pendientes terminen de escribirse.",
+    ));
+
+    if hay_extraibles {
+        let grupo_seguridad = adw::PreferencesGroup::new();
+        grupo_seguridad.set_title(&localizar_visible(idioma_actual(), "Expulsión segura"));
+        grupo_seguridad.set_description(Some(&localizar_visible(
+            idioma_actual(),
+            "La unidad solo se marcará como segura para desconectar después de desmontarla y apagarla correctamente.",
+        )));
+        grupo_seguridad.add(&pesada);
+        pagina.add(&grupo_seguridad);
+    }
+
+    let grupo = adw::PreferencesGroup::new();
+    grupo.set_title(&localizar_visible(idioma_actual(), "Unidades"));
+
     if dispositivos.is_empty() {
         grupo.add(&fila(
-            texto(estado.idioma, "status"),
-            texto(estado.idioma, "empty"),
+            "Estado",
+            "Korunix no encontró unidades de almacenamiento.",
         ));
     }
 
@@ -6320,7 +6579,7 @@ fn pagina_almacenamiento(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesP
         let modelo = dispositivo
             .get("model")
             .and_then(Value::as_str)
-            .filter(|valor| !valor.is_empty())
+            .filter(|valor| !valor.trim().is_empty())
             .unwrap_or(&ruta)
             .to_string();
 
@@ -6331,25 +6590,40 @@ fn pagina_almacenamiento(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesP
                 .unwrap_or("—"),
         );
 
-        let transporte = dispositivo
-            .get("transport")
-            .and_then(Value::as_str)
-            .unwrap_or("—")
-            .to_ascii_uppercase();
-
         let extraible = dispositivo
             .get("removable")
             .and_then(Value::as_bool)
             .unwrap_or(false);
 
+        let montajes = dispositivo
+            .get("mountPoints")
+            .and_then(Value::as_array)
+            .map(|puntos| {
+                puntos
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .filter(|punto| !punto.trim().is_empty())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let estado_unidad = if extraible {
+            if montajes.is_empty() {
+                "Extraíble · No está montada"
+            } else {
+                "Extraíble · Disponible ahora"
+            }
+        } else if montajes.is_empty() {
+            "Interna"
+        } else {
+            "Interna · Disponible ahora"
+        };
+
         let row = adw::ActionRow::new();
         row.set_title(&modelo);
-        row.set_subtitle(&format!(
-            "{tamano} · {transporte} · {}",
-            texto(
-                estado.idioma,
-                if extraible { "removable" } else { "internal" }
-            )
+        row.set_subtitle(&localizar_visible(
+            idioma_actual(),
+            &format!("{tamano} · {estado_unidad}"),
         ));
 
         if extraible {
@@ -6388,16 +6662,16 @@ fn pagina_almacenamiento(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesP
                     return;
                 }
 
-                let cuerpo = frase_confirmar_expulsion(
-                    estado_expulsion.idioma,
-                    &ruta_expulsion,
-                    modo_pesado,
-                );
+                let cuerpo = if modo_pesado {
+                    "¿Expulsar esta unidad? Korunix esperará primero a que terminen de escribirse los datos pendientes y solo entonces la apagará."
+                } else {
+                    "¿Expulsar esta unidad de forma segura? Korunix la desmontará y apagará antes de indicar que puede desconectarse."
+                };
 
                 let dialogo = dialogo_confirmacion(
                     boton,
                     estado_expulsion.idioma,
-                    &cuerpo,
+                    cuerpo,
                     texto(estado_expulsion.idioma, "eject"),
                     false,
                 );
@@ -6459,316 +6733,237 @@ fn pagina_firmware(
 ) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
 
-    let grupo_actualizaciones = adw::PreferencesGroup::new();
-    grupo_actualizaciones.set_title(texto(estado.idioma, "available_updates"));
-
-    let fila_buscar = adw::ActionRow::new();
-    let disponibles = cantidad(actualizaciones, "/devices");
-    fila_buscar.set_title(texto(estado.idioma, "available_updates"));
-    fila_buscar.set_subtitle(&disponibles.to_string());
-    let boton_buscar = gtk::Button::with_label(texto(estado.idioma, "refresh_firmware"));
-    boton_buscar.set_valign(gtk::Align::Center);
-    fila_buscar.add_suffix(&boton_buscar);
-    grupo_actualizaciones.add(&fila_buscar);
-
-    let estado_buscar = Rc::clone(&estado);
-    boton_buscar.connect_clicked(move |boton| {
-        if let Err(error) = ejecutar_json(
-            &estado_buscar,
-            &["firmware", "refresh", "--plan", "--json"],
-        ) {
-            mostrar_error(&estado_buscar, error);
-            return;
-        }
-        let cuerpo = match estado_buscar.idioma {
-            Idioma::Ingles => "Check for firmware updates now? Korunix will look for newer versions. Nothing will be installed yet.",
-            Idioma::BelarusLatino => "Pravjeryc abnaŭłjenni prašyŭki? Korunix budzje šukac novyja vjersii. Pakuł ničoha nje budzje ŭstanoŭłjena.",
-            Idioma::Belarus => "Праверыць абнаўленні прашыўкі? Korunix будзе шукаць новыя версіі. Пакуль нічога не будзе ўстаноўлена.",
-            Idioma::Catalan => "Comproveu si hi ha actualitzacions de firmware ara? Korunix buscarà versions més noves. Encara no s'instal·larà res.",
-            Idioma::Checo => "Chcete nyní zkontrolovat aktualizace firmwaru? Korunix bude hledat novější verze. Zatím se nic instalovat nebude.",
-            Idioma::Aleman => "Jetzt nach Firmware-Updates suchen? Korunix wird nach neueren Versionen suchen. Es wird noch nichts installiert.",
-            Idioma::Frances => "Rechercher les mises à jour du micrologiciel maintenant ? Korunix recherchera des versions plus récentes. Rien ne sera encore installé.",
-            Idioma::Gallego => "Buscar actualizacións de firmware agora? Korunix buscará versións máis novas. Aínda non se instalará nada.",
-            Idioma::Italiano => "Controllare gli aggiornamenti del firmware adesso? Korunix cercherà versioni più recenti. Non verrà ancora installato nulla.",
-            Idioma::Coreano => "지금 펌웨어 업데이트를 확인하시겠습니까? Korunix는 최신 버전을 찾을 것입니다. 아직 아무것도 설치되지 않습니다.",
-            Idioma::Kurdo => "Naha nûvekirinên firmware kontrol bikin? Korunix dê li guhertoyên nûtir bigerin. Dê hîn tiştek neyê sazkirin.",
-            Idioma::Neerlandes => "Nu controleren op firmware-updates? Korunix gaat op zoek naar nieuwere versies. Er zal nog niets geïnstalleerd worden.",
-            Idioma::NoruegoNynorsk => "Se etter fastvareoppdateringer nå? Korunix vil se etter nyere versjoner. Ingenting vil bli installert ennå.",
-            Idioma::Polaco => "Sprawdź teraz dostępność aktualizacji oprogramowania sprzętowego? Korunix będzie szukać nowszych wersji. Nic nie będzie jeszcze instalowane.",
-            Idioma::PortuguesBrasil => "Verifique se há atualizações de firmware agora? Korunix procurará versões mais recentes. Nada será instalado ainda.",
-            Idioma::Ruso => "Проверить наличие обновлений прошивки сейчас? Korunix будет искать новые версии. Пока ничего не будет установлено.",
-            Idioma::Sueco => "Leta efter firmwareuppdateringar nu? Korunix kommer att leta efter nyare versioner. Inget kommer att installeras ännu.",
-            Idioma::Turco => "Firmware güncellemelerini şimdi kontrol etmek ister misiniz? Korunix daha yeni sürümler arayacak. Henüz hiçbir şey kurulmayacak.",
-            Idioma::Ucraniano => "Перевірити наявність оновлень мікропрограми зараз? Korunix шукатиме новіші версії. Поки що нічого не буде встановлено.",
-            Idioma::Vietnamita => "Kiểm tra các bản cập nhật chương trình cơ sở ngay bây giờ? Korunix sẽ tìm kiếm các phiên bản mới hơn. Sẽ không có gì được cài đặt.",
-            Idioma::ChinoSimplificado => "现在检查固件更新吗？ Korunix 将寻找更新的版本。还没有安装任何东西。",
-            Idioma::Hungaro => "Ellenőrizzem most a firmware-frissítéseket? A Korunix újabb verziókat keres. Még semmi sem lesz telepítve.",
-            Idioma::Espanol => "¿Comprobar ahora si hay actualizaciones de firmware? Korunix buscará versiones nuevas. Todavía no se instalará nada.",
-        };
-        let dialogo = dialogo_confirmacion(
-            boton,
-            estado_buscar.idioma,
-            cuerpo,
-            texto(estado_buscar.idioma, "refresh_firmware"),
-            false,
-        );
-        let estado_aplicar = Rc::clone(&estado_buscar);
-        dialogo.connect_response(None, move |_, respuesta| {
-            if respuesta != "apply" {
-                return;
-            }
-            match ejecutar_json(
-                &estado_aplicar,
-                &["firmware", "refresh", "--yes", "--json"],
-            ) {
-                Ok(_) => {
-                    mostrar_exito(&estado_aplicar, texto(estado_aplicar.idioma, "operation_done"));
-                    recargar(Rc::clone(&estado_aplicar));
-                }
-                Err(error) => mostrar_error(&estado_aplicar, error),
-            }
-        });
-        dialogo.present();
-    });
-
     let updates = actualizaciones
         .get("devices")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    if updates.is_empty() {
-        grupo_actualizaciones.add(&fila(
-            texto(estado.idioma, "status"),
-            texto(estado.idioma, "no_updates"),
-        ));
-    }
 
-    for update in updates {
-        let id = update
-            .get("id")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string();
-        if id.is_empty() {
-            continue;
-        }
-        let nombre = update
-            .get("name")
-            .and_then(Value::as_str)
-            .unwrap_or("Firmware")
-            .to_string();
-        let actual = update
-            .get("currentVersion")
-            .and_then(Value::as_str)
-            .unwrap_or("—");
-        let objetivo = update
-            .pointer("/releases/0/version")
-            .and_then(Value::as_str)
-            .unwrap_or("—");
-
-        let row = adw::ActionRow::new();
-        row.set_title(&nombre);
-        row.set_subtitle(&format!("{actual} → {objetivo}"));
-        let boton = gtk::Button::with_label(texto(estado.idioma, "install"));
-        boton.add_css_class("suggested-action");
-        boton.set_valign(gtk::Align::Center);
-        row.add_suffix(&boton);
-        grupo_actualizaciones.add(&row);
-
-        let estado_firmware = Rc::clone(&estado);
-        let id_firmware = id.clone();
-        let nombre_firmware = nombre.clone();
-        boton.connect_clicked(move |boton| {
-            let plan = match ejecutar_json(
-                &estado_firmware,
-                &["firmware", "update", &id_firmware, "--plan", "--json"],
-            ) {
-                Ok(plan) => plan,
-                Err(error) => {
-                    mostrar_error(&estado_firmware, error);
-                    return;
-                }
-            };
-            let efecto = plan
-                .get("effect")
-                .and_then(Value::as_str)
-                .unwrap_or("immediate");
-            let cuerpo = frase_confirmar_firmware(estado_firmware.idioma, &nombre_firmware, efecto);
-            let dialogo = dialogo_confirmacion(
-                boton,
-                estado_firmware.idioma,
-                &cuerpo,
-                texto(estado_firmware.idioma, "install"),
-                false,
-            );
-            let estado_aplicar = Rc::clone(&estado_firmware);
-            let id_aplicar = id_firmware.clone();
-            dialogo.connect_response(None, move |_, respuesta| {
-                if respuesta != "apply" {
-                    return;
-                }
-                match ejecutar_json(
-                    &estado_aplicar,
-                    &["firmware", "update", &id_aplicar, "--yes", "--json"],
-                ) {
-                    Ok(_) => {
-                        mostrar_exito(
-                            &estado_aplicar,
-                            texto(estado_aplicar.idioma, "operation_done"),
-                        );
-                        recargar(Rc::clone(&estado_aplicar));
-                    }
-                    Err(error) => mostrar_error(&estado_aplicar, error),
-                }
-            });
-            dialogo.present();
-        });
-    }
-
-    pagina.add(&grupo_actualizaciones);
-
-    let grupo_dispositivos = adw::PreferencesGroup::new();
-    grupo_dispositivos.set_title(texto(estado.idioma, "firmware_devices"));
     let devices = dispositivos
         .get("devices")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
 
-    let mut visibles = 0_usize;
+    let problemas = devices
+        .iter()
+        .filter(|device| {
+            device
+                .get("problems")
+                .and_then(Value::as_array)
+                .map(|problemas| !problemas.is_empty())
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
 
-    for device in devices {
-        let nombre_crudo = device
-            .get("name")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .trim();
+    let grupo_estado = adw::PreferencesGroup::new();
+    grupo_estado.set_title(&localizar_visible(idioma_actual(), "Estado del firmware"));
 
-        let nombre_generico = nombre_crudo.is_empty()
-            || nombre_crudo == "—"
-            || matches!(
-                nombre_crudo.to_ascii_lowercase().as_str(),
-                "dispositivo sin nombre" | "unnamed device"
-            );
-
-        let summary = device
-            .get("summary")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|valor| !valor.is_empty());
-
-        let vendor = device
-            .get("vendor")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|valor| !valor.is_empty());
-
-        let version = device
-            .get("currentVersion")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|valor| !valor.is_empty());
-
-        let protocol = device
-            .get("protocol")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|valor| !valor.is_empty());
-
-        let soportado = device
-            .get("supported")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-
-        let actualizable = device
-            .get("updatable")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-
-        let tiene_problemas = device
-            .get("problems")
-            .and_then(Value::as_array)
-            .map(|problemas| !problemas.is_empty())
-            .unwrap_or(false);
-
-        let tiene_datos = summary.is_some()
-            || vendor.is_some()
-            || version.is_some()
-            || protocol.is_some()
-            || soportado
-            || actualizable
-            || tiene_problemas;
-
-        if nombre_generico && !tiene_datos {
-            continue;
-        }
-
-        if !actualizable && !tiene_problemas {
-            continue;
-        }
-
-        let titulo = if !nombre_generico {
-            nombre_crudo
-        } else if let Some(summary) = summary {
-            summary
-        } else if let Some(vendor) = vendor {
-            vendor
-        } else {
-            "Firmware"
-        };
-
-        let mut partes = Vec::<&str>::new();
-
-        for dato in [vendor, version, protocol].into_iter().flatten() {
-            if dato != titulo && !partes.iter().any(|actual| *actual == dato) {
-                partes.push(dato);
-            }
-        }
-
-        grupo_dispositivos.add(&fila(
-            titulo,
-            if partes.is_empty() {
-                "—".to_string()
+    let fila_estado = adw::ActionRow::new();
+    if updates.is_empty() && problemas.is_empty() {
+        fila_estado.set_title(&localizar_visible(
+            idioma_actual(),
+            "El firmware está al día",
+        ));
+        fila_estado.set_subtitle(&localizar_visible(
+            idioma_actual(),
+            "No hay actualizaciones ni dispositivos de firmware que requieran atención.",
+        ));
+    } else if !updates.is_empty() {
+        fila_estado.set_title(&localizar_visible(
+            idioma_actual(),
+            if updates.len() == 1 {
+                "Hay una actualización de firmware"
             } else {
-                partes.join(" · ")
+                "Hay actualizaciones de firmware"
             },
         ));
-
-        visibles += 1;
-    }
-
-    if visibles == 0 {
-        grupo_dispositivos.add(&fila(
-            texto(estado.idioma, "status"),
-            match estado.idioma {
-                Idioma::Ingles => "No devices require attention.",
-                Idioma::BelarusLatino => "Nijakija pryłady nje patrabujuc uvahi.",
-                Idioma::Belarus => "Ніякія прылады не патрабуюць увагі.",
-                Idioma::Catalan => "Cap dispositiu requereix atenció.",
-                Idioma::Checo => "Žádná zařízení nevyžadují pozornost.",
-                Idioma::Aleman => "Keine Geräte erfordern Aufmerksamkeit.",
-                Idioma::Frances => "Aucun appareil ne nécessite une attention particulière.",
-                Idioma::Gallego => "Ningún dispositivo require atención.",
-                Idioma::Italiano => "Nessun dispositivo richiede attenzione.",
-                Idioma::Coreano => "주의가 필요한 장치는 없습니다.",
-                Idioma::Kurdo => "No cîhazên pêwîstî bi balê.",
-                Idioma::Neerlandes => "Er zijn geen apparaten die aandacht vereisen.",
-                Idioma::NoruegoNynorsk => "Ingen enheter krever oppmerksomhet.",
-                Idioma::Polaco => "Żadne urządzenia nie wymagają uwagi.",
-                Idioma::PortuguesBrasil => "Nenhum dispositivo requer atenção.",
-                Idioma::Ruso => "Никакие устройства не требуют внимания.",
-                Idioma::Sueco => "Inga enheter kräver uppmärksamhet.",
-                Idioma::Turco => "Hiçbir cihaz dikkat gerektirmez.",
-                Idioma::Ucraniano => "Ніякі пристрої не потребують уваги.",
-                Idioma::Vietnamita => "Không có thiết bị nào cần chú ý.",
-                Idioma::ChinoSimplificado => "没有设备需要注意。",
-                Idioma::Hungaro => "Egyetlen eszköz sem igényel figyelmet.",
-                Idioma::Espanol => "Ningún dispositivo requiere atención.",
-            },
+        fila_estado.set_subtitle(&localizar_visible(
+            idioma_actual(),
+            &format!(
+                "{} {} disponibles.",
+                updates.len(),
+                if updates.len() == 1 {
+                    "actualización"
+                } else {
+                    "actualizaciones"
+                }
+            ),
+        ));
+    } else {
+        fila_estado.set_title(&localizar_visible(
+            idioma_actual(),
+            "Hay dispositivos de firmware que requieren atención",
+        ));
+        fila_estado.set_subtitle(&localizar_visible(
+            idioma_actual(),
+            "No hay una actualización disponible ahora, pero fwupd informó de un problema.",
         ));
     }
 
-    pagina.add(&grupo_dispositivos);
+    let comprobar =
+        gtk::Button::with_label(&localizar_visible(idioma_actual(), "Comprobar de nuevo"));
+    comprobar.set_valign(gtk::Align::Center);
+    fila_estado.add_suffix(&comprobar);
+    grupo_estado.add(&fila_estado);
+    pagina.add(&grupo_estado);
+
+    let estado_buscar = Rc::clone(&estado);
+    comprobar.connect_clicked(move |_| {
+        match ejecutar_json(&estado_buscar, &["firmware", "refresh", "--yes", "--json"]) {
+            Ok(_) => {
+                mostrar_exito(&estado_buscar, "La información de firmware se actualizó.");
+                recargar(Rc::clone(&estado_buscar));
+            }
+            Err(error) => mostrar_error(&estado_buscar, error),
+        }
+    });
+
+    if !updates.is_empty() {
+        let grupo_actualizaciones = adw::PreferencesGroup::new();
+        grupo_actualizaciones.set_title(&localizar_visible(
+            idioma_actual(),
+            "Actualizaciones disponibles",
+        ));
+
+        for update in updates {
+            let id = update
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+
+            if id.is_empty() {
+                continue;
+            }
+
+            let nombre = update
+                .get("name")
+                .and_then(Value::as_str)
+                .filter(|valor| !valor.trim().is_empty())
+                .unwrap_or("Firmware")
+                .to_string();
+
+            let actual = update
+                .get("currentVersion")
+                .and_then(Value::as_str)
+                .unwrap_or("—");
+            let objetivo = update
+                .pointer("/releases/0/version")
+                .and_then(Value::as_str)
+                .unwrap_or("—");
+
+            let row = adw::ActionRow::new();
+            row.set_title(&nombre);
+            row.set_subtitle(&format!("{actual} → {objetivo}"));
+
+            let boton = gtk::Button::with_label(texto(estado.idioma, "install"));
+            boton.add_css_class("suggested-action");
+            boton.set_valign(gtk::Align::Center);
+            row.add_suffix(&boton);
+            grupo_actualizaciones.add(&row);
+
+            let estado_firmware = Rc::clone(&estado);
+            let id_firmware = id.clone();
+            let nombre_firmware = nombre.clone();
+
+            boton.connect_clicked(move |boton| {
+                let plan = match ejecutar_json(
+                    &estado_firmware,
+                    &["firmware", "update", &id_firmware, "--plan", "--json"],
+                ) {
+                    Ok(plan) => plan,
+                    Err(error) => {
+                        mostrar_error(&estado_firmware, error);
+                        return;
+                    }
+                };
+
+                let efecto = plan
+                    .get("effect")
+                    .and_then(Value::as_str)
+                    .unwrap_or("immediate");
+
+                let cuerpo =
+                    frase_confirmar_firmware(estado_firmware.idioma, &nombre_firmware, efecto);
+                let dialogo = dialogo_confirmacion(
+                    boton,
+                    estado_firmware.idioma,
+                    &cuerpo,
+                    texto(estado_firmware.idioma, "install"),
+                    false,
+                );
+
+                let estado_aplicar = Rc::clone(&estado_firmware);
+                let id_aplicar = id_firmware.clone();
+
+                dialogo.connect_response(None, move |_, respuesta| {
+                    if respuesta != "apply" {
+                        return;
+                    }
+
+                    match ejecutar_json(
+                        &estado_aplicar,
+                        &["firmware", "update", &id_aplicar, "--yes", "--json"],
+                    ) {
+                        Ok(_) => {
+                            mostrar_exito(
+                                &estado_aplicar,
+                                texto(estado_aplicar.idioma, "operation_done"),
+                            );
+                            recargar(Rc::clone(&estado_aplicar));
+                        }
+                        Err(error) => mostrar_error(&estado_aplicar, error),
+                    }
+                });
+
+                dialogo.present();
+            });
+        }
+
+        pagina.add(&grupo_actualizaciones);
+    }
+
+    if !problemas.is_empty() {
+        let grupo_problemas = adw::PreferencesGroup::new();
+        grupo_problemas.set_title(&localizar_visible(
+            idioma_actual(),
+            "Dispositivos que requieren atención",
+        ));
+        grupo_problemas.set_description(Some(&localizar_visible(
+            idioma_actual(),
+            "Se muestran solo dispositivos para los que fwupd informó un problema.",
+        )));
+
+        for device in problemas {
+            let nombre = device
+                .get("name")
+                .and_then(Value::as_str)
+                .filter(|valor| !valor.trim().is_empty() && *valor != "—")
+                .or_else(|| {
+                    device
+                        .get("summary")
+                        .and_then(Value::as_str)
+                        .filter(|valor| !valor.trim().is_empty())
+                })
+                .or_else(|| {
+                    device
+                        .get("vendor")
+                        .and_then(Value::as_str)
+                        .filter(|valor| !valor.trim().is_empty())
+                })
+                .unwrap_or("Dispositivo de firmware");
+
+            grupo_problemas.add(&fila(
+                nombre,
+                "fwupd informó que este dispositivo necesita revisión.",
+            ));
+        }
+
+        pagina.add(&grupo_problemas);
+    }
+
     pagina
 }
 
@@ -10686,50 +10881,32 @@ fn pagina_escritorio_apariencia(
 fn pagina_copias_historial(estado: Rc<Estado>, historial: &Value) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
 
-    let grupo_copias = adw::PreferencesGroup::new();
-    grupo_copias.set_title(&localizar_visible(idioma_actual(), "Copias de seguridad"));
-    grupo_copias.set_description(Some(
-        "Las copias portables contienen configuración y nunca credenciales.",
-    ));
+    let grupo_estado = adw::PreferencesGroup::new();
+    grupo_estado.set_title(&localizar_visible(idioma_actual(), "Copia portable"));
 
-    let exportar_fila = adw::ActionRow::new();
-    exportar_fila.set_title(&localizar_visible(
-        idioma_actual(),
-        "Exportar configuración",
-    ));
-    exportar_fila.set_subtitle(&localizar_visible(
-        idioma_actual(),
-        "Crea una copia portable en Descargas.",
-    ));
+    let estado_copia = adw::ActionRow::new();
+    estado_copia.set_title(&localizar_visible(idioma_actual(), "Última copia portable"));
+
+    match ultima_copia_portable(historial) {
+        Some(timestamp) => estado_copia.set_subtitle(&localizar_visible(
+            idioma_actual(),
+            &format!(
+                "{} · No incluye contraseñas ni credenciales.",
+                tiempo_relativo(timestamp)
+            ),
+        )),
+        None => estado_copia.set_subtitle(&localizar_visible(
+            idioma_actual(),
+            "Todavía no has creado una copia portable de esta configuración.",
+        )),
+    }
+
     let exportar = gtk::Button::with_label(texto(estado.idioma, "export_backup"));
     exportar.add_css_class("suggested-action");
     exportar.set_valign(gtk::Align::Center);
-    exportar_fila.add_suffix(&exportar);
-    grupo_copias.add(&exportar_fila);
-
-    let ruta = adw::EntryRow::new();
-    ruta.set_title(&localizar_visible(
-        idioma_actual(),
-        "Archivo para restaurar",
-    ));
-    grupo_copias.add(&ruta);
-
-    let restaurar_fila = adw::ActionRow::new();
-    restaurar_fila.set_title(&localizar_visible(
-        idioma_actual(),
-        "Restaurar configuración",
-    ));
-    restaurar_fila.set_subtitle(&localizar_visible(
-        idioma_actual(),
-        "Korunix crea antes una copia de seguridad de la configuración actual.",
-    ));
-    let restaurar = gtk::Button::with_label(texto(estado.idioma, "restore_backup"));
-    restaurar.add_css_class("destructive-action");
-    restaurar.set_valign(gtk::Align::Center);
-    restaurar_fila.add_suffix(&restaurar);
-    grupo_copias.add(&restaurar_fila);
-
-    pagina.add(&grupo_copias);
+    estado_copia.add_suffix(&exportar);
+    grupo_estado.add(&estado_copia);
+    pagina.add(&grupo_estado);
 
     let estado_exportar = Rc::clone(&estado);
     exportar.connect_clicked(move |boton| {
@@ -10743,7 +10920,7 @@ fn pagina_copias_historial(estado: Rc<Estado>, historial: &Value) -> adw::Prefer
         let dialogo = dialogo_accion(
             boton,
             &estado_exportar,
-            "¿Crear ahora una copia portable de la configuración?",
+            "¿Crear ahora una copia portable de la configuración? No incluirá contraseñas ni credenciales.",
             texto(estado_exportar.idioma, "export_backup"),
             false,
         );
@@ -10754,36 +10931,67 @@ fn pagina_copias_historial(estado: Rc<Estado>, historial: &Value) -> adw::Prefer
                 return;
             }
 
-            match ejecutar_json(&estado_ejecutar, &["backup", "export", "--yes", "--json"]) {
+            match ejecutar_json(
+                &estado_ejecutar,
+                &["backup", "export", "--yes", "--json"],
+            ) {
                 Ok(resultado) => {
                     let salida = resultado
                         .get("output")
                         .and_then(Value::as_str)
                         .unwrap_or("Descargas");
-                    let mensaje = format!("Copia creada: {salida}");
-                    mostrar_exito(&estado_ejecutar, &mensaje);
+                    mostrar_exito(
+                        &estado_ejecutar,
+                        &format!("Copia creada en {salida}"),
+                    );
                     recargar(Rc::clone(&estado_ejecutar));
                 }
                 Err(error) => mostrar_error(&estado_ejecutar, error),
             }
         });
+
         dialogo.present();
     });
+
+    let grupo_restaurar = adw::PreferencesGroup::new();
+    grupo_restaurar.set_title(&localizar_visible(idioma_actual(), "Restaurar una copia"));
+    grupo_restaurar.set_description(Some(&localizar_visible(
+        idioma_actual(),
+        "Korunix valida la copia y respalda la configuración actual antes de sustituirla.",
+    )));
+
+    let ruta = adw::EntryRow::new();
+    ruta.set_title(&localizar_visible(idioma_actual(), "Archivo de copia"));
+    grupo_restaurar.add(&ruta);
+
+    let restaurar_fila = adw::ActionRow::new();
+    restaurar_fila.set_title(&localizar_visible(
+        idioma_actual(),
+        "Restaurar configuración",
+    ));
+    let restaurar = gtk::Button::with_label(texto(estado.idioma, "restore_backup"));
+    restaurar.add_css_class("destructive-action");
+    restaurar.set_valign(gtk::Align::Center);
+    restaurar_fila.add_suffix(&restaurar);
+    grupo_restaurar.add(&restaurar_fila);
+    pagina.add(&grupo_restaurar);
 
     let estado_restaurar = Rc::clone(&estado);
     restaurar.connect_clicked(move |boton| {
         let archivo = ruta.text().trim().to_string();
+
         if archivo.is_empty() {
             mostrar_error(
                 &estado_restaurar,
-                "Selecciona o escribe la ruta de una copia.",
+                "Indica el archivo de copia que quieres restaurar.",
             );
             return;
         }
 
-        let plan = ["backup", "restore", archivo.as_str(), "--plan", "--json"];
-
-        if let Err(error) = ejecutar_json(&estado_restaurar, &plan) {
+        if let Err(error) = ejecutar_json(
+            &estado_restaurar,
+            &["backup", "restore", archivo.as_str(), "--plan", "--json"],
+        ) {
             mostrar_error(&estado_restaurar, error);
             return;
         }
@@ -10791,7 +10999,7 @@ fn pagina_copias_historial(estado: Rc<Estado>, historial: &Value) -> adw::Prefer
         let dialogo = dialogo_accion(
             boton,
             &estado_restaurar,
-            "¿Restaurar esta configuración? La configuración actual se respaldará primero.",
+            "¿Restaurar esta configuración? Korunix guardará primero una copia de seguridad de la configuración actual.",
             texto(estado_restaurar.idioma, "restore_backup"),
             true,
         );
@@ -10821,10 +11029,11 @@ fn pagina_copias_historial(estado: Rc<Estado>, historial: &Value) -> adw::Prefer
     });
 
     let grupo_historial = adw::PreferencesGroup::new();
-    grupo_historial.set_title(&localizar_visible(idioma_actual(), "Historial"));
-    grupo_historial.set_description(Some(
-        "Acciones humanas de Korunix; no contiene contraseñas ni secretos.",
-    ));
+    grupo_historial.set_title(&localizar_visible(idioma_actual(), "Actividad reciente"));
+    grupo_historial.set_description(Some(&localizar_visible(
+        idioma_actual(),
+        "Cambios realizados o preparados desde Korunix. Los secretos no forman parte de esta lista.",
+    )));
 
     let entradas = historial
         .get("entries")
@@ -10833,14 +11042,34 @@ fn pagina_copias_historial(estado: Rc<Estado>, historial: &Value) -> adw::Prefer
         .unwrap_or_default();
 
     if entradas.is_empty() {
-        grupo_historial.add(&fila("Estado", "Todavía no hay acciones registradas."));
+        grupo_historial.add(&fila(
+            "Sin actividad todavía",
+            "Las acciones que hagas con Korunix aparecerán aquí.",
+        ));
     } else {
-        for entrada in entradas.iter().rev().take(30) {
+        for entrada in entradas.iter().rev().take(12) {
             let resumen = entrada
                 .get("summary")
                 .and_then(Value::as_str)
                 .unwrap_or("Acción de Korunix");
-            grupo_historial.add(&fila(resumen, ""));
+
+            let cuando = entrada
+                .get("timestamp")
+                .and_then(Value::as_u64)
+                .map(tiempo_relativo)
+                .unwrap_or_default();
+
+            grupo_historial.add(&fila(resumen, cuando));
+        }
+
+        if entradas.len() > 12 {
+            grupo_historial.set_description(Some(&localizar_visible(
+                idioma_actual(),
+                &format!(
+                    "Mostrando las 12 acciones más recientes de {} registradas.",
+                    entradas.len()
+                ),
+            )));
         }
     }
 
@@ -11155,7 +11384,15 @@ fn recargar(estado: Rc<Estado>) {
             &estado.stack,
             "summary",
             texto(estado.idioma, "summary"),
-            &pagina_resumen(&estado, hardware, people, channel),
+            &pagina_resumen(
+                Rc::clone(&estado),
+                hardware,
+                people,
+                channel,
+                history.as_ref().ok(),
+                firmware_updates.as_ref().ok(),
+                privileges.as_ref().ok(),
+            ),
         );
     } else {
         reemplazar_pagina(
@@ -11954,6 +12191,8 @@ fn construir_ventana(app: &adw::Application, raiz: PathBuf, motor: PathBuf) {
         motor,
         idioma,
         stack,
+        navegacion: lista.clone(),
+        pagina_contenido: pagina_contenido.clone(),
         toast,
         progreso,
         progreso_barra,
@@ -11976,6 +12215,86 @@ fn construir_ventana(app: &adw::Application, raiz: PathBuf, motor: PathBuf) {
 #[cfg(test)]
 mod pruebas_roles_predeterminados_gui {
     use super::*;
+
+    #[test]
+    fn historial_encuentra_la_ultima_copia_portable() {
+        let historial = serde_json::json!({
+            "entries": [
+                {"timestamp": 10, "kind": "backup-export"},
+                {"timestamp": 20, "kind": "applications-prepared"},
+                {"timestamp": 30, "kind": "backup-export"}
+            ]
+        });
+
+        assert_eq!(ultima_copia_portable(&historial), Some(30));
+    }
+
+    #[test]
+    fn tiempo_relativo_es_humano() {
+        assert_eq!(tiempo_relativo_desde(1_000, 1_030), "Ahora");
+        assert_eq!(tiempo_relativo_desde(1_000, 1_120), "Hace 2 min");
+        assert_eq!(tiempo_relativo_desde(1_000, 8_200), "Hace 2 h");
+        assert_eq!(
+            tiempo_relativo_desde(1_000, 1_000 + 2 * 86_400),
+            "Hace 2 días"
+        );
+    }
+
+    #[test]
+    fn resumen_solo_alerta_con_evidencia() {
+        let ahora = 4_000_000;
+        let historial_reciente = serde_json::json!({
+            "entries": [{
+                "timestamp": ahora - 10 * 86_400,
+                "kind": "backup-export"
+            }]
+        });
+        let firmware = serde_json::json!({"devices": []});
+        let privilegios = serde_json::json!({"guiUsable": true});
+
+        assert!(asuntos_resumen(
+            Some(&historial_reciente),
+            Some(&firmware),
+            Some(&privilegios),
+            ahora
+        )
+        .is_empty());
+
+        let firmware_pendiente = serde_json::json!({"devices": [{"id": "uno"}]});
+        let historial_vacio = serde_json::json!({"entries": []});
+        let privilegios_inutiles = serde_json::json!({"guiUsable": false});
+        let asuntos = asuntos_resumen(
+            Some(&historial_vacio),
+            Some(&firmware_pendiente),
+            Some(&privilegios_inutiles),
+            ahora,
+        );
+
+        assert_eq!(asuntos.len(), 3);
+        assert_eq!(asuntos[0].destino, "backups");
+        assert_eq!(asuntos[1].destino, "firmware");
+        assert_eq!(asuntos[2].destino, "maintenance");
+    }
+
+    #[test]
+    fn mapa_de_navegacion_cubre_las_doce_paginas() {
+        for nombre in [
+            "summary",
+            "updates",
+            "hardware",
+            "media",
+            "storage",
+            "firmware",
+            "applications",
+            "appearance",
+            "localization",
+            "people",
+            "backups",
+            "maintenance",
+        ] {
+            assert!(indice_pagina(nombre).is_some(), "{nombre}");
+        }
+    }
 
     #[test]
     fn busqueda_global_encuentra_decisiones_humanas() {

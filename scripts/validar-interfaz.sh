@@ -37,6 +37,24 @@ grep -Fq 'Buscar más aplicaciones' "$interfaz"
 grep -Fq 'Navegador predeterminado' "$interfaz"
 grep -Fq 'Editor de texto en Plasma' "$interfaz"
 grep -Fq 'KDE Plasma' "$interfaz"
+grep -Fq 'fn asuntos_resumen' "$interfaz"
+grep -Fq 'Estado del equipo' "$interfaz"
+grep -Fq 'Todo está bien' "$interfaz"
+grep -Fq 'Expulsión después de archivos grandes' "$interfaz"
+grep -Fq 'El firmware está al día' "$interfaz"
+grep -Fq 'Última copia portable' "$interfaz"
+grep -Fq 'Versiones para recuperación' "$interfaz"
+grep -Fq 'Limpieza recomendada' "$interfaz"
+
+if grep -Fq '"firmware", "refresh", "--plan"' "$interfaz"; then
+  echo "ERROR: Firmware volvió a pedir confirmación para una mera consulta." >&2
+  exit 1
+fi
+
+if grep -Fq 'selector.set_title(texto(estado.idioma, "generations"))' "$interfaz"; then
+  echo "ERROR: Mantenimiento volvió a esconder las recuperaciones en un selector técnico." >&2
+  exit 1
+fi
 
 if grep -Fq 'fuentes_modelo = gtk::StringList' "$interfaz"; then
   echo "ERROR: Aplicaciones volvió a pedir una fuente técnica al usuario." >&2
@@ -75,3 +93,9 @@ echo "✓ catálogo describe qué instala cada aplicación y para qué sirve"
 echo "✓ buscador de aplicaciones vive arriba y oculta la fuente técnica"
 echo "✓ actualizaciones agrupan dependencias bajo decisiones humanas"
 echo "✓ localización muestra primero valores humanos"
+
+echo "✓ Resumen funciona como centro de salud con señales comprobables"
+echo "✓ Almacenamiento explica la expulsión de archivos grandes"
+echo "✓ Firmware presenta un único estado y consulta sin diálogo redundante"
+echo "✓ Copias e historial muestran estado y tiempo relativo"
+echo "✓ Mantenimiento muestra tres recuperaciones recientes y limpieza comprensible"
