@@ -420,9 +420,12 @@ En Niri y Hyprland, el compositor continúa siendo dueño de la distribución,
 variante y cambio de teclado. Eso no autoriza a desactivar el backend de
 composición que necesiten las aplicaciones.
 
-Las aplicaciones GTK4 de la suite GNOME utilizada por la experiencia Noctalia,
-incluidos Nautilus y GNOME Text Editor, deben poder resolver teclas muertas y
-diacríticos con la misma fiabilidad que en un escritorio GNOME completo.
+Todas las aplicaciones GNOME instaladas que utilicen GTK/GTK4 y puedan depender
+del backend de composición deben resolver teclas muertas y diacríticos con la
+misma fiabilidad que en un escritorio GNOME completo. Esta garantía incluye
+tanto las aplicaciones instaladas directamente por Korunix como las que llegan
+por un rol predeterminado o por la experiencia del escritorio. Nautilus y GNOME
+Text Editor son ejemplos de esa familia, no excepciones ni el alcance completo.
 
 Cuando ninguna persona haya pedido un método de entrada avanzado:
 
@@ -434,12 +437,21 @@ Cuando exista una selección efectiva de métodos de entrada avanzados, Korunix
 puede utilizar Fcitx5 como backend coordinado para el host.
 
 Una optimización de autostart nunca debe desactivar el backend de composición
-solo porque Niri o Hyprland administren XKB. La validación funcional debe probar
-al menos una variante con teclas muertas en una aplicación GTK4 iniciada desde
-la experiencia normal del escritorio, no solamente desde una terminal. Para una
-configuración española equivalente a `es(deadtilde)`, la prueba debe confirmar
-que combinaciones como `á`, `é`, `í`, `ó`, `ú` y `ü` funcionan tanto al editar
-texto como al renombrar un archivo en Nautilus.
+solo porque Niri o Hyprland administren XKB.
+
+La garantía funcional se aplica a toda aplicación GNOME instalada que exponga
+campos de texto o acciones de renombrado y dependa del contexto de entrada de
+GTK. La prueba de aceptación debe recorrer las aplicaciones GNOME instaladas
+relevantes, no una lista histórica fija. Como mínimo debe cubrir categorías
+distintas cuando existan —por ejemplo editor de texto, gestor de archivos y
+otra aplicación GNOME con entrada editable— y cualquier aplicación GNOME en la
+que se detecte una regresión pasa a formar parte de la matriz de comprobación.
+
+Para una configuración española equivalente a `es(deadtilde)`, la prueba debe
+confirmar que combinaciones como `á`, `é`, `í`, `ó`, `ú` y `ü` funcionan en
+todos esos contextos. La validación no se considera superada si funciona en
+Nautilus o GNOME Text Editor pero falla en otra aplicación GNOME instalada que
+dependa del mismo backend de composición.
 
 ## 10. Apariencia de Korunix y apariencia del sistema
 

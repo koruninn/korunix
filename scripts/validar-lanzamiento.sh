@@ -224,11 +224,13 @@ else
 fi
 
 if grep -Fq '### 9.1. Teclas muertas, diacríticos y métodos de composición' spec.md \
-   && grep -Fq 'Una optimización de autostart nunca debe desactivar el backend de composición' spec.md
+   && grep -Fq 'Todas las aplicaciones GNOME instaladas que utilicen GTK/GTK4 y puedan depender' spec.md \
+   && grep -Fq 'Text Editor son ejemplos de esa familia, no excepciones ni el alcance completo.' spec.md \
+   && grep -Fq 'La validación no se considera superada si funciona en' spec.md
 then
-  ok 'especificación protege teclas muertas y diacríticos'
+  ok 'especificación protege diacríticos en toda la familia GNOME instalada'
 else
-  fallo 'la especificación no protege la composición de texto'
+  fallo 'la especificación redujo la composición a aplicaciones GNOME concretas'
 fi
 
 if [[ -s spec.md ]] && grep -q '^# Korunix' spec.md; then
