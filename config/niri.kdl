@@ -190,7 +190,7 @@ binds {
 
     Mod+E { spawn "nautilus"; }
 
-    Mod+B { spawn "firefox"; }
+    Mod+B { spawn "korunix-open-browser"; }
 
     Mod+Page_Down      { focus-workspace-down; }
     Mod+Page_Up        { focus-workspace-up; }

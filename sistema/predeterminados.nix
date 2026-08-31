@@ -50,6 +50,87 @@
     };
   };
 
+  # Los roles describen intenciones humanas, no paquetes Nix ni archivos
+  # .desktop. La traducción técnica vive en sistema/roles.nix.
+  roles = {
+    common = {
+      terminal = "alacritty";
+      shell = "fish";
+      mail = "thunderbird";
+      photoEditor = "gimp";
+    };
+
+    byDesktop = {
+      niri = {
+        fileManager = "nautilus";
+        imageViewer = "loupe";
+        pdfViewer = "papers";
+        textEditor = "gnome-text-editor";
+        videoPlayer = "showtime";
+        musicPlayer = "gnome-music";
+        calendar = "gnome-calendar";
+        maps = "gnome-maps";
+        camera = "snapshot";
+        calculator = "gnome-calculator";
+        archiveManager = "file-roller";
+      };
+
+      hyprland = {
+        fileManager = "nautilus";
+        imageViewer = "loupe";
+        pdfViewer = "papers";
+        textEditor = "gnome-text-editor";
+        videoPlayer = "showtime";
+        musicPlayer = "gnome-music";
+        calendar = "gnome-calendar";
+        maps = "gnome-maps";
+        camera = "snapshot";
+        calculator = "gnome-calculator";
+        archiveManager = "file-roller";
+      };
+
+      cinnamon = {
+        fileManager = "nemo";
+        imageViewer = "xviewer";
+        pdfViewer = "xreader";
+        textEditor = "xed";
+        videoPlayer = "celluloid";
+        musicPlayer = "rhythmbox";
+        calendar = "gnome-calendar";
+        maps = "gnome-maps";
+        camera = "snapshot";
+        calculator = "gnome-calculator";
+        archiveManager = "file-roller";
+      };
+
+      plasma = {
+        fileManager = "dolphin";
+        imageViewer = "gwenview";
+        pdfViewer = "okular";
+        textEditor = null;
+        videoPlayer = "haruna";
+        musicPlayer = "elisa";
+        calendar = "merkuro";
+        maps = "marble";
+        camera = "kamoso";
+        calculator = "kcalc";
+        archiveManager = "ark";
+      };
+    };
+
+    choices = {
+      browser = [
+        "firefox"
+        "google-chrome"
+      ];
+
+      plasmaTextEditor = [
+        "kwrite"
+        "kate"
+      ];
+    };
+  };
+
   services = {
     # Descubrimiento local y SSH forman parte de la instalación inicial.
     avahi = true;

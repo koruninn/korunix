@@ -18,7 +18,125 @@
 
   profiles = lib.genAttrs cfg.users loadUser;
 
+  roleModel = import ./roles.nix {inherit lib pkgs;};
+
+  enabledDesktops =
+    lib.unique ([cfg.desktop.primary] ++ cfg.desktop.additional);
+
+  plasmaEnabled = lib.elem "plasma" enabledDesktops;
+
   settingsFor = userId: cfg.userSettings.${userId} or {};
+
+  defaultRolesFor = userId:
+    profiles.${userId}.defaultRoles or {};
+
+  browserRoleFor = userId:
+    (defaultRolesFor userId).browser or null;
+
+  plasmaTextEditorRoleFor = userId:
+    (defaultRolesFor userId).plasmaTextEditor or null;
+
+  browserEffectiveFor = userId: let
+    requested = browserRoleFor userId;
+  in
+    if requested != null && lib.elem requested cfg.applications
+    then requested
+    else null;
+
+  defaultRoleKeysFor = userId:
+    builtins.attrNames (defaultRolesFor userId);
+
+  knownDefaultRoleKeys = [
+    "browser"
+    "plasmaTextEditor"
+  ];
+
+  unknownDefaultRoleKeys =
+    lib.concatMap
+    (userId:
+      map
+      (key: "${userId}:${key}")
+      (lib.filter
+        (key: !(lib.elem key knownDefaultRoleKeys))
+        (defaultRoleKeysFor userId)))
+    cfg.users;
+
+  invalidBrowserRoles =
+    lib.concatMap
+    (userId: let
+      value = browserRoleFor userId;
+    in
+      lib.optional
+      (value != null && !(lib.elem value roleModel.browserChoices))
+      "${userId}:${toString value}")
+    cfg.users;
+
+  invalidPlasmaTextEditorRoles =
+    lib.concatMap
+    (userId: let
+      value = plasmaTextEditorRoleFor userId;
+    in
+      lib.optional
+      (value != null && !(lib.elem value roleModel.plasmaTextEditorChoices))
+      "${userId}:${toString value}")
+    cfg.users;
+
+  plasmaEditorRequested =
+    plasmaEnabled
+    && lib.any
+    (userId: plasmaTextEditorRoleFor userId != null)
+    cfg.users;
+
+  mimeDefaultsForUser = userId:
+    lib.listToAttrs
+    (map
+      (desktop: {
+        name = roleModel.desktopMimeFileNames.${desktop};
+        value = roleModel.mimeDefaultsFor {
+          inherit desktop;
+          browser = browserEffectiveFor userId;
+          plasmaTextEditor = plasmaTextEditorRoleFor userId;
+        };
+      })
+      enabledDesktops);
+
+  roleStateForUser = userId: let
+    browserRequested = browserRoleFor userId;
+    browserEffective = browserEffectiveFor userId;
+    plasmaEditorRequestedByUser = plasmaTextEditorRoleFor userId;
+  in {
+    id = userId;
+
+    requested = {
+      browser = browserRequested;
+      plasmaTextEditor = plasmaEditorRequestedByUser;
+    };
+
+    effective = {
+      browser = browserEffective;
+      plasmaTextEditor =
+        if plasmaEnabled
+        then plasmaEditorRequestedByUser
+        else null;
+    };
+
+    deferred = {
+      browser =
+        browserRequested
+        != null
+        && browserEffective == null;
+      plasmaTextEditor = false;
+    };
+
+    needsChoice = {
+      browser = browserRequested == null;
+      plasmaTextEditor =
+        plasmaEnabled
+        && plasmaEditorRequestedByUser == null;
+    };
+
+    mimeFiles = mimeDefaultsForUser userId;
+  };
 
   accountNameFor = userId: let
     profile = profiles.${userId};
@@ -350,6 +468,7 @@
         language = profile.language or config.korunix.localization.systemLanguage;
         inputMethods = usableInputMethodsFor userId;
         fcitxMethods = map fcitxEngineFor inputMethods;
+        mimeDefaults = builtins.toJSON (mimeDefaultsForUser userId);
       in ''
         ${lib.escapeShellArg accountName})
           KORUNIX_USER_ID=${lib.escapeShellArg userId}
@@ -362,6 +481,7 @@
           else "0"
         }
           KORUNIX_FCITX_KEYBOARD=${lib.escapeShellArg fcitxKeyboard}
+          KORUNIX_MIME_DEFAULTS=${lib.escapeShellArg mimeDefaults}
           KORUNIX_AVATAR_SOURCE=${
           if avatar == null
           then "''"
@@ -396,6 +516,164 @@
 
     korunix_state="$state_home/korunix"
     mkdir -p "$korunix_state"
+
+
+    # Los archivos específicos del escritorio tienen prioridad sobre el
+    # mimeapps.list general. Korunix modifica únicamente Default Applications
+    # de los roles que administra y conserva cualquier asociación ajena.
+    ${pkgs.python3}/bin/python3 - \
+      "$config_home" \
+      "$korunix_state" \
+      "$KORUNIX_MIME_DEFAULTS" \
+      <<'PY'
+    from __future__ import annotations
+
+    import json
+    import os
+    import re
+    import shutil
+    import sys
+    import tempfile
+    import time
+    from pathlib import Path
+
+    config_home = Path(sys.argv[1])
+    state_home = Path(sys.argv[2])
+    files = json.loads(sys.argv[3])
+
+    header = re.compile(r"^[ \t]*\[Default Applications\][ \t]*$", re.M)
+
+
+    def merge_defaults(source: str, defaults: dict[str, str]) -> str:
+        if not defaults:
+            return source
+
+        match = header.search(source)
+
+        if match is None:
+            prefix = source.rstrip()
+            if prefix:
+                prefix += "\n\n"
+            section = "[Default Applications]\n"
+            section += "".join(
+                f"{mime}={desktop}\n"
+                for mime, desktop in sorted(defaults.items())
+            )
+            return prefix + section
+
+        following = re.search(r"(?m)^[ \t]*\[", source[match.end():])
+        end = match.end() + following.start() if following else len(source)
+
+        before = source[:match.end()]
+        body = source[match.end():end]
+        after = source[end:]
+
+        lines = body.splitlines(keepends=True)
+        managed = dict(defaults)
+        seen: set[str] = set()
+        result: list[str] = []
+
+        assignment = re.compile(r"^([ \t]*)([^#;\s][^=]*?)[ \t]*=(.*)$")
+
+        for line in lines:
+            raw = line.rstrip("\r\n")
+            match_line = assignment.match(raw)
+
+            if match_line is None:
+                result.append(line)
+                continue
+
+            key = match_line.group(2).strip()
+
+            if key not in managed:
+                result.append(line)
+                continue
+
+            if key in seen:
+                continue
+
+            newline = "\r\n" if line.endswith("\r\n") else "\n"
+            result.append(
+                f"{match_line.group(1)}{key}={managed[key]}{newline}"
+            )
+            seen.add(key)
+
+        missing = [
+            key
+            for key in sorted(managed)
+            if key not in seen
+        ]
+
+        if missing:
+            if result and not result[-1].endswith(("\n", "\r\n")):
+                result[-1] += "\n"
+
+            if not result or result[-1].strip():
+                result.append("\n")
+
+            result.extend(
+                f"{key}={managed[key]}\n"
+                for key in missing
+            )
+
+        return before + "".join(result) + after
+
+
+    for filename, defaults in files.items():
+        if not re.fullmatch(
+            r"(?:niri|hyprland|x-cinnamon|kde)-mimeapps\.list",
+            filename,
+        ):
+            raise SystemExit(
+                f"Korunix: nombre de archivo MIME no permitido: {filename}"
+            )
+
+        target = config_home / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+        original = (
+            target.read_text(encoding="utf-8")
+            if target.exists()
+            else ""
+        )
+
+        merged = merge_defaults(original, defaults)
+        if merged and not merged.endswith("\n"):
+            merged += "\n"
+
+        if merged == original:
+            continue
+
+        if target.exists():
+            backup_dir = state_home / "backups" / "mime"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            stamp = f"{time.time_ns()}-{os.getpid()}"
+            shutil.copy2(
+                target,
+                backup_dir / f"{filename}.{stamp}",
+            )
+
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{filename}.korunix-",
+            dir=target.parent,
+            text=True,
+        )
+        temporary = Path(temporary_name)
+
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                output.write(merged)
+                output.flush()
+                os.fsync(output.fileno())
+
+            if target.exists():
+                os.chmod(temporary, target.stat().st_mode)
+
+            os.replace(temporary, target)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+    PY
 
     ${lib.optionalString (lib.elem "spotify" config.korunix.applications) ''
       # Una implementación anterior creó un lanzador personal que apuntaba a
@@ -1039,11 +1317,44 @@ in {
           + lib.concatStringsSep ", " invalidDeferredInputMethods;
       }
       {
+        assertion = unknownDefaultRoleKeys == [];
+        message =
+          "Korunix no conoce estos roles predeterminados portables: "
+          + lib.concatStringsSep ", " unknownDefaultRoleKeys;
+      }
+      {
+        assertion = invalidBrowserRoles == [];
+        message =
+          "Korunix solo permite Firefox o Google Chrome como navegador predeterminado: "
+          + lib.concatStringsSep ", " invalidBrowserRoles;
+      }
+      {
+        assertion = invalidPlasmaTextEditorRoles == [];
+        message =
+          "Plasma solo permite KWrite o Kate como editor predeterminado: "
+          + lib.concatStringsSep ", " invalidPlasmaTextEditorRoles;
+      }
+      {
         assertion =
           !androidRequested
           || lib.elem "android-tools" config.korunix.applications;
         message = "La capacidad Android activa necesita android-tools en este host.";
       }
+    ];
+
+    # Contrato legible para el motor y la GUI. Una elección null significa
+    # que Korunix todavía debe preguntarla; no se inventa una preferencia.
+    environment.etc."korunix/default-roles.json".text = builtins.toJSON {
+      schemaVersion = 1;
+      policy = roleModel.productPolicy;
+      desktopMimeFiles = roleModel.desktopMimeFileNames;
+      people = map roleStateForUser cfg.users;
+    };
+
+    # KWrite y Kate comparten paquete en Nixpkgs. Solo se añade cuando alguien
+    # con Plasma realmente ha elegido uno de los dos enfoques.
+    environment.systemPackages = lib.optionals plasmaEditorRequested [
+      (roleModel.packageFor "kate")
     ];
 
     # GTK4 4.20+ necesita un método de entrada para resolver correctamente

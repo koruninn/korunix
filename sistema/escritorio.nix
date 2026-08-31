@@ -6,6 +6,7 @@
   ...
 }: let
   productDefaults = import ./predeterminados.nix;
+  roleModel = import ./roles.nix {inherit lib pkgs;};
   cfg = config.korunix.desktop;
   localization = config.korunix.localization;
 
@@ -114,6 +115,33 @@
   hyprlandEnabled = lib.elem "hyprland" enabledDesktops;
   cinnamonEnabled = lib.elem "cinnamon" enabledDesktops;
   plasmaEnabled = lib.elem "plasma" enabledDesktops;
+
+  fixedRolePackages = roleModel.packagesFor enabledDesktops;
+
+  roleBrowserLauncher = pkgs.writeShellApplication {
+    name = "korunix-open-browser";
+    runtimeInputs = [
+      pkgs.gtk3
+      pkgs.xdg-utils
+    ];
+
+    text = ''
+      set -eu
+
+      desktop_id="$(xdg-settings get default-web-browser 2>/dev/null || true)"
+
+      if [ -z "$desktop_id" ]; then
+        printf '%s\n' \
+          "Korunix todavía no tiene un navegador predeterminado efectivo." \
+          >&2
+        exit 2
+      fi
+
+      application="''${desktop_id%.desktop}"
+
+      exec gtk-launch "$application"
+    '';
+  };
 
   # El módulo de Cinnamon reúne en un único directorio tanto los esquemas
   # necesarios como los valores predeterminados visuales de Linux Mint.
@@ -1260,6 +1288,10 @@ in {
         (lib.hiPrio waylandSessions)
         (lib.hiPrio desktopVisibilityOverlay)
         (lib.hiPrio hiddenUnselectedSessions)
+      ]
+      ++ fixedRolePackages
+      ++ [
+        roleBrowserLauncher
       ]
       ++ lib.optionals niriEnabled [
         pkgs.xwayland-satellite

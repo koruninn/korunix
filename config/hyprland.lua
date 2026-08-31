@@ -97,7 +97,7 @@ local noctalia = "noctalia msg"
 -- Aplicaciones principales.
 hl.bind("SUPER + T", hl.dsp.exec_cmd("alacritty"))
 hl.bind("SUPER + E", hl.dsp.exec_cmd("nautilus"))
-hl.bind("SUPER + B", hl.dsp.exec_cmd("firefox"))
+hl.bind("SUPER + B", hl.dsp.exec_cmd("korunix-open-browser"))
 
 -- Noctalia.
 hl.bind(
