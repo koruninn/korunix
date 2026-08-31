@@ -77,6 +77,18 @@ al activar exactamente esa misma generación. La previsualización debe usar
 información que pueda obtenerse sin modificar el sistema y la activación real
 debe concentrar la autorización necesaria.
 
+Aplicar una generación no significa únicamente cambiar el sistema vivo. Una
+aplicación completada debe registrar la misma generación como generación
+predeterminada del sistema y actualizar el mecanismo de arranque correspondiente
+antes de declararse verificada. Al terminar correctamente, tanto
+`/run/current-system` como la resolución canónica de
+`/nix/var/nix/profiles/system` deben apuntar a la candidata. Invocar
+`switch-to-configuration switch` de forma aislada sin registrar primero la
+generación no satisface este contrato, porque un reinicio podría recuperar una
+generación anterior. La verificación final también debe confirmar que la
+candidata aparece entre las generaciones registradas y recuperables; cambiar
+solo `/run/current-system` no basta para declarar `apply` completado.
+
 Las operaciones potencialmente largas deben comunicar su fase actual antes de
 empezar y seguir dando señales de actividad mientras trabajan. Un flujo normal
 de aplicación distingue como mínimo:

@@ -649,6 +649,7 @@ fn trusted_program(nombre: &str) -> Result<PathBuf, String> {
         nombre,
         "nix"
             | "nix-env"
+            | "nixos-rebuild"
             | "nix-collect-garbage"
             | "bootctl"
             | "grub-reboot"
@@ -2542,7 +2543,7 @@ fn prepare_cycle(
     };
 
     let activation = if preview {
-        "La previsualización no necesita privilegios. La activación real se ejecutará solo después de confirmar y autorizar una vez."
+        "La previsualización no necesita privilegios. La activación real se ejecutará solo después de confirmar y autorizar una vez, y dejará esa misma generación como predeterminada para los próximos arranques."
             .to_string()
     } else {
         String::new()
@@ -2655,10 +2656,8 @@ fn change_cycle(raiz: &Path, command: &str, args: &[String]) -> Result<ExitCode,
         return Ok(ExitCode::SUCCESS);
     }
 
-    let activator = candidate.join("bin/switch-to-configuration");
-    if !activator.is_file() {
-        return Err("La candidata no contiene switch-to-configuration.".into());
-    }
+    let host = resolver_equipo(raiz)?;
+    let flake = format!("path:{}#{host}", raiz.display());
 
     emitir_fase(
         json,
@@ -2667,13 +2666,15 @@ fn change_cycle(raiz: &Path, command: &str, args: &[String]) -> Result<ExitCode,
         "Esperando autorización para activar el sistema…",
     );
 
-    // Esta es la única frontera privilegiada del ciclo apply. La
-    // previsualización ya ocurrió sin Polkit, así que una aplicación lógica no
-    // puede abrir dos solicitudes consecutivas de autenticación.
+    // Esta es la única frontera privilegiada del ciclo apply. nixos-rebuild
+    // registra la candidata en el perfil del sistema y actualiza el cargador
+    // de arranque antes de activarla. La candidata ya fue construida durante
+    // la fase anterior, así que Nix reutiliza el resultado cuando la fuente no
+    // cambió.
     let _ = privileged(
         raiz,
-        &activator.display().to_string(),
-        &["switch".into()],
+        "nixos-rebuild",
+        &["switch".into(), "--flake".into(), flake],
         true,
     )?;
 
@@ -2684,7 +2685,25 @@ fn change_cycle(raiz: &Path, command: &str, args: &[String]) -> Result<ExitCode,
         "Verificando la activación…",
     );
 
-    let verified = current_system() == candidate.display().to_string();
+    let candidate_text = candidate.display().to_string();
+    let running_system = current_system();
+    let profile_system = fs::canonicalize(system_profile())
+        .ok()
+        .map(|path| path.display().to_string())
+        .unwrap_or_default();
+    let registered = generations()
+        .into_iter()
+        .any(|(_, path)| path.display().to_string() == candidate_text);
+
+    let verified =
+        running_system == candidate_text && profile_system == candidate_text && registered;
+
+    if !verified {
+        return Err(
+            "La configuración se activó, pero no quedó registrada de forma persistente como generación predeterminada."
+                .into(),
+        );
+    }
 
     let _ = Command::new(tool("systemctl"))
         .args(["--user", "start", "korunix-user-prepare.service"])

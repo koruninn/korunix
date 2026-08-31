@@ -219,6 +219,18 @@ else
   fallo 'apply volvió a quedar sin fases humanas o contaminó el modo JSON'
 fi
 
+if rg -q '"nixos-rebuild"' sistema/programa/operaciones.rs \
+   && rg -q 'let profile_system = fs::canonicalize\(system_profile\(\)\)' sistema/programa/operaciones.rs \
+   && rg -q 'let registered = generations\(\)' sistema/programa/operaciones.rs \
+   && rg -q 'no quedó registrada de forma persistente como generación predeterminada' sistema/programa/operaciones.rs \
+   && grep -Fq 'La verificación final también debe confirmar que la' spec.md \
+   && grep -Fq 'candidata aparece entre las generaciones registradas y recuperables' spec.md
+then
+  ok 'apply registra y verifica una generación persistente'
+else
+  fallo 'apply puede activar una closure sin persistirla como generación'
+fi
+
 if rg -q 'La previsualización no necesita privilegios' sistema/programa/operaciones.rs \
    && ! rg -q 'dry-activate' sistema/programa/operaciones.rs
 then
