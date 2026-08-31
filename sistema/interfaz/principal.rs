@@ -9336,7 +9336,420 @@ fn fila_aplicacion(estado: Rc<Estado>, id: String, fuente: String, activa: bool)
     fila
 }
 
-fn pagina_aplicaciones(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage {
+fn opciones_navegador_ids(instaladas: &[String], actual: Option<&str>) -> (Vec<String>, u32) {
+    let mut ids = Vec::<String>::new();
+
+    // Una única aplicación instalada puede proponerse, pero nunca se asume.
+    if actual.is_none() {
+        ids.push(String::new());
+    }
+
+    for id in ["firefox", "google-chrome"] {
+        let instalada = instaladas.iter().any(|valor| valor == id);
+        if instalada || actual == Some(id) {
+            ids.push(id.to_string());
+        }
+    }
+
+    let seleccionado = actual
+        .and_then(|valor| ids.iter().position(|id| id == valor))
+        .unwrap_or(0) as u32;
+
+    (ids, seleccionado)
+}
+
+fn opciones_editor_plasma_ids(actual: Option<&str>) -> (Vec<String>, u32) {
+    let mut ids = Vec::<String>::new();
+
+    if actual.is_none() {
+        ids.push(String::new());
+    }
+
+    ids.push("kwrite".to_string());
+    ids.push("kate".to_string());
+
+    let seleccionado = actual
+        .and_then(|valor| ids.iter().position(|id| id == valor))
+        .unwrap_or(0) as u32;
+
+    (ids, seleccionado)
+}
+
+fn argumentos_cambio_roles(
+    persona: &str,
+    browser_antes: Option<&str>,
+    browser_despues: Option<&str>,
+    editor_antes: Option<&str>,
+    editor_despues: Option<&str>,
+    plan: bool,
+) -> Option<Vec<String>> {
+    let mut argumentos = vec![
+        "defaults".to_string(),
+        "set".to_string(),
+        "--person".to_string(),
+        persona.to_string(),
+    ];
+
+    if browser_antes != browser_despues {
+        if let Some(browser) = browser_despues {
+            argumentos.push("--browser".to_string());
+            argumentos.push(browser.to_string());
+        }
+    }
+
+    if editor_antes != editor_despues {
+        if let Some(editor) = editor_despues {
+            argumentos.push("--plasma-text-editor".to_string());
+            argumentos.push(editor.to_string());
+        }
+    }
+
+    if argumentos.len() == 4 {
+        return None;
+    }
+
+    argumentos.push(if plan {
+        "--plan".to_string()
+    } else {
+        "--yes".to_string()
+    });
+    argumentos.push("--json".to_string());
+
+    Some(argumentos)
+}
+
+fn agregar_roles_predeterminados(
+    pagina: &adw::PreferencesPage,
+    estado: Rc<Estado>,
+    seleccionados: &[String],
+    predeterminados: Option<&Value>,
+) {
+    let Some(predeterminados) = predeterminados else {
+        let grupo = adw::PreferencesGroup::new();
+        grupo.set_title(&localizar_visible(
+            idioma_actual(),
+            "Aplicaciones predeterminadas",
+        ));
+        grupo.set_description(Some(&localizar_visible(
+            idioma_actual(),
+            "No pude leer las elecciones predeterminadas del motor. El catálogo de aplicaciones sigue disponible.",
+        )));
+        pagina.add(&grupo);
+        return;
+    };
+
+    let personas = predeterminados
+        .get("people")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    if personas.is_empty() {
+        let grupo = adw::PreferencesGroup::new();
+        grupo.set_title(&localizar_visible(
+            idioma_actual(),
+            "Aplicaciones predeterminadas",
+        ));
+        grupo.set_description(Some(&localizar_visible(
+            idioma_actual(),
+            "No hay perfiles de persona asignados a este equipo.",
+        )));
+        pagina.add(&grupo);
+        return;
+    }
+
+    for persona in personas {
+        let Some(persona_id) = persona
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+        else {
+            continue;
+        };
+
+        let browser_actual = persona
+            .pointer("/requested/browser")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+
+        let editor_actual = persona
+            .pointer("/requested/plasmaTextEditor")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+
+        let browser_pendiente = persona
+            .pointer("/needsChoice/browser")
+            .and_then(Value::as_bool)
+            .unwrap_or(browser_actual.is_none());
+
+        let editor_pendiente = persona
+            .pointer("/needsChoice/plasmaTextEditor")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+
+        let mostrar_editor = editor_pendiente || editor_actual.is_some();
+
+        let grupo = adw::PreferencesGroup::new();
+        grupo.set_title(&format!(
+            "{} · {}",
+            localizar_visible(idioma_actual(), "Aplicaciones predeterminadas"),
+            persona_id
+        ));
+        grupo.set_description(Some(&localizar_visible(
+            idioma_actual(),
+            "Estas elecciones pertenecen al perfil portable. Korunix genera las asociaciones MIME a partir del rol y las activa al aplicar la configuración.",
+        )));
+
+        let (browser_ids, browser_indice) =
+            opciones_navegador_ids(seleccionados, browser_actual.as_deref());
+
+        let browser_labels = browser_ids
+            .iter()
+            .map(|id| match id.as_str() {
+                "" => localizar_visible(idioma_actual(), "Elige una opción"),
+                "firefox" => {
+                    if seleccionados.iter().any(|valor| valor == "firefox") {
+                        "Firefox".to_string()
+                    } else {
+                        localizar_visible(idioma_actual(), "Firefox — no instalado en este equipo")
+                    }
+                }
+                "google-chrome" => {
+                    if seleccionados.iter().any(|valor| valor == "google-chrome") {
+                        "Google Chrome".to_string()
+                    } else {
+                        localizar_visible(
+                            idioma_actual(),
+                            "Google Chrome — no instalado en este equipo",
+                        )
+                    }
+                }
+                otro => otro.to_string(),
+            })
+            .collect::<Vec<_>>();
+
+        let browser_refs = browser_labels
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+
+        let browser_modelo = gtk::StringList::new(&browser_refs);
+        let browser = adw::ComboRow::new();
+        browser.set_title(&localizar_visible(
+            idioma_actual(),
+            "¿Qué navegador quieres usar por defecto?",
+        ));
+        browser.set_model(Some(&browser_modelo));
+        browser.set_selected(browser_indice);
+
+        let navegadores_instalados = ["firefox", "google-chrome"]
+            .into_iter()
+            .filter(|id| seleccionados.iter().any(|valor| valor == id))
+            .count();
+
+        let browser_subtitulo = if browser_pendiente && navegadores_instalados == 1 {
+            localizar_visible(
+                idioma_actual(),
+                "Solo hay un navegador candidato instalado. Korunix lo propone, pero debes confirmarlo explícitamente.",
+            )
+        } else if browser_pendiente {
+            localizar_visible(
+                idioma_actual(),
+                "La elección está pendiente. Instalar un navegador no lo convierte automáticamente en predeterminado.",
+            )
+        } else {
+            localizar_visible(
+                idioma_actual(),
+                "El navegador solo recibe web y enlaces; no se apropia de imágenes ni PDF.",
+            )
+        };
+
+        browser.set_subtitle(&browser_subtitulo);
+        grupo.add(&browser);
+
+        let mut editor_ids = Vec::<String>::new();
+        let mut editor_combo = None::<adw::ComboRow>;
+
+        if mostrar_editor {
+            let (ids, seleccionado) = opciones_editor_plasma_ids(editor_actual.as_deref());
+
+            let labels = ids
+                .iter()
+                .map(|id| match id.as_str() {
+                    "" => localizar_visible(idioma_actual(), "Elige una opción"),
+                    "kwrite" => localizar_visible(idioma_actual(), "KWrite — ligero y directo"),
+                    "kate" => localizar_visible(
+                        idioma_actual(),
+                        "Kate — proyectos y herramientas avanzadas",
+                    ),
+                    otro => otro.to_string(),
+                })
+                .collect::<Vec<_>>();
+
+            let refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+            let modelo = gtk::StringList::new(&refs);
+            let editor = adw::ComboRow::new();
+            editor.set_title(&localizar_visible(
+                idioma_actual(),
+                "¿Qué editor de texto prefieres en Plasma?",
+            ));
+            editor.set_subtitle(&localizar_visible(
+                idioma_actual(),
+                "KWrite prioriza la edición ligera y directa. Kate añade proyectos, sesiones, paneles y herramientas avanzadas.",
+            ));
+            editor.set_model(Some(&modelo));
+            editor.set_selected(seleccionado);
+            grupo.add(&editor);
+
+            editor_ids = ids;
+            editor_combo = Some(editor);
+        }
+
+        let fila_guardar = adw::ActionRow::new();
+        fila_guardar.set_title(&localizar_visible(
+            idioma_actual(),
+            "Guardar estas elecciones",
+        ));
+        fila_guardar.set_subtitle(&localizar_visible(
+            idioma_actual(),
+            "Korunix prepara primero un plan, guarda el perfil portable y aplica la configuración solo después de tu confirmación.",
+        ));
+
+        let guardar = gtk::Button::with_label(texto(estado.idioma, "save_apply"));
+        guardar.add_css_class("suggested-action");
+        guardar.set_valign(gtk::Align::Center);
+        fila_guardar.add_suffix(&guardar);
+        grupo.add(&fila_guardar);
+
+        pagina.add(&grupo);
+
+        let estado_guardar = Rc::clone(&estado);
+        let persona_guardar = persona_id.clone();
+        let browser_ids_guardar = browser_ids.clone();
+        let editor_ids_guardar = editor_ids.clone();
+        let browser_antes = browser_actual.clone();
+        let editor_antes = editor_actual.clone();
+
+        guardar.connect_clicked(move |boton| {
+            let browser_despues = browser_ids_guardar
+                .get(browser.selected() as usize)
+                .filter(|id| !id.is_empty())
+                .cloned();
+
+            if browser_pendiente && browser_despues.is_none() {
+                mostrar_error(
+                    &estado_guardar,
+                    localizar_visible(
+                        idioma_actual(),
+                        "Elige explícitamente qué navegador debe ser el predeterminado.",
+                    ),
+                );
+                return;
+            }
+
+            let editor_despues = editor_combo
+                .as_ref()
+                .and_then(|fila| editor_ids_guardar.get(fila.selected() as usize))
+                .filter(|id| !id.is_empty())
+                .cloned();
+
+            if editor_pendiente && editor_despues.is_none() {
+                mostrar_error(
+                    &estado_guardar,
+                    localizar_visible(
+                        idioma_actual(),
+                        "Elige KWrite o Kate y revisa la diferencia de enfoque antes de continuar.",
+                    ),
+                );
+                return;
+            }
+
+            let Some(plan) = argumentos_cambio_roles(
+                &persona_guardar,
+                browser_antes.as_deref(),
+                browser_despues.as_deref(),
+                editor_antes.as_deref(),
+                editor_despues.as_deref(),
+                true,
+            ) else {
+                mostrar_exito(
+                    &estado_guardar,
+                    texto(estado_guardar.idioma, "no_change"),
+                );
+                return;
+            };
+
+            if let Err(error) = ejecutar_json_owned(&estado_guardar, &plan) {
+                mostrar_error(&estado_guardar, error);
+                return;
+            }
+
+            let Some(ejecucion) = argumentos_cambio_roles(
+                &persona_guardar,
+                browser_antes.as_deref(),
+                browser_despues.as_deref(),
+                editor_antes.as_deref(),
+                editor_despues.as_deref(),
+                false,
+            ) else {
+                mostrar_exito(
+                    &estado_guardar,
+                    texto(estado_guardar.idioma, "no_change"),
+                );
+                return;
+            };
+
+            let cuerpo = format!(
+                "{} «{}». {}",
+                localizar_visible(
+                    idioma_actual(),
+                    "Korunix guardará estas elecciones en el perfil portable de",
+                ),
+                persona_guardar,
+                localizar_visible(
+                    idioma_actual(),
+                    "Después validará y aplicará la configuración. Las asociaciones MIME se derivan de los roles y no se modifican por separado.",
+                )
+            );
+
+            let dialogo = dialogo_accion(
+                boton,
+                &estado_guardar,
+                &cuerpo,
+                texto(estado_guardar.idioma, "save_apply"),
+                false,
+            );
+
+            let estado_aplicar = Rc::clone(&estado_guardar);
+            dialogo.connect_response(None, move |_, respuesta| {
+                if respuesta != "apply" {
+                    return;
+                }
+
+                match ejecutar_json_owned(&estado_aplicar, &ejecucion)
+                    .and_then(|_| aplicar_configuracion_gui(&estado_aplicar))
+                {
+                    Ok(_) => {
+                        mostrar_exito(
+                            &estado_aplicar,
+                            texto(estado_aplicar.idioma, "operation_done"),
+                        );
+                        recargar(Rc::clone(&estado_aplicar));
+                    }
+                    Err(error) => mostrar_error(&estado_aplicar, error),
+                }
+            });
+
+            dialogo.present();
+        });
+    }
+}
+
+fn pagina_aplicaciones(
+    estado: Rc<Estado>,
+    datos: &Value,
+    predeterminados: Option<&Value>,
+) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
 
     let seleccionados = datos
@@ -9347,6 +9760,8 @@ fn pagina_aplicaciones(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPag
         .into_iter()
         .filter_map(|valor| valor.as_str().map(str::to_string))
         .collect::<Vec<_>>();
+
+    agregar_roles_predeterminados(&pagina, Rc::clone(&estado), &seleccionados, predeterminados);
 
     let catalogo = datos
         .get("catalog")
@@ -10199,6 +10614,7 @@ fn recargar(estado: Rc<Estado>) {
     let people = consultar(&estado, "users");
     mostrar_progreso(&estado, 16, "reading");
     let applications = ejecutar_json(&estado, &["applications", "--json"]);
+    let defaults = ejecutar_json(&estado, &["defaults", "--json"]);
     mostrar_progreso(&estado, 22, "reading");
     let desktop = ejecutar_json(&estado, &["desktop", "--json"]);
     mostrar_progreso(&estado, 28, "reading");
@@ -10293,7 +10709,7 @@ fn recargar(estado: Rc<Estado>) {
             &estado.stack,
             "applications",
             texto(estado.idioma, "applications"),
-            &pagina_aplicaciones(Rc::clone(&estado), &datos),
+            &pagina_aplicaciones(Rc::clone(&estado), &datos, defaults.as_ref().ok()),
         ),
         Err(error) => reemplazar_pagina(
             &estado.stack,
@@ -10905,7 +11321,18 @@ fn construir_ventana(app: &adw::Application, raiz: PathBuf, motor: PathBuf) {
             }
 
             let destino = if [
-                "firefox", "aplic", "programa", "software", "flatpak", "nixpkgs",
+                "firefox",
+                "chrome",
+                "navegador",
+                "browser",
+                "editor",
+                "kwrite",
+                "kate",
+                "aplic",
+                "programa",
+                "software",
+                "flatpak",
+                "nixpkgs",
             ]
             .iter()
             .any(|clave| consulta.contains(clave))
@@ -11068,6 +11495,60 @@ fn construir_ventana(app: &adw::Application, raiz: PathBuf, motor: PathBuf) {
 
     recargar(estado);
     ventana.present();
+}
+
+#[cfg(test)]
+mod pruebas_roles_predeterminados_gui {
+    use super::*;
+
+    #[test]
+    fn un_navegador_instalado_no_se_asume() {
+        let instaladas = vec!["firefox".to_string()];
+        let (ids, seleccionado) = opciones_navegador_ids(&instaladas, None);
+
+        assert_eq!(seleccionado, 0);
+        assert_eq!(ids, vec!["".to_string(), "firefox".to_string()]);
+    }
+
+    #[test]
+    fn navegador_actual_se_conserva_aunque_no_este_instalado() {
+        let instaladas = vec!["firefox".to_string()];
+        let (ids, seleccionado) = opciones_navegador_ids(&instaladas, Some("google-chrome"));
+
+        assert_eq!(ids[seleccionado as usize], "google-chrome");
+    }
+
+    #[test]
+    fn cambio_parcial_no_reenvia_el_editor() {
+        let argumentos = argumentos_cambio_roles(
+            "persona",
+            Some("firefox"),
+            Some("google-chrome"),
+            Some("kate"),
+            Some("kate"),
+            true,
+        )
+        .expect("debe existir un cambio");
+
+        assert!(argumentos
+            .windows(2)
+            .any(|par| { par == ["--browser".to_string(), "google-chrome".to_string()] }));
+        assert!(!argumentos
+            .iter()
+            .any(|valor| valor == "--plasma-text-editor"));
+        assert!(argumentos.iter().any(|valor| valor == "--plan"));
+        assert!(argumentos.iter().any(|valor| valor == "--json"));
+    }
+
+    #[test]
+    fn editor_plasma_no_se_asume_si_falta_eleccion() {
+        let (ids, seleccionado) = opciones_editor_plasma_ids(None);
+
+        assert_eq!(seleccionado, 0);
+        assert_eq!(ids[0], "");
+        assert_eq!(ids[1], "kwrite");
+        assert_eq!(ids[2], "kate");
+    }
 }
 
 fn main() -> glib::ExitCode {
