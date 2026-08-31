@@ -40,7 +40,6 @@
     snapshot = pkgs.snapshot;
     birdfont = pkgs.birdfont;
     darktable = pkgs.darktable;
-    "figma-linux" = pkgs.figma-linux;
     fontforge = pkgs.fontforge;
     git = pkgs.git;
     gimp = pkgs.gimp;
@@ -74,6 +73,7 @@
   };
 
   specialApplications = [
+    "figma-linux-next"
     "firefox"
     "localsend"
     "obs-studio"
@@ -149,9 +149,9 @@
       description = "Organiza y revela fotografías, especialmente archivos RAW.";
       category = "Diseño";
     };
-    "figma-linux" = {
+    "figma-linux-next" = {
       name = "Figma";
-      description = "Cliente de escritorio para trabajar con diseños y prototipos de Figma.";
+      description = "Cliente de escritorio no oficial para trabajar con diseños y prototipos de Figma.";
       category = "Diseño";
     };
     fontforge = {
@@ -753,6 +753,8 @@ in {
         (lib.hiPrio spotifySessionWrapper)
         syncNoctaliaSpotify
       ];
+
+    programs.figma-linux-next.enable = lib.elem "figma-linux-next" cfg;
 
     programs.firefox.enable = lib.elem "firefox" cfg;
 

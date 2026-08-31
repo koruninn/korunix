@@ -106,7 +106,7 @@
       "birdfont"
       "cohesion"
       "darktable"
-      "figma-linux"
+      "figma-linux-next"
       "firefox"
       "fontforge"
       "genshin-impact"

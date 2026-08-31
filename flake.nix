@@ -12,6 +12,8 @@
     # que algunas aplicaciones aisladas pueden necesitar.
     nixpkgsStable.url = "nixpkgs/nixos-26.05";
 
+    figma-linux-next.url = "github:arximus88/figma-linux-next";
+
     hatter = {
       url = "github:Mibea/Hatter";
       flake = false;
@@ -339,6 +341,7 @@
           ./sistema/personas.nix
 
           selectedAagl.nixosModules.default
+          inputs.figma-linux-next.nixosModules.default
           inputs.noctalia.nixosModules.default
           inputs.spicetify-nix.nixosModules.default
 

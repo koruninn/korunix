@@ -465,6 +465,8 @@ Cuando ninguna persona haya pedido un método de entrada avanzado:
   `ibus start --type wayland`, usando el mecanismo de método de entrada de
   Wayland en lugar del arranque XIM heredado
   `ibus-daemon --daemonize --xim`;
+- el backend IBus utiliza su frontend Wayland y no fuerza `GTK_IM_MODULE` ni
+  `QT_IM_MODULE`; `XMODIFIERS=@im=ibus` puede permanecer como compatibilidad;
 - IBus no sustituye ni reconfigura el modelo XKB del compositor.
 
 Korunix no debe ocultar ni filtrar una advertencia de IBus para hacer parecer
@@ -1519,6 +1521,20 @@ Las dependencias técnicas no se presentan como elecciones separadas si el usuar
 AAGL se trata como infraestructura coordinada. La interfaz presenta los launchers o juegos que la persona puede decidir instalar, no `aagl`, `aaglStable` u otras piezas internas como aplicaciones normales. Los launchers de AAGL permanecen desactivados por defecto y una opción incompatible con la arquitectura actual no debe presentarse como instalable.
 
 Las categorías deben ser humanas, estables y sin aplicaciones repetidas. “Diseño” es una sola categoría. Sunshine pertenece únicamente a Transmisión. Polyglot pertenece a Oficina y estudio.
+
+Dentro del catálogo curado, Figma se implementa mediante el flake
+`arximus88/figma-linux-next`. En la lista normal de aplicaciones, el nombre
+visible es exactamente “Figma”. `figma-linux-next` es únicamente el
+identificador interno y no debe aparecer como nombre de la aplicación en la
+interfaz normal. El origen del paquete sigue siendo un detalle interno. Korunix
+importa el módulo NixOS
+proporcionado por ese proyecto y habilita `programs.figma-linux-next`, de modo
+que también se conserve el manejador `figma://` necesario para los
+redireccionamientos de inicio de sesión. La integración debe seguir siendo
+evaluable en `x86_64-linux` y `aarch64-linux`.
+
+El paquete histórico `figma-linux` de Nixpkgs no forma parte del catálogo
+curado mientras esta decisión esté vigente.
 
 Korunix no debe convertirse solamente en una tienda de aplicaciones. Aplicaciones es una sección dentro de un centro mayor de administración del sistema.
 

@@ -242,7 +242,7 @@ escritorio='sistema/escritorio.nix'
 if rg -q 'type = "ibus";' "$personas" \
    && rg -q 'else "ibus";' "$personas" \
    && rg -q 'launcher = "xdg-autostart";' "$personas" \
-   && grep -Fq 'Exec=${ibusPackage}/bin/ibus start --type wayland' "$escritorio" \
+   && grep -Fq "Exec=\${ibusPackage}/bin/ibus start --type wayland" "$escritorio" \
    && grep -Fq 'NotShowIn=KDE;' "$escritorio" \
    && ! grep -Fq 'ibus-daemon --daemonize --xim' "$escritorio" \
    && ! grep -Fq 'NotShowIn=KDE;niri;Hyprland;hyprland;' "$escritorio"
@@ -250,6 +250,13 @@ then
   ok 'IBus usa el arranque Wayland y sigue disponible en Niri/Hyprland'
 else
   fallo 'IBus quedó deshabilitado, volvió al arranque XIM o contradice la política de diacríticos'
+fi
+
+if rg -q 'ibus\.waylandFrontend = true;' "$personas"
+then
+  ok 'IBus usa su frontend Wayland sin forzar módulos GTK/Qt'
+else
+  fallo 'IBus perdió waylandFrontend y puede volver a mostrar la advertencia de entorno'
 fi
 
 if grep -Fq '### 9.1. Teclas muertas, diacríticos y métodos de composición' spec.md \
@@ -262,6 +269,49 @@ then
   ok 'especificación protege diacríticos y el arranque Wayland de IBus'
 else
   fallo 'la especificación perdió el alcance GNOME o el contrato Wayland de IBus'
+fi
+
+aplicaciones='sistema/aplicaciones.nix'
+equipo='configuracion/equipos/korunix.nix'
+
+if grep -Fq 'figma-linux-next.url = "github:arximus88/figma-linux-next";' flake.nix \
+   && grep -Fq 'inputs.figma-linux-next.nixosModules.default' flake.nix \
+   && grep -Fq '"figma-linux-next"' "$aplicaciones" \
+   && grep -Fq 'programs.figma-linux-next.enable' "$aplicaciones" \
+   && grep -Fq '"figma-linux-next"' "$equipo" \
+   && ! grep -Fq '"figma-linux"' "$aplicaciones" \
+   && ! grep -Fq '"figma-linux"' "$equipo" \
+   && jq -e '.nodes.root.inputs["figma-linux-next"] != null' flake.lock >/dev/null
+then
+  ok 'Figma usa Figma Linux Next y el paquete histórico quedó retirado'
+else
+  fallo 'Figma volvió al paquete antiguo o perdió su integración declarativa'
+fi
+
+if grep -Fq 'arximus88/figma-linux-next' spec.md \
+   && grep -Fq "El paquete histórico \`figma-linux\` de Nixpkgs no forma parte" spec.md \
+   && grep -Fq "no fuerza \`GTK_IM_MODULE\` ni" spec.md
+then
+  ok 'especificación protege IBus Wayland y Figma Linux Next'
+else
+  fallo 'spec.md perdió la decisión de IBus o Figma'
+fi
+
+figma_visible="$(
+  nix eval \
+    --raw \
+    '.#nixosConfigurations.korunix.config.korunix.internal.applicationPresentation."figma-linux-next".name' \
+    2>/dev/null \
+    || true
+)"
+
+if [[ "$figma_visible" == "Figma" ]] \
+   && grep -Fq 'visible es exactamente “Figma”' spec.md \
+   && ! grep -Fq 'name = "Figma Linux Next";' sistema/aplicaciones.nix
+then
+  ok 'Figma se presenta únicamente como Figma'
+else
+  fallo 'figma-linux-next se filtró al nombre visible del catálogo'
 fi
 
 if [[ -s spec.md ]] && grep -q '^# Korunix' spec.md; then

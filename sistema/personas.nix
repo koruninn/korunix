@@ -1378,6 +1378,8 @@ in {
       else {
         enable = true;
         type = "ibus";
+
+        ibus.waylandFrontend = true;
       };
 
     # Contrato interno legible para los backends de terminal y la GUI futura.
