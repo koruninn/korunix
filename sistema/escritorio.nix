@@ -1004,13 +1004,6 @@
     plugins = config.i18n.inputMethod.ibus.engines;
   };
 
-  ibusPanel = config.i18n.inputMethod.ibus.panel;
-
-  ibusPanelArgument =
-    lib.optionalString
-    (ibusPanel != null)
-    "--panel=${toString ibusPanel}";
-
   hyprlandMonitorRule = lib.optionalString monitorConfigured ''
     hl.monitor({
         output = ${builtins.toJSON cfg.monitor.output},
@@ -1277,17 +1270,18 @@ in {
       '';
     };
 
-    # La copia en /etc/xdg tiene prioridad sobre el autostart aportado por el
-    # paquete de IBus. Niri y Hyprland siguen siendo dueños de la distribución
-    # XKB, pero las aplicaciones GTK4 necesitan IBus como backend de composición
-    # para resolver correctamente teclas muertas y diacríticos. Por eso no debe
-    # excluirse de esas sesiones. KDE conserva su integración propia.
+    # La copia en /etc/xdg tiene prioridad sobre el autostart genérico aportado
+    # por NixOS. Niri y Hyprland siguen siendo dueños de la distribución XKB,
+    # mientras IBus aporta la composición que necesitan las aplicaciones GTK.
+    # Ambos compositores soportan un método de entrada Wayland, por lo que IBus
+    # entra mediante su lanzador Wayland y no mediante el arranque XIM heredado
+    # que provoca una notificación de configuración incorrecta.
     environment.etc."xdg/autostart/ibus-daemon.desktop" = lib.mkIf (ibusEnabled && (niriEnabled || hyprlandEnabled)) {
       text = ''
         [Desktop Entry]
         Name=IBus
         Type=Application
-        Exec=${ibusPackage}/bin/ibus-daemon --daemonize --xim ${ibusPanelArgument}
+        Exec=${ibusPackage}/bin/ibus start --type wayland
         NotShowIn=KDE;
       '';
     };

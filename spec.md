@@ -461,7 +461,18 @@ Cuando ninguna persona haya pedido un método de entrada avanzado:
 
 - Korunix utiliza IBus como backend normal de composición;
 - IBus debe poder iniciar también en Niri y Hyprland;
+- en las sesiones Wayland de Niri y Hyprland, Korunix inicia IBus mediante
+  `ibus start --type wayland`, usando el mecanismo de método de entrada de
+  Wayland en lugar del arranque XIM heredado
+  `ibus-daemon --daemonize --xim`;
 - IBus no sustituye ni reconfigura el modelo XKB del compositor.
+
+Korunix no debe ocultar ni filtrar una advertencia de IBus para hacer parecer
+correcta una integración que no lo sea. Si IBus muestra al iniciar una
+notificación indicando que debe ser invocado desde la sesión Wayland, la
+integración no está cerrada aunque los diacríticos funcionen. La solución debe
+ser corregir el mecanismo de arranque y conservar después la misma prueba
+funcional de composición.
 
 Cuando exista una selección efectiva de métodos de entrada avanzados, Korunix
 puede utilizar Fcitx5 como backend coordinado para el host.

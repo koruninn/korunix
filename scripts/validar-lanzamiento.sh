@@ -242,22 +242,26 @@ escritorio='sistema/escritorio.nix'
 if rg -q 'type = "ibus";' "$personas" \
    && rg -q 'else "ibus";' "$personas" \
    && rg -q 'launcher = "xdg-autostart";' "$personas" \
+   && grep -Fq 'Exec=${ibusPackage}/bin/ibus start --type wayland' "$escritorio" \
    && grep -Fq 'NotShowIn=KDE;' "$escritorio" \
+   && ! grep -Fq 'ibus-daemon --daemonize --xim' "$escritorio" \
    && ! grep -Fq 'NotShowIn=KDE;niri;Hyprland;hyprland;' "$escritorio"
 then
-  ok 'IBus sigue disponible para composición GTK4 en Niri/Hyprland'
+  ok 'IBus usa el arranque Wayland y sigue disponible en Niri/Hyprland'
 else
-  fallo 'IBus quedó deshabilitado o incoherente con la política de diacríticos'
+  fallo 'IBus quedó deshabilitado, volvió al arranque XIM o contradice la política de diacríticos'
 fi
 
 if grep -Fq '### 9.1. Teclas muertas, diacríticos y métodos de composición' spec.md \
    && grep -Fq 'Todas las aplicaciones GNOME instaladas que utilicen GTK/GTK4 y puedan depender' spec.md \
    && grep -Fq 'Text Editor son ejemplos de esa familia, no excepciones ni el alcance completo.' spec.md \
+   && grep -Fq 'ibus start --type wayland' spec.md \
+   && grep -Fq 'Korunix no debe ocultar ni filtrar una advertencia de IBus' spec.md \
    && grep -Fq 'La validación no se considera superada si funciona en' spec.md
 then
-  ok 'especificación protege diacríticos en toda la familia GNOME instalada'
+  ok 'especificación protege diacríticos y el arranque Wayland de IBus'
 else
-  fallo 'la especificación redujo la composición a aplicaciones GNOME concretas'
+  fallo 'la especificación perdió el alcance GNOME o el contrato Wayland de IBus'
 fi
 
 if [[ -s spec.md ]] && grep -q '^# Korunix' spec.md; then
