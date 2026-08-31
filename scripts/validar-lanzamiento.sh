@@ -219,9 +219,13 @@ else
   fallo 'apply volvió a quedar sin fases humanas o contaminó el modo JSON'
 fi
 
-if grep -Fq 'let target = format!(".#nixosConfigurations.{host}.config.system.build.toplevel");' sistema/programa/operaciones.rs \
-   && grep -Fq 'format!(".#nixosConfigurations.{id}.config.system.build.toplevel.drvPath")' sistema/programa/operaciones.rs \
-   && grep -Fq 'let flake = format!(".#{host}");' sistema/programa/operaciones.rs \
+if grep -Fq 'fn flake_source(raiz: &Path) -> String' sistema/programa/operaciones.rs \
+   && grep -Fq 'raiz.display().to_string()' sistema/programa/operaciones.rs \
+   && grep -Fq 'fn flake_reference(raiz: &Path, fragment: &str) -> String' sistema/programa/operaciones.rs \
+   && grep -Fq 'flake_source(raiz),' sistema/programa/operaciones.rs \
+   && grep -Fq 'let target = flake_reference(' sistema/programa/operaciones.rs \
+   && grep -Fq 'let flake = flake_reference(raiz, &host);' sistema/programa/operaciones.rs \
+   && ! grep -Fq 'let flake = format!(".#{host}");' sistema/programa/operaciones.rs \
    && ! grep -Fq 'let flake = format!("path:{}#{host}", raiz.display());' sistema/programa/operaciones.rs \
    && ! grep -Fq 'nombre.starts_with("/nix/store/") && nombre.ends_with("/bin/switch-to-configuration")' sistema/programa/operaciones.rs \
    && grep -Fq '"nixos-rebuild"' sistema/programa/operaciones.rs \
@@ -229,11 +233,12 @@ if grep -Fq 'let target = format!(".#nixosConfigurations.{host}.config.system.bu
    && grep -Fq 'let registered = generations()' sistema/programa/operaciones.rs \
    && grep -Fq 'no quedó registrada de forma persistente como generación predeterminada' sistema/programa/operaciones.rs \
    && grep -Fq 'misma identidad de fuente del flake' spec.md \
+   && grep -Fq 'independiente del directorio de' spec.md \
    && grep -Fq 'candidata aparece entre las generaciones registradas y recuperables' spec.md
 then
-  ok 'apply conserva la identidad de la candidata y verifica su persistencia'
+  ok 'apply usa una fuente absoluta común y verifica su persistencia'
 else
-  fallo 'el ciclo de apply puede cambiar de candidata o perder persistencia'
+  fallo 'el ciclo de apply puede depender del cwd, cambiar de candidata o perder persistencia'
 fi
 
 if rg -q 'La previsualización no necesita privilegios' sistema/programa/operaciones.rs \

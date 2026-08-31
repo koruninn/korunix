@@ -999,6 +999,14 @@ fn structure(raiz: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn flake_source(raiz: &Path) -> String {
+    raiz.display().to_string()
+}
+
+fn flake_reference(raiz: &Path, fragment: &str) -> String {
+    format!("{}#{fragment}", flake_source(raiz))
+}
+
 fn validate_with_output(raiz: &Path, human_output: bool) -> Result<(), String> {
     if human_output {
         structure(raiz)?;
@@ -1024,6 +1032,7 @@ fn validate_with_output(raiz: &Path, human_output: bool) -> Result<(), String> {
     let flake_args = [
         "flake".into(),
         "check".into(),
+        flake_source(raiz),
         "--no-build".into(),
         "--show-trace".into(),
     ];
@@ -1042,7 +1051,10 @@ fn validate_with_output(raiz: &Path, human_output: bool) -> Result<(), String> {
                 "eval".into(),
                 "--raw".into(),
                 "--no-write-lock-file".into(),
-                format!(".#nixosConfigurations.{id}.config.system.build.toplevel.drvPath"),
+                flake_reference(
+                    raiz,
+                    &format!("nixosConfigurations.{id}.config.system.build.toplevel.drvPath"),
+                ),
             ],
         )?;
         if drv.is_empty() {
@@ -2293,7 +2305,10 @@ fn update(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
 fn build_candidate(raiz: &Path, json: bool) -> Result<PathBuf, String> {
     let host = resolver_equipo(raiz)?;
 
-    let target = format!(".#nixosConfigurations.{host}.config.system.build.toplevel");
+    let target = flake_reference(
+        raiz,
+        &format!("nixosConfigurations.{host}.config.system.build.toplevel"),
+    );
 
     let mut child = Command::new(tool("nix"))
         .args([
@@ -2650,7 +2665,7 @@ fn change_cycle(raiz: &Path, command: &str, args: &[String]) -> Result<ExitCode,
     }
 
     let host = resolver_equipo(raiz)?;
-    let flake = format!(".#{host}");
+    let flake = flake_reference(raiz, &host);
 
     emitir_fase(
         json,

@@ -99,6 +99,14 @@ distribución local sin metadatos Git deben conservar de igual forma la misma
 semántica local. La candidata revisada por la persona es la que debe registrarse,
 activarse y verificarse.
 
+La referencia local usada por ese ciclo debe ser independiente del directorio de
+trabajo efectivo del proceso privilegiado. Una ruta local absoluta **sin forzar
+un esquema de URL** satisface ese contrato: Nix conserva automáticamente la
+semántica Git cuando la fuente pertenece a un checkout y utiliza semántica de
+ruta cuando se ejecuta desde una distribución local sin metadatos Git. De este
+modo, atravesar Polkit no puede convertir `.#equipo` en una búsqueda accidental
+de `flake.nix` bajo el directorio personal de `root`.
+
 Las operaciones potencialmente largas deben comunicar su fase actual antes de
 empezar y seguir dando señales de actividad mientras trabajan. Un flujo normal
 de aplicación distingue como mínimo:
