@@ -4108,11 +4108,16 @@ fn appearance_state_json(raiz: &Path) -> Result<String, String> {
             "appearance".into(),
             appearance,
             r#"{
-              schemaVersion:1,
+              schemaVersion:2,
               kind:"korunix-appearance-state",
               declared:$appearance,
-              styles:["default","everforest"],
-              modes:["light","dark","auto"]
+              styles:["default","dynamic","everforest"],
+              modes:["light","dark","auto"],
+              styleSupport:{
+                default:["niri","hyprland","cinnamon","plasma"],
+                dynamic:["niri","hyprland"],
+                everforest:["niri","hyprland"]
+              }
             }"#
             .into(),
         ],
@@ -4175,8 +4180,8 @@ fn appearance_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, String
     }
 
     if let Some(valor) = style.as_deref() {
-        if !matches!(valor, "default" | "everforest") {
-            return Err("El estilo debe ser default o everforest.".to_string());
+        if !matches!(valor, "default" | "dynamic" | "everforest") {
+            return Err("El estilo debe ser default, dynamic o everforest.".to_string());
         }
     }
 

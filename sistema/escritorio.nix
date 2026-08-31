@@ -9,6 +9,7 @@
   roleModel = import ./roles.nix {inherit lib pkgs;};
   cfg = config.korunix.desktop;
   localization = config.korunix.localization;
+  appearance = config.korunix.appearance;
 
   keyboardLayouts =
     [localization.keyboard.layout]
@@ -187,6 +188,18 @@
     "${cfg.monitor.mode}@${toString cfg.monitor.refreshRate}.000";
 
   noctaliaEnabled = niriEnabled || hyprlandEnabled;
+
+  # La apariencia declarada controla la base que Korunix entrega a Noctalia.
+  # Predeterminado usa la paleta incorporada, Dinámico deriva colores del fondo
+  # y Everforest usa la paleta comunitaria.
+  noctaliaThemeSource =
+    if appearance.style == "dynamic"
+    then "wallpaper"
+    else if appearance.style == "everforest"
+    then "community"
+    else "builtin";
+
+  noctaliaThemeMode = appearance.mode;
 
   noctaliaPackage =
     inputs.noctalia.packages.${pkgs.stdenv.hostPlatform.system}.default;
@@ -1037,6 +1050,7 @@ in {
     style = lib.mkOption {
       type = lib.types.enum [
         "default"
+        "dynamic"
         "everforest"
       ];
       default = "default";
@@ -1545,7 +1559,17 @@ in {
     };
 
     environment.etc."korunix/noctalia/config.toml" = lib.mkIf noctaliaEnabled {
-      source = ../config/noctalia/config.toml;
+      text =
+        builtins.replaceStrings
+        [
+          "@KORUNIX_THEME_SOURCE@"
+          "@KORUNIX_THEME_MODE@"
+        ]
+        [
+          noctaliaThemeSource
+          noctaliaThemeMode
+        ]
+        (builtins.readFile ../config/noctalia/config.toml);
     };
 
     environment.etc."korunix/noctalia/wallpapers" = lib.mkIf noctaliaEnabled {

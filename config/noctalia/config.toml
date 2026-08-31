@@ -191,9 +191,9 @@ direction = "down"
 [theme]
 builtin = "Noctalia"
 community_palette = "Everforest"
-mode = "auto"
+mode = "@KORUNIX_THEME_MODE@"
 pure_black_dark = false
-source = "community"
+source = "@KORUNIX_THEME_SOURCE@"
 
 [theme.templates]
 builtin_ids = ["alacritty", "gtk3", "gtk4", "niri", "qt"]

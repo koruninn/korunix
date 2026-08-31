@@ -28,6 +28,10 @@ fi
 grep -Fq 'adw::BreakpointCondition::parse("max-width: 819px")' "$interfaz"
 grep -Fq 'fila.set_size_request(-1, 60)' "$interfaz"
 grep -Fq 'busqueda_global.set_size_request(-1, 38)' "$interfaz"
+grep -Fq 'stack.set_hhomogeneous(false)' "$interfaz"
+grep -Fq 'stack.set_vhomogeneous(false)' "$interfaz"
+grep -Fq 'split.set_max_sidebar_width(280.0)' "$interfaz"
+grep -Fq 'refresh_estrecho.set_visible(false)' "$interfaz"
 
 # Las superficies normales deben presentar objetivos humanos.
 grep -Fq 'fn presentacion_aplicacion' "$interfaz"
@@ -45,6 +49,13 @@ grep -Fq 'El firmware está al día' "$interfaz"
 grep -Fq 'Última copia portable' "$interfaz"
 grep -Fq 'Versiones para recuperación' "$interfaz"
 grep -Fq 'Limpieza recomendada' "$interfaz"
+grep -Fq 'fn estilo_disponible_para_escritorios' "$interfaz"
+grep -Fq 'fn ruta_preview_apariencia' "$interfaz"
+grep -Fq 'Predeterminado' "$interfaz"
+grep -Fq 'Dinámico' "$interfaz"
+grep -Fq 'Everforest' "$interfaz"
+grep -Fq 'Escritorio que quieres comparar' "$interfaz"
+grep -Fq 'no guarda vídeo y libera la cámara' "$interfaz"
 
 if grep -Fq '"firmware", "refresh", "--plan"' "$interfaz"; then
   echo "ERROR: Firmware volvió a pedir confirmación para una mera consulta." >&2
@@ -99,3 +110,21 @@ echo "✓ Almacenamiento explica la expulsión de archivos grandes"
 echo "✓ Firmware presenta un único estado y consulta sin diálogo redundante"
 echo "✓ Copias e historial muestran estado y tiempo relativo"
 echo "✓ Mantenimiento muestra tres recuperaciones recientes y limpieza comprensible"
+
+if grep -Fq 'let modos = resumen_modos_camara(&camara)' "$interfaz"; then
+  echo "ERROR: Cámaras volvió a mostrar la lista completa de resoluciones/FPS." >&2
+  exit 1
+fi
+
+grep -Fq '"dynamic"' sistema/escritorio.nix
+grep -Fq '@KORUNIX_THEME_SOURCE@' config/noctalia/config.toml
+grep -Fq '@KORUNIX_THEME_MODE@' config/noctalia/config.toml
+grep -Fq 'styles:["default","dynamic","everforest"]' sistema/programa/operaciones.rs
+grep -Fq 'dynamic:["niri","hyprland"]' sistema/programa/operaciones.rs
+
+echo "✓ Apariencia separa Predeterminado, Dinámico y Everforest"
+echo "✓ compatibilidad se calcula sobre todos los escritorios seleccionados"
+echo "✓ previews usan escritorio × estilo × modo"
+echo "✓ Noctalia recibe fuente y modo desde la apariencia declarada"
+echo "✓ modo compacto evita heredar el ancho mínimo de otras páginas"
+echo "✓ cámaras reservan resoluciones/FPS para detalles y explican privacidad una sola vez"

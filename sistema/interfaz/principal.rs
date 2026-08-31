@@ -8168,77 +8168,6 @@ fn texto_prueba_camara(idioma: Idioma, clave: &str) -> &'static str {
     }
 }
 
-fn modos_camara_humanos(formatos: &Value) -> Vec<String> {
-    let mut modos = Vec::<(u64, u64, f64)>::new();
-
-    for formato in formatos.as_array().into_iter().flatten() {
-        let tamanos = formato
-            .get("sizes")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-
-        for tamano in tamanos {
-            let Some(ancho) = tamano.get("width").and_then(Value::as_u64) else {
-                continue;
-            };
-            let Some(alto) = tamano.get("height").and_then(Value::as_u64) else {
-                continue;
-            };
-
-            let max_fps = tamano
-                .get("fps")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_f64)
-                .fold(0.0_f64, f64::max);
-
-            if let Some(actual) = modos.iter_mut().find(|(w, h, _)| *w == ancho && *h == alto) {
-                actual.2 = actual.2.max(max_fps);
-            } else {
-                modos.push((ancho, alto, max_fps));
-            }
-        }
-    }
-
-    modos.sort_by(|a, b| {
-        (b.0 * b.1)
-            .cmp(&(a.0 * a.1))
-            .then_with(|| b.2.total_cmp(&a.2))
-    });
-
-    modos
-        .into_iter()
-        .take(6)
-        .map(|(ancho, alto, fps)| {
-            if fps > 0.0 {
-                let fps = if (fps.fract()).abs() < 0.001 {
-                    format!("{fps:.0}")
-                } else {
-                    format!("{fps:.1}")
-                };
-                format!("{ancho}×{alto} · {fps} FPS")
-            } else {
-                format!("{ancho}×{alto}")
-            }
-        })
-        .collect()
-}
-
-fn resumen_modos_camara(camara: &Value) -> String {
-    let modos = camara
-        .get("formats")
-        .map(modos_camara_humanos)
-        .unwrap_or_default();
-
-    if modos.is_empty() {
-        String::new()
-    } else {
-        modos.join(", ")
-    }
-}
-
 fn pagina_multimedia(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
     let audio = datos.get("audio").cloned().unwrap_or(Value::Null);
@@ -9094,14 +9023,7 @@ fn pagina_multimedia(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage 
             },
         };
 
-        let modos = resumen_modos_camara(&camara);
-        let detalle = if modos.is_empty() {
-            base.to_string()
-        } else {
-            format!("{base} · {modos}")
-        };
-
-        grupo_camaras.add(&fila(&titulo, &detalle));
+        grupo_camaras.add(&fila(&titulo, base));
     }
 
     if vistas.is_empty() {
@@ -9115,6 +9037,10 @@ fn pagina_multimedia(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage 
 
     let grupo_prueba_camara = adw::PreferencesGroup::new();
     grupo_prueba_camara.set_title(texto_prueba_camara(estado.idioma, "title"));
+    grupo_prueba_camara.set_description(Some(&localizar_visible(
+        idioma_actual(),
+        "Korunix abre una previsualización temporal solo cuando la solicitas; no guarda vídeo y libera la cámara al cerrar la prueba.",
+    )));
 
     let camaras_prueba = datos
         .pointer("/cameras/devices")
@@ -9146,150 +9072,20 @@ fn pagina_multimedia(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage 
         let row = adw::ActionRow::new();
         row.set_title(&titulo);
 
-        let disponibles = resumen_modos_camara(&camara);
         let disponible = camara
             .get("available")
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        let prueba = match estado.idioma {
-            Idioma::Ingles => "Test: 640×360 · automatic FPS",
-            Idioma::BelarusLatino => "Test: 640×360 · aŭtamatyčny FPS",
-            Idioma::Belarus => "Тэст: 640×360 · аўтаматычны FPS",
-            Idioma::Catalan => "Prova: 640×360 · FPS automàtic",
-            Idioma::Checo => "Test: 640×360 · automatické FPS",
-            Idioma::Aleman => "Test: 640×360 · automatische FPS",
-            Idioma::Frances => "Test : 640×360 · FPS automatique",
-            Idioma::Gallego => "Proba: 640×360 · FPS automático",
-            Idioma::Italiano => "Test: 640×360 · FPS automatico",
-            Idioma::Coreano => "테스트: 640×360 · 자동 FPS",
-            Idioma::Kurdo => "Test: 640×360 · FPS otomatîk",
-            Idioma::Neerlandes => "Test: 640×360 · automatische FPS",
-            Idioma::NoruegoNynorsk => "Test: 640×360 · automatisk FPS",
-            Idioma::Polaco => "Test: 640×360 · automatyczny FPS",
-            Idioma::PortuguesBrasil => "Teste: 640×360 · FPS automático",
-            Idioma::Ruso => "Тест: 640×360 · автоматический FPS",
-            Idioma::Sueco => "Test: 640×360 · automatisk FPS",
-            Idioma::Turco => "Test: 640×360 · otomatik FPS",
-            Idioma::Ucraniano => "Тест: 640×360 · автоматичний FPS",
-            Idioma::Vietnamita => "Kiểm tra: 640×360 · FPS tự động",
-            Idioma::ChinoSimplificado => "测试：640×360·自动FPS",
-            Idioma::Hungaro => "Próba: 640×360 · automatikus FPS",
-            Idioma::Espanol => "Prueba: 640×360 · FPS automático",
-        };
 
-        let subtitulo = if !disponible {
-            match estado.idioma {
-                Idioma::Ingles => {
-                    "Waiting for a video source. The test will become available automatically."
-                        .to_string()
-                }
-                Idioma::BelarusLatino => {
-                    "Čakannje krynicy videa. Test stanje dastupnym aŭtamatyčna.".to_string()
-                }
-                Idioma::Belarus => {
-                    "Чаканне крыніцы відэа. Тэст стане даступным аўтаматычна.".to_string()
-                }
-                Idioma::Catalan => {
-                    "Esperant una font de vídeo. La prova estarà disponible automàticament."
-                        .to_string()
-                }
-                Idioma::Checo => {
-                    "Čekání na zdroj videa. Test bude k dispozici automaticky.".to_string()
-                }
-                Idioma::Aleman => {
-                    "Warten auf eine Videoquelle. Der Test wird automatisch verfügbar sein."
-                        .to_string()
-                }
-                Idioma::Frances => {
-                    "En attente d'une source vidéo. Le test deviendra disponible automatiquement."
-                        .to_string()
-                }
-                Idioma::Gallego => {
-                    "Agardando por unha fonte de vídeo. A proba estará dispoñible automaticamente."
-                        .to_string()
-                }
-                Idioma::Italiano => {
-                    "In attesa di una sorgente video. Il test sarà disponibile automaticamente."
-                        .to_string()
-                }
-                Idioma::Coreano => {
-                    "비디오 소스를 기다리고 있습니다. 테스트가 자동으로 제공됩니다.".to_string()
-                }
-                Idioma::Kurdo => {
-                    "Li benda çavkaniyek vîdyoyê ne. Test dê bixweber peyda bibe.".to_string()
-                }
-                Idioma::Neerlandes => {
-                    "Wachten op een videobron. De test wordt automatisch beschikbaar.".to_string()
-                }
-                Idioma::NoruegoNynorsk => {
-                    "Venter på en videokilde. Testen blir automatisk tilgjengelig.".to_string()
-                }
-                Idioma::Polaco => {
-                    "Czekam na źródło wideo. Test będzie dostępny automatycznie.".to_string()
-                }
-                Idioma::PortuguesBrasil => {
-                    "Aguardando uma fonte de vídeo. O teste ficará disponível automaticamente."
-                        .to_string()
-                }
-                Idioma::Ruso => {
-                    "Жду источник видео. Тест станет доступен автоматически.".to_string()
-                }
-                Idioma::Sueco => {
-                    "Väntar på en videokälla. Testet blir automatiskt tillgängligt.".to_string()
-                }
-                Idioma::Turco => {
-                    "Video kaynağı bekleniyor. Test otomatik olarak kullanılabilir hale gelecektir."
-                        .to_string()
-                }
-                Idioma::Ucraniano => {
-                    "Очікування джерела відео. Тест стане доступним автоматично.".to_string()
-                }
-                Idioma::Vietnamita => {
-                    "Đang chờ nguồn video. Bài kiểm tra sẽ tự động có sẵn.".to_string()
-                }
-                Idioma::ChinoSimplificado => "等待视频源。测试将自动变为可用。".to_string(),
-                Idioma::Hungaro => {
-                    "Videóforrásra vár. A próba automatikusan elérhetővé válik.".to_string()
-                }
-                Idioma::Espanol => {
-                    "Esperando una fuente de vídeo. La prueba se habilitará automáticamente."
-                        .to_string()
-                }
-            }
-        } else if disponibles.is_empty() {
-            format!(
-                "{} · {prueba}",
-                texto_prueba_camara(estado.idioma, "detail")
+        let subtitulo = if disponible {
+            localizar_visible(
+                idioma_actual(),
+                "Lista para abrir una previsualización temporal.",
             )
         } else {
-            format!(
-                "{} · {prueba} · {}: {disponibles}",
-                texto_prueba_camara(estado.idioma, "detail"),
-                match estado.idioma {
-                    Idioma::Ingles => "Available",
-                    Idioma::BelarusLatino => "Dastupny",
-                    Idioma::Belarus => "Даступна",
-                    Idioma::Catalan => "Disponible",
-                    Idioma::Checo => "Dostupná",
-                    Idioma::Aleman => "Verfügbar",
-                    Idioma::Frances => "Disponible",
-                    Idioma::Gallego => "Dispoñible",
-                    Idioma::Italiano => "Disponibili",
-                    Idioma::Coreano => "사용 가능",
-                    Idioma::Kurdo => "Heyî",
-                    Idioma::Neerlandes => "Beschikbaar",
-                    Idioma::NoruegoNynorsk => "Tilgjengeleg(e)",
-                    Idioma::Polaco => "Dostępne",
-                    Idioma::PortuguesBrasil => "Disponível",
-                    Idioma::Ruso => "Доступные",
-                    Idioma::Sueco => "Tillgänglig",
-                    Idioma::Turco => "Kullanılabilir",
-                    Idioma::Ucraniano => "Доступні пристрої",
-                    Idioma::Vietnamita => "Khả dụng",
-                    Idioma::ChinoSimplificado => "可用设备",
-                    Idioma::Hungaro => "Elérhető",
-                    Idioma::Espanol => "Disponibles",
-                },
+            localizar_visible(
+                idioma_actual(),
+                "Esperando una fuente de vídeo. La prueba se habilitará automáticamente.",
             )
         };
 
@@ -9507,7 +9303,7 @@ fn terminos_busqueda_pagina(nombre: &str) -> &'static str {
             "aplicaciones programas software navegador browser firefox chrome correo thunderbird editor texto kwrite kate oficina juegos diseño multimedia instalar eliminar"
         }
         "appearance" => {
-            "apariencia tema claro oscuro automático automatico everforest escritorio niri hyprland plasma cinnamon fondo iconos"
+            "apariencia tema claro oscuro automático automatico dinámico dinamico everforest escritorio niri hyprland plasma cinnamon fondo iconos"
         }
         "localization" => {
             "idioma región region país pais formatos zona horaria hora teclado distribución distribucion variante entrada"
@@ -10526,21 +10322,231 @@ fn pagina_aplicaciones(
     pagina
 }
 
+fn soporte_estilo(apariencia: &Value, estilo: &str) -> Vec<String> {
+    apariencia
+        .get("styleSupport")
+        .and_then(|soporte| soporte.get(estilo))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|valor| valor.as_str().map(str::to_string))
+        .collect()
+}
+
+fn estilo_disponible_para_escritorios(
+    apariencia: &Value,
+    estilo: &str,
+    escritorios: &[String],
+) -> bool {
+    let soporte = soporte_estilo(apariencia, estilo);
+
+    if soporte.is_empty() {
+        return estilo == "default";
+    }
+
+    escritorios
+        .iter()
+        .all(|escritorio| soporte.iter().any(|soportado| soportado == escritorio))
+}
+
+fn nombre_estilo_humano(estilo: &str) -> &'static str {
+    match estilo {
+        "dynamic" => "Dinámico",
+        "everforest" => "Everforest",
+        _ => "Predeterminado",
+    }
+}
+
+fn descripcion_estilo_humano(estilo: &str) -> &'static str {
+    match estilo {
+        "dynamic" => {
+            "Genera la paleta a partir del fondo. Actualmente está integrado de forma completa con Niri e Hyprland mediante Noctalia."
+        }
+        "everforest" => {
+            "Aplica la identidad Everforest administrada por Korunix. Actualmente está integrada de forma completa con Niri e Hyprland."
+        }
+        _ => "Conserva la apariencia natural de cada escritorio y sus integraciones nativas.",
+    }
+}
+
+fn estilo_elegido(
+    predeterminado: &gtk::CheckButton,
+    dinamico: &gtk::CheckButton,
+    everforest: &gtk::CheckButton,
+) -> &'static str {
+    if dinamico.is_active() {
+        "dynamic"
+    } else if everforest.is_active() {
+        "everforest"
+    } else {
+        "default"
+    }
+}
+
+fn escritorios_propuestos(
+    catalogo: &[String],
+    principal: &adw::ComboRow,
+    checks: &[(String, gtk::CheckButton, adw::ActionRow)],
+) -> Vec<String> {
+    let principal_id = catalogo
+        .get(principal.selected() as usize)
+        .cloned()
+        .unwrap_or_else(|| "niri".to_string());
+
+    let mut resultado = vec![principal_id.clone()];
+
+    for (id, check, _) in checks {
+        if check.is_active() && id != &principal_id && !resultado.iter().any(|actual| actual == id)
+        {
+            resultado.push(id.clone());
+        }
+    }
+
+    resultado
+}
+
+fn ruta_preview_apariencia(raiz: &Path, escritorio: &str, estilo: &str, modo: &str) -> PathBuf {
+    raiz.join("config")
+        .join("previews")
+        .join(escritorio)
+        .join(format!("{estilo}-{modo}.png"))
+}
+
+fn imagen_preview(path: &Path, compacta: bool) -> gtk::Picture {
+    let picture = gtk::Picture::for_filename(path);
+    picture.set_can_shrink(true);
+    picture.set_keep_aspect_ratio(true);
+    picture.set_hexpand(true);
+    picture.set_vexpand(true);
+
+    if compacta {
+        picture.set_size_request(120, 220);
+    } else {
+        picture.set_size_request(-1, 300);
+    }
+
+    picture.add_css_class("card");
+    picture
+}
+
+fn actualizar_preview_apariencia(
+    contenedor: &gtk::Box,
+    raiz: &Path,
+    apariencia: &Value,
+    escritorio: &str,
+    estilo: &str,
+    modo: &str,
+) {
+    while let Some(hijo) = contenedor.first_child() {
+        contenedor.remove(&hijo);
+    }
+
+    if !estilo_disponible_para_escritorios(apariencia, estilo, &[escritorio.to_string()]) {
+        let mensaje = gtk::Label::new(Some(&format!(
+            "{} todavía no está disponible de forma completa en {}.",
+            nombre_estilo_humano(estilo),
+            nombre_escritorio_humano(escritorio)
+        )));
+        mensaje.set_wrap(true);
+        mensaje.set_xalign(0.0);
+        mensaje.add_css_class("dim-label");
+        contenedor.append(&mensaje);
+        return;
+    }
+
+    let directa = ruta_preview_apariencia(raiz, escritorio, estilo, modo);
+    if directa.is_file() {
+        contenedor.append(&imagen_preview(&directa, false));
+        return;
+    }
+
+    if modo == "auto" {
+        let clara = ruta_preview_apariencia(raiz, escritorio, estilo, "light");
+        let oscura = ruta_preview_apariencia(raiz, escritorio, estilo, "dark");
+
+        if clara.is_file() && oscura.is_file() {
+            let doble = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+            doble.set_hexpand(true);
+            doble.append(&imagen_preview(&clara, true));
+            doble.append(&imagen_preview(&oscura, true));
+            contenedor.append(&doble);
+
+            let nota = gtk::Label::new(Some(
+                "Automático alterna entre las variantes clara y oscura de este mismo estilo.",
+            ));
+            nota.set_wrap(true);
+            nota.set_xalign(0.0);
+            nota.add_css_class("dim-label");
+            contenedor.append(&nota);
+            return;
+        }
+    }
+
+    let modo_humano = match modo {
+        "light" => "Claro",
+        "dark" => "Oscuro",
+        _ => "Automático",
+    };
+
+    let mensaje = gtk::Label::new(Some(&format!(
+        "Falta incorporar la captura de {} · {} · {}.",
+        nombre_escritorio_humano(escritorio),
+        nombre_estilo_humano(estilo),
+        modo_humano
+    )));
+    mensaje.set_wrap(true);
+    mensaje.set_xalign(0.0);
+    mensaje.add_css_class("dim-label");
+    contenedor.append(&mensaje);
+}
+
+fn refrescar_compatibilidad_estilos(
+    apariencia: &Value,
+    catalogo: &[String],
+    principal: &adw::ComboRow,
+    checks: &[(String, gtk::CheckButton, adw::ActionRow)],
+    predeterminado: &gtk::CheckButton,
+    dinamico: &gtk::CheckButton,
+    fila_dinamica: &adw::ActionRow,
+    everforest: &gtk::CheckButton,
+    fila_everforest: &adw::ActionRow,
+) {
+    let escritorios = escritorios_propuestos(catalogo, principal, checks);
+
+    let dynamic_ok = estilo_disponible_para_escritorios(apariencia, "dynamic", &escritorios);
+    dinamico.set_sensitive(dynamic_ok);
+    fila_dinamica.set_subtitle(&localizar_visible(
+        idioma_actual(),
+        if dynamic_ok {
+            descripcion_estilo_humano("dynamic")
+        } else {
+            "No disponible con la selección actual: Dinámico requiere que todos los escritorios elegidos sean Niri o Hyprland."
+        },
+    ));
+
+    let everforest_ok = estilo_disponible_para_escritorios(apariencia, "everforest", &escritorios);
+    everforest.set_sensitive(everforest_ok);
+    fila_everforest.set_subtitle(&localizar_visible(
+        idioma_actual(),
+        if everforest_ok {
+            descripcion_estilo_humano("everforest")
+        } else {
+            "No disponible con la selección actual: la integración Everforest completa para Plasma y Cinnamon sigue pendiente."
+        },
+    ));
+
+    if (dinamico.is_active() && !dynamic_ok) || (everforest.is_active() && !everforest_ok) {
+        predeterminado.set_active(true);
+    }
+}
+
 fn pagina_escritorio_apariencia(
     estado: Rc<Estado>,
     escritorio: &Value,
     apariencia: &Value,
 ) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
-
-    let estilos = apariencia
-        .get("styles")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|v| v.as_str().map(str::to_string))
-        .collect::<Vec<_>>();
 
     let modos = apariencia
         .get("modes")
@@ -10587,32 +10593,79 @@ fn pagina_escritorio_apariencia(
         .filter_map(|v| v.as_str().map(str::to_string))
         .collect::<Vec<_>>();
 
-    let grupo = adw::PreferencesGroup::new();
-    grupo.set_title(&localizar_visible(idioma_actual(), "Apariencia"));
-    grupo.set_description(Some(
-        "La previsualización cambia en esta misma ventana; Guardar y aplicar hace persistente la decisión.",
-    ));
+    let soporte = Rc::new(apariencia.clone());
 
-    let estilos_humanos = estilos
+    let catalogo_humano = catalogo
         .iter()
-        .map(|valor| {
-            if valor == "everforest" {
-                "Everforest".to_string()
-            } else {
-                "Predeterminada".to_string()
-            }
-        })
+        .map(|id| nombre_escritorio_humano(id))
         .collect::<Vec<_>>();
-    let estilos_refs = estilos_humanos
+    let catalogo_refs = catalogo_humano
         .iter()
         .map(String::as_str)
         .collect::<Vec<_>>();
-    let estilos_modelo = gtk::StringList::new(&estilos_refs);
-    let estilo = adw::ComboRow::new();
-    estilo.set_title(&localizar_visible(idioma_actual(), "Estilo"));
-    estilo.set_model(Some(&estilos_modelo));
-    estilo.set_selected(indice(&estilo_actual, &estilos));
-    grupo.add(&estilo);
+
+    let grupo_preview = adw::PreferencesGroup::new();
+    grupo_preview.set_title(&localizar_visible(idioma_actual(), "Previsualización"));
+    grupo_preview.set_description(Some(&localizar_visible(
+        idioma_actual(),
+        "Compara cómo quedará la misma decisión en cada escritorio. Las capturas representan el resultado final, no el tema de la ventana de Korunix.",
+    )));
+
+    let modelo_preview = gtk::StringList::new(&catalogo_refs);
+    let escritorio_preview = adw::ComboRow::new();
+    escritorio_preview.set_title(&localizar_visible(
+        idioma_actual(),
+        "Escritorio que quieres comparar",
+    ));
+    escritorio_preview.set_model(Some(&modelo_preview));
+    escritorio_preview.set_selected(indice(&escritorio_actual, &catalogo));
+    grupo_preview.add(&escritorio_preview);
+
+    let preview = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    preview.set_hexpand(true);
+    grupo_preview.add(&preview);
+    pagina.add(&grupo_preview);
+
+    let grupo_apariencia = adw::PreferencesGroup::new();
+    grupo_apariencia.set_title(&localizar_visible(idioma_actual(), "Apariencia"));
+    grupo_apariencia.set_description(Some(&localizar_visible(
+        idioma_actual(),
+        "El estilo decide de dónde proviene la apariencia. Claro, Oscuro y Automático deciden el modo luminoso dentro de ese estilo.",
+    )));
+
+    let predeterminado = gtk::CheckButton::new();
+    let dinamico = gtk::CheckButton::new();
+    let everforest = gtk::CheckButton::new();
+    dinamico.set_group(Some(&predeterminado));
+    everforest.set_group(Some(&predeterminado));
+
+    match estilo_actual.as_str() {
+        "dynamic" => dinamico.set_active(true),
+        "everforest" => everforest.set_active(true),
+        _ => predeterminado.set_active(true),
+    }
+
+    let fila_predeterminada = adw::ActionRow::new();
+    fila_predeterminada.set_title(&localizar_visible(idioma_actual(), "Predeterminado"));
+    fila_predeterminada.set_subtitle(&localizar_visible(
+        idioma_actual(),
+        descripcion_estilo_humano("default"),
+    ));
+    predeterminado.set_valign(gtk::Align::Center);
+    fila_predeterminada.add_suffix(&predeterminado);
+    grupo_apariencia.add(&fila_predeterminada);
+
+    let fila_dinamica = adw::ActionRow::new();
+    fila_dinamica.set_title(&localizar_visible(idioma_actual(), "Dinámico"));
+    dinamico.set_valign(gtk::Align::Center);
+    fila_dinamica.add_suffix(&dinamico);
+    grupo_apariencia.add(&fila_dinamica);
+
+    let fila_everforest = adw::ActionRow::new();
+    fila_everforest.set_title("Everforest");
+    everforest.set_valign(gtk::Align::Center);
+    fila_everforest.add_suffix(&everforest);
+    grupo_apariencia.add(&fila_everforest);
 
     let modos_humanos = modos
         .iter()
@@ -10626,54 +10679,22 @@ fn pagina_escritorio_apariencia(
     let modos_modelo = gtk::StringList::new(&modos_refs);
     let modo = adw::ComboRow::new();
     modo.set_title(&localizar_visible(idioma_actual(), "Modo"));
+    modo.set_subtitle(&localizar_visible(
+        idioma_actual(),
+        "Automático sigue el estado claro/oscuro del escritorio cuando la integración lo permite.",
+    ));
     modo.set_model(Some(&modos_modelo));
     modo.set_selected(indice(&modo_actual, &modos));
-    grupo.add(&modo);
-
-    let estado_modo = Rc::clone(&estado);
-    let modos_preview = modos.clone();
-    modo.connect_selected_notify(move |fila| {
-        let seleccionado = modos_preview
-            .get(fila.selected() as usize)
-            .map(String::as_str)
-            .unwrap_or("auto");
-
-        let modo = match seleccionado {
-            "light" => ModoApariencia::Claro,
-            "dark" => ModoApariencia::Oscuro,
-            _ => match modo_noctalia_actual() {
-                Some(ModoApariencia::Claro) => ModoApariencia::Claro,
-                Some(ModoApariencia::Oscuro) => ModoApariencia::Oscuro,
-                _ => ModoApariencia::Automatico,
-            },
-        };
-
-        aplicar_modo(modo);
-
-        if seleccionado == "auto" {
-            sincronizar_apariencia_viva(
-                estado_modo._apariencia._ajustes_sistema.as_ref(),
-                &estado_modo._apariencia._css_noctalia,
-            );
-        }
-    });
-
-    pagina.add(&grupo);
+    grupo_apariencia.add(&modo);
+    pagina.add(&grupo_apariencia);
 
     let grupo_escritorio = adw::PreferencesGroup::new();
     grupo_escritorio.set_title(&localizar_visible(idioma_actual(), "Escritorios"));
-    grupo_escritorio.set_description(Some(
-        "Elige un escritorio principal y, si quieres, deja otros disponibles para iniciar sesión con ellos.",
-    ));
+    grupo_escritorio.set_description(Some(&localizar_visible(
+        idioma_actual(),
+        "El escritorio principal inicia por defecto. Los demás quedan disponibles como sesiones adicionales.",
+    )));
 
-    let catalogo_humano = catalogo
-        .iter()
-        .map(|id| nombre_escritorio_humano(id))
-        .collect::<Vec<_>>();
-    let catalogo_refs = catalogo_humano
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>();
     let modelo_escritorios = gtk::StringList::new(&catalogo_refs);
     let principal = adw::ComboRow::new();
     principal.set_title(&localizar_visible(idioma_actual(), "Escritorio principal"));
@@ -10690,14 +10711,16 @@ fn pagina_escritorio_apariencia(
 
                 let check = gtk::CheckButton::new();
                 let es_principal = id == &escritorio_actual;
-                check.set_active(
-                    es_principal || adicionales_actuales.iter().any(|actual| actual == id),
-                );
+                let instalada =
+                    es_principal || adicionales_actuales.iter().any(|actual| actual == id);
+                check.set_active(instalada);
                 check.set_sensitive(!es_principal);
                 check.set_valign(gtk::Align::Center);
 
                 if es_principal {
                     row.set_subtitle(&localizar_visible(idioma_actual(), "Principal"));
+                } else if instalada {
+                    row.set_subtitle(&localizar_visible(idioma_actual(), "Instalado"));
                 }
 
                 row.add_suffix(&check);
@@ -10706,44 +10729,197 @@ fn pagina_escritorio_apariencia(
             })
             .collect::<Vec<_>>(),
     );
+    pagina.add(&grupo_escritorio);
+
+    refrescar_compatibilidad_estilos(
+        &soporte,
+        &catalogo,
+        &principal,
+        &checks,
+        &predeterminado,
+        &dinamico,
+        &fila_dinamica,
+        &everforest,
+        &fila_everforest,
+    );
 
     let principal_actual = Rc::new(RefCell::new(escritorio_actual.clone()));
-    let checks_principal = Rc::clone(&checks);
-    let catalogo_principal = catalogo.clone();
-    let principal_actual_cambio = Rc::clone(&principal_actual);
 
-    principal.connect_selected_notify(move |selector| {
-        let Some(nuevo) = catalogo_principal.get(selector.selected() as usize) else {
-            return;
-        };
+    {
+        let checks_principal = Rc::clone(&checks);
+        let catalogo_principal = catalogo.clone();
+        let principal_actual_cambio = Rc::clone(&principal_actual);
+        let soporte_principal = Rc::clone(&soporte);
+        let predeterminado_principal = predeterminado.clone();
+        let dinamico_principal = dinamico.clone();
+        let fila_dinamica_principal = fila_dinamica.clone();
+        let everforest_principal = everforest.clone();
+        let fila_everforest_principal = fila_everforest.clone();
+        let principal_compat = principal.clone();
+        let escritorio_preview_principal = escritorio_preview.clone();
 
-        let anterior = principal_actual_cambio.borrow().clone();
+        principal.connect_selected_notify(move |selector| {
+            let Some(nuevo) = catalogo_principal.get(selector.selected() as usize) else {
+                return;
+            };
 
-        for (id, check, row) in checks_principal.iter() {
-            if id == nuevo {
-                check.set_active(true);
-                check.set_sensitive(false);
-                row.set_subtitle(&localizar_visible(idioma_actual(), "Principal"));
-            } else {
-                if id == &anterior {
-                    check.set_active(false);
+            let anterior = principal_actual_cambio.borrow().clone();
+
+            for (id, check, row) in checks_principal.iter() {
+                if id == nuevo {
+                    check.set_active(true);
+                    check.set_sensitive(false);
+                    row.set_subtitle(&localizar_visible(idioma_actual(), "Principal"));
+                } else {
+                    if id == &anterior {
+                        check.set_active(false);
+                    }
+                    check.set_sensitive(true);
+                    let texto = if check.is_active() {
+                        localizar_visible(idioma_actual(), "Instalado")
+                    } else {
+                        String::new()
+                    };
+                    row.set_subtitle(&texto);
                 }
-                check.set_sensitive(true);
-                row.set_subtitle("");
             }
-        }
 
-        *principal_actual_cambio.borrow_mut() = nuevo.clone();
+            *principal_actual_cambio.borrow_mut() = nuevo.clone();
+            escritorio_preview_principal.set_selected(selector.selected());
+
+            refrescar_compatibilidad_estilos(
+                &soporte_principal,
+                &catalogo_principal,
+                &principal_compat,
+                &checks_principal,
+                &predeterminado_principal,
+                &dinamico_principal,
+                &fila_dinamica_principal,
+                &everforest_principal,
+                &fila_everforest_principal,
+            );
+        });
+    }
+
+    for (_, check, row) in checks.iter() {
+        let soporte_check = Rc::clone(&soporte);
+        let catalogo_check = catalogo.clone();
+        let principal_check = principal.clone();
+        let checks_check = Rc::clone(&checks);
+        let predeterminado_check = predeterminado.clone();
+        let dinamico_check = dinamico.clone();
+        let fila_dinamica_check = fila_dinamica.clone();
+        let everforest_check = everforest.clone();
+        let fila_everforest_check = fila_everforest.clone();
+        let row_check = row.clone();
+
+        check.connect_toggled(move |check| {
+            if check.is_sensitive() {
+                let texto = if check.is_active() {
+                    localizar_visible(idioma_actual(), "Instalado")
+                } else {
+                    String::new()
+                };
+                row_check.set_subtitle(&texto);
+            }
+
+            refrescar_compatibilidad_estilos(
+                &soporte_check,
+                &catalogo_check,
+                &principal_check,
+                &checks_check,
+                &predeterminado_check,
+                &dinamico_check,
+                &fila_dinamica_check,
+                &everforest_check,
+                &fila_everforest_check,
+            );
+        });
+    }
+
+    let refrescar_preview: Rc<dyn Fn()> = Rc::new({
+        let preview = preview.clone();
+        let raiz = estado.raiz.clone();
+        let soporte = Rc::clone(&soporte);
+        let catalogo = catalogo.clone();
+        let modos = modos.clone();
+        let escritorio_preview = escritorio_preview.clone();
+        let modo = modo.clone();
+        let predeterminado = predeterminado.clone();
+        let dinamico = dinamico.clone();
+        let everforest = everforest.clone();
+
+        move || {
+            let escritorio = catalogo
+                .get(escritorio_preview.selected() as usize)
+                .map(String::as_str)
+                .unwrap_or("niri");
+            let estilo = estilo_elegido(&predeterminado, &dinamico, &everforest);
+            let modo = modos
+                .get(modo.selected() as usize)
+                .map(String::as_str)
+                .unwrap_or("auto");
+
+            actualizar_preview_apariencia(&preview, &raiz, &soporte, escritorio, estilo, modo);
+        }
     });
 
-    pagina.add(&grupo_escritorio);
+    refrescar_preview();
+
+    {
+        let refrescar = Rc::clone(&refrescar_preview);
+        escritorio_preview.connect_selected_notify(move |_| refrescar());
+    }
+
+    for check in [&predeterminado, &dinamico, &everforest] {
+        let refrescar = Rc::clone(&refrescar_preview);
+        check.connect_toggled(move |check| {
+            if check.is_active() {
+                refrescar();
+            }
+        });
+    }
+
+    {
+        let refrescar = Rc::clone(&refrescar_preview);
+        let estado_modo = Rc::clone(&estado);
+        let modos_preview = modos.clone();
+
+        modo.connect_selected_notify(move |fila| {
+            let seleccionado = modos_preview
+                .get(fila.selected() as usize)
+                .map(String::as_str)
+                .unwrap_or("auto");
+
+            let modo_aplicacion = match seleccionado {
+                "light" => ModoApariencia::Claro,
+                "dark" => ModoApariencia::Oscuro,
+                _ => match modo_noctalia_actual() {
+                    Some(ModoApariencia::Claro) => ModoApariencia::Claro,
+                    Some(ModoApariencia::Oscuro) => ModoApariencia::Oscuro,
+                    _ => ModoApariencia::Automatico,
+                },
+            };
+
+            aplicar_modo(modo_aplicacion);
+
+            if seleccionado == "auto" {
+                sincronizar_apariencia_viva(
+                    estado_modo._apariencia._ajustes_sistema.as_ref(),
+                    &estado_modo._apariencia._css_noctalia,
+                );
+            }
+
+            refrescar();
+        });
+    }
 
     let grupo_guardar = adw::PreferencesGroup::new();
     let fila_guardar = adw::ActionRow::new();
     fila_guardar.set_title(&localizar_visible(idioma_actual(), "Guardar decisiones"));
     fila_guardar.set_subtitle(&localizar_visible(
         idioma_actual(),
-        "Korunix valida primero y crea una sola generación para el conjunto.",
+        "Korunix valida la apariencia y todas las sesiones seleccionadas antes de aplicar el conjunto.",
     ));
     let guardar = gtk::Button::with_label(texto(estado.idioma, "save_apply"));
     guardar.add_css_class("suggested-action");
@@ -10753,28 +10929,48 @@ fn pagina_escritorio_apariencia(
     pagina.add(&grupo_guardar);
 
     let estado_guardar = Rc::clone(&estado);
-    let estilos_guardar = estilos.clone();
     let modos_guardar = modos.clone();
     let catalogo_guardar = catalogo.clone();
+    let soporte_guardar = Rc::clone(&soporte);
+    let predeterminado_guardar = predeterminado.clone();
+    let dinamico_guardar = dinamico.clone();
+    let everforest_guardar = everforest.clone();
 
     guardar.connect_clicked(move |boton| {
-        let style = estilos_guardar
-            .get(estilo.selected() as usize)
-            .cloned()
-            .unwrap_or_else(|| "default".to_string());
+        let style = estilo_elegido(
+            &predeterminado_guardar,
+            &dinamico_guardar,
+            &everforest_guardar,
+        )
+        .to_string();
+
         let mode = modos_guardar
             .get(modo.selected() as usize)
             .cloned()
             .unwrap_or_else(|| "auto".to_string());
+
         let desktop = catalogo_guardar
             .get(principal.selected() as usize)
             .cloned()
             .unwrap_or_else(|| escritorio_actual.clone());
 
-        let additional = checks
+        let proposed = escritorios_propuestos(&catalogo_guardar, &principal, &checks);
+
+        if !estilo_disponible_para_escritorios(&soporte_guardar, &style, &proposed) {
+            mostrar_error(
+                &estado_guardar,
+                format!(
+                    "{} no está disponible de forma completa para todos los escritorios seleccionados.",
+                    nombre_estilo_humano(&style)
+                ),
+            );
+            return;
+        }
+
+        let additional = proposed
             .iter()
-            .filter(|(id, check, _)| check.is_active() && id != &desktop)
-            .map(|(id, _, _)| id.clone())
+            .filter(|id| *id != &desktop)
+            .cloned()
             .collect::<Vec<_>>()
             .join(",");
 
@@ -10815,7 +11011,15 @@ fn pagina_escritorio_apariencia(
         let dialogo = dialogo_accion(
             boton,
             &estado_guardar,
-            "¿Guardar y aplicar la apariencia y los escritorios seleccionados?",
+            &format!(
+                "¿Guardar y aplicar {} · {} para los escritorios seleccionados?",
+                nombre_estilo_humano(&style),
+                match mode.as_str() {
+                    "light" => "Claro",
+                    "dark" => "Oscuro",
+                    _ => "Automático",
+                }
+            ),
             texto(estado_guardar.idioma, "save_apply"),
             false,
         );
@@ -11925,6 +12129,8 @@ fn construir_ventana(app: &adw::Application, raiz: PathBuf, motor: PathBuf) {
     let stack = gtk::Stack::new();
     stack.set_hexpand(true);
     stack.set_vexpand(true);
+    stack.set_hhomogeneous(false);
+    stack.set_vhomogeneous(false);
     stack.set_transition_type(gtk::StackTransitionType::Crossfade);
 
     let paginas = [
@@ -11965,7 +12171,7 @@ fn construir_ventana(app: &adw::Application, raiz: PathBuf, motor: PathBuf) {
 
     let split = adw::OverlaySplitView::new();
     split.set_min_sidebar_width(220.0);
-    split.set_max_sidebar_width(300.0);
+    split.set_max_sidebar_width(280.0);
     split.set_sidebar_width_fraction(0.28);
     split.set_enable_show_gesture(true);
     split.set_enable_hide_gesture(true);
@@ -12169,18 +12375,22 @@ fn construir_ventana(app: &adw::Application, raiz: PathBuf, motor: PathBuf) {
 
     let split_estrecho = split.clone();
     let menu_estrecho = menu_secciones.clone();
+    let refresh_estrecho = refresh.clone();
     breakpoint.connect_apply(move |_| {
         split_estrecho.set_collapsed(true);
         split_estrecho.set_show_sidebar(false);
         menu_estrecho.set_visible(true);
+        refresh_estrecho.set_visible(false);
     });
 
     let split_ancho = split.clone();
     let menu_ancho = menu_secciones.clone();
+    let refresh_ancho = refresh.clone();
     breakpoint.connect_unapply(move |_| {
         split_ancho.set_collapsed(false);
         split_ancho.set_show_sidebar(true);
         menu_ancho.set_visible(false);
+        refresh_ancho.set_visible(true);
     });
 
     ventana.add_breakpoint(breakpoint);
@@ -12294,6 +12504,51 @@ mod pruebas_roles_predeterminados_gui {
         ] {
             assert!(indice_pagina(nombre).is_some(), "{nombre}");
         }
+    }
+
+    #[test]
+    fn apariencia_respeta_capacidades_de_todos_los_escritorios() {
+        let apariencia = serde_json::json!({
+            "styleSupport": {
+                "default": ["niri", "hyprland", "cinnamon", "plasma"],
+                "dynamic": ["niri", "hyprland"],
+                "everforest": ["niri", "hyprland"]
+            }
+        });
+
+        assert!(estilo_disponible_para_escritorios(
+            &apariencia,
+            "dynamic",
+            &["niri".to_string(), "hyprland".to_string()]
+        ));
+        assert!(!estilo_disponible_para_escritorios(
+            &apariencia,
+            "dynamic",
+            &["niri".to_string(), "plasma".to_string()]
+        ));
+        assert!(!estilo_disponible_para_escritorios(
+            &apariencia,
+            "everforest",
+            &["niri".to_string(), "cinnamon".to_string()]
+        ));
+        assert!(estilo_disponible_para_escritorios(
+            &apariencia,
+            "default",
+            &[
+                "niri".to_string(),
+                "hyprland".to_string(),
+                "cinnamon".to_string(),
+                "plasma".to_string()
+            ]
+        ));
+    }
+
+    #[test]
+    fn preview_tiene_ruta_estable_por_escritorio_estilo_y_modo() {
+        assert_eq!(
+            ruta_preview_apariencia(Path::new("/tmp/korunix"), "plasma", "default", "dark"),
+            Path::new("/tmp/korunix/config/previews/plasma/default-dark.png")
+        );
     }
 
     #[test]
