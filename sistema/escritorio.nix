@@ -1278,17 +1278,17 @@ in {
     };
 
     # La copia en /etc/xdg tiene prioridad sobre el autostart aportado por el
-    # paquete de IBus. Conservamos su comportamiento original y añadimos solo
-    # las sesiones que Korunix administra directamente mediante XKB.
+    # paquete de IBus. Niri y Hyprland siguen siendo dueños de la distribución
+    # XKB, pero las aplicaciones GTK4 necesitan IBus como backend de composición
+    # para resolver correctamente teclas muertas y diacríticos. Por eso no debe
+    # excluirse de esas sesiones. KDE conserva su integración propia.
     environment.etc."xdg/autostart/ibus-daemon.desktop" = lib.mkIf (ibusEnabled && (niriEnabled || hyprlandEnabled)) {
       text = ''
         [Desktop Entry]
         Name=IBus
         Type=Application
         Exec=${ibusPackage}/bin/ibus-daemon --daemonize --xim ${ibusPanelArgument}
-        # KDE lo integra desde su propio escritorio.
-        # Niri y Hyprland usan el teclado XKB administrado por Korunix.
-        NotShowIn=KDE;niri;Hyprland;hyprland;
+        NotShowIn=KDE;
       '';
     };
 

@@ -209,6 +209,28 @@ fi
 
 printf '\n%s\n' '→ Producto y contrato'
 
+personas='sistema/personas.nix'
+escritorio='sistema/escritorio.nix'
+
+if rg -q 'type = "ibus";' "$personas" \
+   && rg -q 'else "ibus";' "$personas" \
+   && rg -q 'launcher = "xdg-autostart";' "$personas" \
+   && grep -Fq 'NotShowIn=KDE;' "$escritorio" \
+   && ! grep -Fq 'NotShowIn=KDE;niri;Hyprland;hyprland;' "$escritorio"
+then
+  ok 'IBus sigue disponible para composición GTK4 en Niri/Hyprland'
+else
+  fallo 'IBus quedó deshabilitado o incoherente con la política de diacríticos'
+fi
+
+if grep -Fq '### 9.1. Teclas muertas, diacríticos y métodos de composición' spec.md \
+   && grep -Fq 'Una optimización de autostart nunca debe desactivar el backend de composición' spec.md
+then
+  ok 'especificación protege teclas muertas y diacríticos'
+else
+  fallo 'la especificación no protege la composición de texto'
+fi
+
 if [[ -s spec.md ]] && grep -q '^# Korunix' spec.md; then
   ok 'especificación de producto'
 else

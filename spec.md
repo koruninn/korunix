@@ -412,6 +412,35 @@ Cuando sea fiable, debe detectar y proponer valores. La interfaz debe favorecer 
 
 Se deben admitir múltiples idiomas y múltiples distribuciones de teclado cuando el sistema lo permita.
 
+### 9.1. Teclas muertas, diacríticos y métodos de composición
+
+La distribución XKB y el método de composición son capas distintas.
+
+En Niri y Hyprland, el compositor continúa siendo dueño de la distribución,
+variante y cambio de teclado. Eso no autoriza a desactivar el backend de
+composición que necesiten las aplicaciones.
+
+Las aplicaciones GTK4 de la suite GNOME utilizada por la experiencia Noctalia,
+incluidos Nautilus y GNOME Text Editor, deben poder resolver teclas muertas y
+diacríticos con la misma fiabilidad que en un escritorio GNOME completo.
+
+Cuando ninguna persona haya pedido un método de entrada avanzado:
+
+- Korunix utiliza IBus como backend normal de composición;
+- IBus debe poder iniciar también en Niri y Hyprland;
+- IBus no sustituye ni reconfigura el modelo XKB del compositor.
+
+Cuando exista una selección efectiva de métodos de entrada avanzados, Korunix
+puede utilizar Fcitx5 como backend coordinado para el host.
+
+Una optimización de autostart nunca debe desactivar el backend de composición
+solo porque Niri o Hyprland administren XKB. La validación funcional debe probar
+al menos una variante con teclas muertas en una aplicación GTK4 iniciada desde
+la experiencia normal del escritorio, no solamente desde una terminal. Para una
+configuración española equivalente a `es(deadtilde)`, la prueba debe confirmar
+que combinaciones como `á`, `é`, `í`, `ó`, `ú` y `ü` funcionan tanto al editar
+texto como al renombrar un archivo en Nautilus.
+
 ## 10. Apariencia de Korunix y apariencia del sistema
 
 ### 10.1. Korunix inicia neutral
