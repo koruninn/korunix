@@ -638,13 +638,6 @@ fn confirm(pregunta: &str) -> Result<bool, String> {
 }
 
 fn trusted_program(nombre: &str) -> Result<PathBuf, String> {
-    if nombre.starts_with("/nix/store/") && nombre.ends_with("/bin/switch-to-configuration") {
-        let p = PathBuf::from(nombre);
-        if p.is_file() {
-            return Ok(p);
-        }
-    }
-
     if !matches!(
         nombre,
         "nix"
@@ -2657,7 +2650,7 @@ fn change_cycle(raiz: &Path, command: &str, args: &[String]) -> Result<ExitCode,
     }
 
     let host = resolver_equipo(raiz)?;
-    let flake = format!("path:{}#{host}", raiz.display());
+    let flake = format!(".#{host}");
 
     emitir_fase(
         json,

@@ -89,6 +89,16 @@ generación anterior. La verificación final también debe confirmar que la
 candidata aparece entre las generaciones registradas y recuperables; cambiar
 solo `/run/current-system` no basta para declarar `apply` completado.
 
+La validación, la previsualización, la construcción y la aplicación de un mismo
+ciclo deben conservar **la misma identidad de fuente del flake**. Korunix no debe
+construir una candidata con una referencia y después pedir a `nixos-rebuild` que
+reevalúe otra referencia semánticamente distinta, porque ambas pueden producir
+closures diferentes aunque señalen al mismo directorio visible. En un checkout
+Git las fases del ciclo deben conservar la misma semántica Git; en una
+distribución local sin metadatos Git deben conservar de igual forma la misma
+semántica local. La candidata revisada por la persona es la que debe registrarse,
+activarse y verificarse.
+
 Las operaciones potencialmente largas deben comunicar su fase actual antes de
 empezar y seguir dando señales de actividad mientras trabajan. Un flujo normal
 de aplicación distingue como mínimo:

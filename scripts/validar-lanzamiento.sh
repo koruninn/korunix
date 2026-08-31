@@ -219,16 +219,21 @@ else
   fallo 'apply volvió a quedar sin fases humanas o contaminó el modo JSON'
 fi
 
-if rg -q '"nixos-rebuild"' sistema/programa/operaciones.rs \
-   && rg -q 'let profile_system = fs::canonicalize\(system_profile\(\)\)' sistema/programa/operaciones.rs \
-   && rg -q 'let registered = generations\(\)' sistema/programa/operaciones.rs \
-   && rg -q 'no quedó registrada de forma persistente como generación predeterminada' sistema/programa/operaciones.rs \
-   && grep -Fq 'La verificación final también debe confirmar que la' spec.md \
+if grep -Fq 'let target = format!(".#nixosConfigurations.{host}.config.system.build.toplevel");' sistema/programa/operaciones.rs \
+   && grep -Fq 'format!(".#nixosConfigurations.{id}.config.system.build.toplevel.drvPath")' sistema/programa/operaciones.rs \
+   && grep -Fq 'let flake = format!(".#{host}");' sistema/programa/operaciones.rs \
+   && ! grep -Fq 'let flake = format!("path:{}#{host}", raiz.display());' sistema/programa/operaciones.rs \
+   && ! grep -Fq 'nombre.starts_with("/nix/store/") && nombre.ends_with("/bin/switch-to-configuration")' sistema/programa/operaciones.rs \
+   && grep -Fq '"nixos-rebuild"' sistema/programa/operaciones.rs \
+   && grep -Fq 'let profile_system = fs::canonicalize(system_profile())' sistema/programa/operaciones.rs \
+   && grep -Fq 'let registered = generations()' sistema/programa/operaciones.rs \
+   && grep -Fq 'no quedó registrada de forma persistente como generación predeterminada' sistema/programa/operaciones.rs \
+   && grep -Fq 'misma identidad de fuente del flake' spec.md \
    && grep -Fq 'candidata aparece entre las generaciones registradas y recuperables' spec.md
 then
-  ok 'apply registra y verifica una generación persistente'
+  ok 'apply conserva la identidad de la candidata y verifica su persistencia'
 else
-  fallo 'apply puede activar una closure sin persistirla como generación'
+  fallo 'el ciclo de apply puede cambiar de candidata o perder persistencia'
 fi
 
 if rg -q 'La previsualización no necesita privilegios' sistema/programa/operaciones.rs \
