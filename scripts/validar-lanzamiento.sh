@@ -228,6 +228,41 @@ else
   fallo 'expulsión no usa sincronización por sistema de archivos'
 fi
 
+if rg -q 'fn storage_transfer\(' "$operaciones" \
+   && rg -q 'fn transferir_archivos_a_directorio\(' "$operaciones" \
+   && rg -q 'KORUNIX_TRANSFER' "$operaciones" \
+   && rg -q 'fn sincronizar_sistema_archivos\(' "$operaciones" \
+   && rg -q 'archivos_iguales' "$operaciones" \
+   && rg -q 'renombrar_sin_reemplazar' "$operaciones" \
+   && grep -Fq '"usesGlobalSync": false' "$operaciones"
+then
+  ok 'transferencias persisten y verifican sin sync global'
+else
+  fallo 'transferencias seguras perdieron persistencia, verificación o aislamiento'
+fi
+
+if rg -q 'gtk::FileChooserNative::new' sistema/interfaz/principal.rs \
+   && rg -q 'set_select_multiple\(true\)' sistema/interfaz/principal.rs \
+   && rg -q 'EventoMotor::Transferencia' sistema/interfaz/principal.rs \
+   && rg -q 'mostrar_progreso_transferencia' sistema/interfaz/principal.rs \
+   && grep -Fq 'Transferencias a almacenamiento extraíble' spec.md \
+   && grep -Fq 'mostrar porcentaje, velocidad y ETA cuando sean medibles' spec.md \
+   && grep -Fq 'ofrecer expulsar el dispositivo cuando proceda' spec.md
+then
+  ok 'GUI ofrece el asistente de transferencias definido por la especificación'
+else
+  fallo 'la GUI perdió el asistente o su contrato de progreso'
+fi
+
+if rg -q 'fn storage_tool\(' "$operaciones" \
+   && rg -q 'capture_status\(raiz, programa, args\)' "$operaciones" \
+   && ! grep -Fq 'visible(raiz, "sync"' "$operaciones"
+then
+  ok 'expulsión JSON mantiene stdout limpio y evita sync global'
+else
+  fallo 'expulsión puede contaminar JSON o volver a sincronización global'
+fi
+
 
 printf '\n%s\n' '→ Producto y contrato'
 

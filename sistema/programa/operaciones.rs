@@ -1689,6 +1689,881 @@ fn clean(
     Ok(ExitCode::SUCCESS)
 }
 
+#[derive(Clone, Debug)]
+struct TransferSource {
+    path: PathBuf,
+    name: String,
+    bytes: u64,
+}
+
+fn transfer_sources(paths: &[String]) -> Result<Vec<TransferSource>, String> {
+    if paths.is_empty() {
+        return Err("Selecciona al menos un archivo para transferir.".to_string());
+    }
+
+    let mut names = BTreeSet::<String>::new();
+    let mut result = Vec::<TransferSource>::new();
+
+    for raw in paths {
+        let requested = PathBuf::from(raw);
+        let link_meta = fs::symlink_metadata(&requested)
+            .map_err(|error| format!("No pude leer {}: {error}", requested.display()))?;
+
+        if link_meta.file_type().is_symlink() {
+            return Err(format!(
+                "{} es un enlace. Korunix solo transfiere archivos normales seleccionados explícitamente.",
+                requested.display()
+            ));
+        }
+
+        if !link_meta.is_file() {
+            return Err(format!(
+                "{} no es un archivo normal. Este asistente no copia carpetas.",
+                requested.display()
+            ));
+        }
+
+        let path = fs::canonicalize(&requested)
+            .map_err(|error| format!("No pude resolver {}: {error}", requested.display()))?;
+        let meta = fs::metadata(&path)
+            .map_err(|error| format!("No pude medir {}: {error}", path.display()))?;
+
+        let name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| format!("{} no tiene un nombre utilizable.", path.display()))?
+            .to_string();
+
+        if !names.insert(name.clone()) {
+            return Err(format!(
+                "Has seleccionado más de un archivo llamado «{name}». Elige nombres distintos para evitar una colisión en el destino."
+            ));
+        }
+
+        result.push(TransferSource {
+            path,
+            name,
+            bytes: meta.len(),
+        });
+    }
+
+    Ok(result)
+}
+
+fn storage_transfer_target_json(raiz: &Path, device: &str) -> Result<String, String> {
+    let selected = fs::canonicalize(device)
+        .unwrap_or_else(|_| PathBuf::from(device))
+        .display()
+        .to_string();
+
+    let disk = storage_parent(raiz, &selected)?;
+    let flags = capture(
+        raiz,
+        "lsblk",
+        &[
+            "-dnro".into(),
+            "RM,HOTPLUG,TRAN".into(),
+            "--".into(),
+            disk.clone(),
+        ],
+    )?;
+
+    let mut parts = flags.split_whitespace();
+    let rm = parts.next().unwrap_or("");
+    let hot = parts.next().unwrap_or("");
+    let transport = parts.next().unwrap_or("");
+    let removable = rm == "1" || hot == "1" || matches!(transport, "usb" | "mmc");
+
+    if !removable {
+        return Err(
+            "Las transferencias seguras de este asistente solo usan unidades extraíbles."
+                .to_string(),
+        );
+    }
+
+    let selected_type = capture(
+        raiz,
+        "lsblk",
+        &["-dnro".into(), "TYPE".into(), "--".into(), selected.clone()],
+    )?;
+
+    let raw = capture(
+        raiz,
+        "lsblk",
+        &[
+            "-b".into(),
+            "-J".into(),
+            "-p".into(),
+            "--tree".into(),
+            "-o".into(),
+            "PATH,TYPE,SIZE,FSTYPE,MOUNTPOINTS".into(),
+            "--".into(),
+            disk.clone(),
+        ],
+    )?;
+
+    jq_con_entrada(
+        raiz,
+        &[
+            "-c".into(),
+            "--arg".into(),
+            "selected".into(),
+            selected,
+            "--arg".into(),
+            "disk".into(),
+            disk,
+            "--arg".into(),
+            "transport".into(),
+            transport.into(),
+            "--arg".into(),
+            "selectedType".into(),
+            selected_type.trim().to_string(),
+            r#"
+              def nodes: ., (.children[]? | nodes);
+              def mount:
+                [(.mountpoints // [])[]?
+                 | select(type=="string" and startswith("/"))][0] // null;
+              def acceptable:
+                (.fstype != null)
+                and (.fstype != "")
+                and (.fstype != "swap")
+                and (.fstype != "iso9660");
+
+              [.blockdevices[]?
+               | nodes
+               | select((.type=="part" or .type=="disk") and acceptable)
+               | {
+                   partition:.path,
+                   fileSystem:.fstype,
+                   size:((.size | tonumber?) // 0),
+                   mountPoint:mount
+                 }
+              ] as $candidates
+              | (
+                  if $selectedType=="part" then
+                    [$candidates[] | select(.partition==$selected)][0]
+                  else
+                    ($candidates | sort_by(.size) | reverse | .[0])
+                  end
+                ) as $target
+              | if $target == null then
+                  error("La unidad no contiene un sistema de archivos adecuado para recibir archivos.")
+                else
+                  {
+                    schemaVersion:1,
+                    kind:"korunix-storage-transfer-target",
+                    disk:$disk,
+                    selectedDevice:$selected,
+                    partition:$target.partition,
+                    fileSystem:$target.fileSystem,
+                    sizeBytes:$target.size,
+                    mountPoint:$target.mountPoint,
+                    mounted:($target.mountPoint != null),
+                    transport:($transport | if .=="" then null else . end),
+                    removable:true
+                  }
+                end
+            "#
+            .into(),
+        ],
+        &raw,
+    )
+}
+
+fn storage_transfer_plan_json(
+    raiz: &Path,
+    device: &str,
+    source_paths: &[String],
+) -> Result<String, String> {
+    let sources = transfer_sources(source_paths)?;
+    let target_text = storage_transfer_target_json(raiz, device)?;
+    let target: serde_json::Value =
+        serde_json::from_str(&target_text).map_err(|error| error.to_string())?;
+
+    let file_system = target
+        .get("fileSystem")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+
+    if file_system == "vfat" && sources.iter().any(|source| source.bytes > 4_294_967_295) {
+        return Err(
+            "Esta unidad usa FAT y no puede recibir uno de los archivos porque supera 4 GiB."
+                .to_string(),
+        );
+    }
+
+    let mount = target
+        .get("mountPoint")
+        .and_then(serde_json::Value::as_str)
+        .map(PathBuf::from);
+
+    let items = sources
+        .iter()
+        .map(|source| {
+            let conflict = mount
+                .as_ref()
+                .map(|mount| mount.join(&source.name).exists())
+                .unwrap_or(false);
+
+            serde_json::json!({
+                "source": source.path.display().to_string(),
+                "name": source.name.clone(),
+                "bytes": source.bytes,
+                "conflict": conflict
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let total_bytes = sources.iter().map(|source| source.bytes).sum::<u64>();
+    let conflicts = items
+        .iter()
+        .filter(|item| item.get("conflict").and_then(serde_json::Value::as_bool) == Some(true))
+        .filter_map(|item| item.get("name").and_then(serde_json::Value::as_str))
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+
+    Ok(serde_json::json!({
+        "schemaVersion": 1,
+        "kind": "korunix-storage-transfer-plan",
+        "target": target,
+        "items": items,
+        "fileCount": sources.len(),
+        "totalBytes": total_bytes,
+        "conflicts": conflicts,
+        "measurableProgress": {
+            "copyBytes": true,
+            "speed": true,
+            "etaDuringCopy": true,
+            "persistenceDuration": false,
+            "verificationDuration": false
+        },
+        "safety": {
+            "overwritesExistingFiles": false,
+            "usesGlobalSync": false,
+            "persistsPerFilesystem": true,
+            "verifiesContent": true,
+            "automaticEject": false
+        }
+    })
+    .to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn sincronizar_sistema_archivos(path: &Path) -> Result<(), String> {
+    use std::os::fd::AsRawFd;
+
+    extern "C" {
+        fn syncfs(fd: i32) -> i32;
+    }
+
+    let directory = fs::File::open(path).map_err(|error| {
+        format!(
+            "No pude abrir {} para confirmar sus datos: {error}",
+            path.display()
+        )
+    })?;
+
+    let result = unsafe { syncfs(directory.as_raw_fd()) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "No pude confirmar las escrituras pendientes de {}: {}",
+            path.display(),
+            io::Error::last_os_error()
+        ))
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn sincronizar_sistema_archivos(_path: &Path) -> Result<(), String> {
+    Err("La persistencia por sistema de archivos de Korunix requiere Linux.".to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn renombrar_sin_reemplazar(source: &Path, target: &Path) -> Result<(), String> {
+    use std::ffi::{c_char, CString};
+    use std::os::unix::ffi::OsStrExt;
+
+    const AT_FDCWD: i32 = -100;
+    const RENAME_NOREPLACE: u32 = 1;
+
+    extern "C" {
+        fn renameat2(
+            olddirfd: i32,
+            oldpath: *const c_char,
+            newdirfd: i32,
+            newpath: *const c_char,
+            flags: u32,
+        ) -> i32;
+    }
+
+    let source_c = CString::new(source.as_os_str().as_bytes())
+        .map_err(|_| format!("Ruta de transferencia no válida: {}", source.display()))?;
+    let target_c = CString::new(target.as_os_str().as_bytes())
+        .map_err(|_| format!("Ruta de transferencia no válida: {}", target.display()))?;
+
+    let result = unsafe {
+        renameat2(
+            AT_FDCWD,
+            source_c.as_ptr(),
+            AT_FDCWD,
+            target_c.as_ptr(),
+            RENAME_NOREPLACE,
+        )
+    };
+
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(format!(
+            "No pude finalizar {} sin reemplazar un archivo existente: {}",
+            target.display(),
+            io::Error::last_os_error()
+        ))
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn renombrar_sin_reemplazar(_source: &Path, _target: &Path) -> Result<(), String> {
+    Err("La finalización segura de transferencias de Korunix requiere Linux.".to_string())
+}
+
+fn archivos_iguales(left: &Path, right: &Path) -> Result<bool, String> {
+    let left_meta = fs::metadata(left)
+        .map_err(|error| format!("No pude volver a leer {}: {error}", left.display()))?;
+    let right_meta = fs::metadata(right)
+        .map_err(|error| format!("No pude verificar {}: {error}", right.display()))?;
+
+    if left_meta.len() != right_meta.len() {
+        return Ok(false);
+    }
+
+    let mut left_file = fs::File::open(left)
+        .map_err(|error| format!("No pude abrir {}: {error}", left.display()))?;
+    let mut right_file = fs::File::open(right)
+        .map_err(|error| format!("No pude verificar {}: {error}", right.display()))?;
+
+    let mut left_buffer = vec![0u8; 1024 * 1024];
+    let mut right_buffer = vec![0u8; 1024 * 1024];
+
+    loop {
+        let left_read = left_file
+            .read(&mut left_buffer)
+            .map_err(|error| format!("No pude verificar {}: {error}", left.display()))?;
+        let right_read = right_file
+            .read(&mut right_buffer)
+            .map_err(|error| format!("No pude verificar {}: {error}", right.display()))?;
+
+        if left_read != right_read {
+            return Ok(false);
+        }
+        if left_read == 0 {
+            return Ok(true);
+        }
+        if left_buffer[..left_read] != right_buffer[..right_read] {
+            return Ok(false);
+        }
+    }
+}
+
+fn emitir_progreso_transferencia(
+    json: bool,
+    stage: &str,
+    percent: Option<u8>,
+    current: Option<&str>,
+    file_index: usize,
+    file_count: usize,
+    transferred_bytes: u64,
+    total_bytes: u64,
+    current_file_bytes: u64,
+    current_file_total: u64,
+    bytes_per_second: Option<f64>,
+    eta_seconds: Option<u64>,
+) {
+    let event = serde_json::json!({
+        "stage": stage,
+        "percent": percent,
+        "current": current,
+        "fileIndex": file_index,
+        "fileCount": file_count,
+        "transferredBytes": transferred_bytes,
+        "totalBytes": total_bytes,
+        "currentFileBytes": current_file_bytes,
+        "currentFileTotal": current_file_total,
+        "bytesPerSecond": bytes_per_second,
+        "etaSeconds": eta_seconds
+    });
+
+    if json && !io::stderr().is_terminal() {
+        eprintln!("KORUNIX_TRANSFER\t{event}");
+    } else {
+        let mut message = match current {
+            Some(current) if !current.is_empty() => format!("{stage}: {current}"),
+            _ => stage.to_string(),
+        };
+
+        if let Some(percent) = percent {
+            message.push_str(&format!(" · {percent}%"));
+        }
+        if let Some(speed) = bytes_per_second {
+            message.push_str(&format!(" · {:.1} MiB/s", speed / 1024.0 / 1024.0));
+        }
+        if let Some(eta) = eta_seconds {
+            message.push_str(&format!(" · ~{eta} s"));
+        }
+
+        eprintln!("→ {message}");
+    }
+
+    let _ = io::stderr().flush();
+}
+
+fn storage_mount_transfer_target(
+    raiz: &Path,
+    partition: &str,
+    current_mount: Option<&str>,
+) -> Result<(PathBuf, bool), String> {
+    if let Some(current) = current_mount {
+        let path = PathBuf::from(current);
+        if path.is_dir() {
+            return Ok((path, false));
+        }
+    }
+
+    let (code, output, error) = capture_status(
+        raiz,
+        "udisksctl",
+        &["mount".into(), "-b".into(), partition.into()],
+    )?;
+
+    if code != 0 {
+        let detail = if error.trim().is_empty() {
+            output
+        } else {
+            error
+        };
+        return Err(if detail.trim().is_empty() {
+            format!("No pude dejar disponible {partition} para recibir archivos.")
+        } else {
+            detail
+        });
+    }
+
+    let mounts = capture(
+        raiz,
+        "lsblk",
+        &[
+            "-nro".into(),
+            "MOUNTPOINTS".into(),
+            "--".into(),
+            partition.into(),
+        ],
+    )?;
+
+    let mount = mounts
+        .lines()
+        .map(str::trim)
+        .find(|line| line.starts_with('/'))
+        .map(PathBuf::from)
+        .ok_or_else(|| {
+            format!("{partition} se preparó, pero el sistema no informó dónde quedó disponible.")
+        })?;
+
+    Ok((mount, true))
+}
+
+fn transferir_archivos_a_directorio(
+    sources: &[TransferSource],
+    destination: &Path,
+    json: bool,
+) -> Result<Vec<PathBuf>, String> {
+    if !destination.is_dir() {
+        return Err(format!(
+            "{} no es un destino disponible.",
+            destination.display()
+        ));
+    }
+
+    let total_bytes = sources.iter().map(|source| source.bytes).sum::<u64>();
+    let file_count = sources.len();
+    let transfer_stamp = stamp();
+    let mut temporary = Vec::<(PathBuf, PathBuf, PathBuf)>::new();
+    let mut finals = Vec::<PathBuf>::new();
+
+    for source in sources {
+        let final_path = destination.join(&source.name);
+        if final_path.exists() {
+            return Err(format!(
+                "Ya existe «{}» en el destino. Korunix no reemplazará archivos durante una transferencia segura.",
+                source.name
+            ));
+        }
+    }
+
+    let result = (|| -> Result<Vec<PathBuf>, String> {
+        let started = std::time::Instant::now();
+        let mut transferred = 0u64;
+        let mut last_event = std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_secs(1))
+            .unwrap_or_else(std::time::Instant::now);
+
+        if total_bytes == 0 {
+            emitir_progreso_transferencia(
+                json,
+                "copying_files",
+                Some(100),
+                None,
+                0,
+                file_count,
+                0,
+                0,
+                0,
+                0,
+                None,
+                Some(0),
+            );
+        }
+
+        for (index, source) in sources.iter().enumerate() {
+            let final_path = destination.join(&source.name);
+            let temp_path =
+                destination.join(format!(".korunix-transfer-{transfer_stamp}-{index}.part"));
+
+            let mut input = fs::File::open(&source.path)
+                .map_err(|error| format!("No pude abrir {}: {error}", source.path.display()))?;
+
+            let mut output = fs::OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&temp_path)
+                .map_err(|error| {
+                    format!(
+                        "No pude crear el archivo temporal en {}: {error}",
+                        destination.display()
+                    )
+                })?;
+
+            temporary.push((source.path.clone(), temp_path.clone(), final_path.clone()));
+
+            let mut buffer = vec![0u8; 8 * 1024 * 1024];
+            let mut current_bytes = 0u64;
+
+            loop {
+                let read = input
+                    .read(&mut buffer)
+                    .map_err(|error| format!("No pude leer {}: {error}", source.path.display()))?;
+
+                if read == 0 {
+                    break;
+                }
+
+                output
+                    .write_all(&buffer[..read])
+                    .map_err(|error| format!("No pude guardar {}: {error}", source.name))?;
+
+                current_bytes += read as u64;
+                transferred += read as u64;
+
+                let elapsed = started.elapsed().as_secs_f64();
+                let speed = (elapsed > 0.0).then_some(transferred as f64 / elapsed);
+                let eta = speed.and_then(|speed| {
+                    if speed > 0.0 && total_bytes >= transferred {
+                        Some(((total_bytes - transferred) as f64 / speed).ceil() as u64)
+                    } else {
+                        None
+                    }
+                });
+
+                if last_event.elapsed() >= std::time::Duration::from_millis(250)
+                    || current_bytes == source.bytes
+                {
+                    let percent = if total_bytes == 0 {
+                        Some(100)
+                    } else {
+                        Some(((transferred.saturating_mul(100) / total_bytes).min(100)) as u8)
+                    };
+
+                    emitir_progreso_transferencia(
+                        json,
+                        "copying_files",
+                        percent,
+                        Some(&source.name),
+                        index + 1,
+                        file_count,
+                        transferred,
+                        total_bytes,
+                        current_bytes,
+                        source.bytes,
+                        speed,
+                        eta,
+                    );
+
+                    last_event = std::time::Instant::now();
+                }
+            }
+
+            if current_bytes != source.bytes {
+                return Err(format!(
+                    "{} cambió mientras se copiaba. Korunix no declarará la transferencia completada.",
+                    source.path.display()
+                ));
+            }
+
+            output
+                .sync_all()
+                .map_err(|error| format!("No pude confirmar {}: {error}", source.name))?;
+        }
+
+        emitir_progreso_transferencia(
+            json,
+            "saving_data",
+            None,
+            None,
+            file_count,
+            file_count,
+            total_bytes,
+            total_bytes,
+            0,
+            0,
+            None,
+            None,
+        );
+
+        sincronizar_sistema_archivos(destination)?;
+
+        for (index, (source, temp, _)) in temporary.iter().enumerate() {
+            let name = source
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("archivo");
+
+            emitir_progreso_transferencia(
+                json,
+                "verifying_transfer",
+                None,
+                Some(name),
+                index + 1,
+                file_count,
+                total_bytes,
+                total_bytes,
+                0,
+                fs::metadata(source).map(|meta| meta.len()).unwrap_or(0),
+                None,
+                None,
+            );
+
+            if !archivos_iguales(source, temp)? {
+                return Err(format!(
+                    "La copia de «{name}» no coincide con el archivo original. Korunix no la considera válida."
+                ));
+            }
+        }
+
+        for (_, temp, final_path) in &temporary {
+            if final_path.exists() {
+                return Err(format!(
+                    "Apareció un archivo llamado «{}» en el destino mientras Korunix verificaba la copia. No se reemplazará.",
+                    final_path
+                        .file_name()
+                        .and_then(|value| value.to_str())
+                        .unwrap_or("archivo")
+                ));
+            }
+
+            renombrar_sin_reemplazar(temp, final_path)?;
+            finals.push(final_path.clone());
+        }
+
+        sincronizar_sistema_archivos(destination)?;
+
+        emitir_progreso_transferencia(
+            json,
+            "done",
+            Some(100),
+            None,
+            file_count,
+            file_count,
+            total_bytes,
+            total_bytes,
+            0,
+            0,
+            None,
+            Some(0),
+        );
+
+        Ok(finals.clone())
+    })();
+
+    if result.is_err() {
+        for (_, temp, _) in &temporary {
+            let _ = fs::remove_file(temp);
+        }
+        for final_path in &finals {
+            let _ = fs::remove_file(final_path);
+        }
+        let _ = sincronizar_sistema_archivos(destination);
+    }
+
+    result
+}
+
+fn storage_transfer(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
+    let Some(device) = args.first() else {
+        return Err(
+            "Uso: korunix storage transfer <unidad> --source <archivo>... [--plan|--yes] [--json]."
+                .to_string(),
+        );
+    };
+
+    if device.starts_with('-') {
+        return Err("Indica primero la unidad extraíble de destino.".to_string());
+    }
+
+    let mut source_paths = Vec::<String>::new();
+    let mut plan_only = false;
+    let mut yes = false;
+    let mut json = false;
+    let mut index = 1usize;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--source" => {
+                index += 1;
+                let source = args
+                    .get(index)
+                    .ok_or_else(|| "--source necesita una ruta de archivo.".to_string())?;
+                source_paths.push(source.clone());
+            }
+            "--plan" if !plan_only => plan_only = true,
+            "--yes" if !yes => yes = true,
+            "--json" if !json => json = true,
+            other => return Err(format!("Opción de transferencia desconocida: {other}")),
+        }
+        index += 1;
+    }
+
+    let plan = storage_transfer_plan_json(raiz, device, &source_paths)?;
+
+    if plan_only {
+        if yes {
+            return Err("--yes no se utiliza junto con --plan.".to_string());
+        }
+        if json {
+            println!("{plan}");
+        } else {
+            pretty(raiz, &plan)?;
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    if json && !yes {
+        return Err("storage transfer --json necesita --yes.".to_string());
+    }
+
+    let conflicts = jq_con_entrada(raiz, &["-r".into(), ".conflicts[]?".into()], &plan)?;
+
+    if !conflicts.trim().is_empty() {
+        return Err(format!(
+            "El destino ya contiene estos archivos y Korunix no los reemplazará:\n{}",
+            conflicts
+        ));
+    }
+
+    if !yes && !confirm("¿Iniciar esta transferencia segura?")? {
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    let sources = transfer_sources(&source_paths)?;
+    let target_text = storage_transfer_target_json(raiz, device)?;
+    let target: serde_json::Value =
+        serde_json::from_str(&target_text).map_err(|error| error.to_string())?;
+
+    let partition = target
+        .get("partition")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "El destino no contiene una partición utilizable.".to_string())?;
+
+    let current_mount = target.get("mountPoint").and_then(serde_json::Value::as_str);
+
+    emitir_progreso_transferencia(
+        json,
+        "preparing",
+        None,
+        None,
+        0,
+        sources.len(),
+        0,
+        sources.iter().map(|source| source.bytes).sum(),
+        0,
+        0,
+        None,
+        None,
+    );
+
+    let (mount, mounted_by_korunix) =
+        storage_mount_transfer_target(raiz, partition, current_mount)?;
+
+    let total_bytes = sources.iter().map(|source| source.bytes).sum::<u64>();
+    let final_paths = transferir_archivos_a_directorio(&sources, &mount, json)?;
+
+    let result = serde_json::json!({
+        "schemaVersion": 1,
+        "kind": "korunix-storage-transfer-result",
+        "completed": true,
+        "verified": true,
+        "persisted": true,
+        "disk": target.get("disk").cloned().unwrap_or(serde_json::Value::Null),
+        "partition": partition,
+        "mountPoint": mount.display().to_string(),
+        "mountedByKorunix": mounted_by_korunix,
+        "fileCount": sources.len(),
+        "totalBytes": total_bytes,
+        "files": final_paths
+            .iter()
+            .map(|path| {
+                serde_json::json!({
+                    "name": path.file_name().and_then(|value| value.to_str()),
+                    "destination": path.display().to_string()
+                })
+            })
+            .collect::<Vec<_>>(),
+        "readyToEject": true,
+        "automaticEject": false,
+        "usesGlobalSync": false
+    });
+
+    if json {
+        println!("{result}");
+    } else {
+        println!("✓ Transferencia completada, persistida y verificada.");
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
+fn storage_tool(raiz: &Path, programa: &str, args: &[String], json: bool) -> Result<(), String> {
+    if !json {
+        return visible(raiz, programa, args);
+    }
+
+    let (code, output, error) = capture_status(raiz, programa, args)?;
+    if code == 0 {
+        return Ok(());
+    }
+
+    let detail = if !error.trim().is_empty() {
+        error
+    } else if !output.trim().is_empty() {
+        output
+    } else {
+        format!("{programa} terminó con error.")
+    };
+
+    Err(detail)
+}
+
 fn storage_list_json(raiz: &Path) -> Result<String, String> {
     let raw = capture(
         raiz,
@@ -1932,15 +2807,22 @@ fn storage(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
         return Ok(ExitCode::SUCCESS);
     }
 
+    if args.first().map(String::as_str) == Some("transfer") {
+        return storage_transfer(raiz, &args[1..]);
+    }
+
     if args.first().map(String::as_str) != Some("eject") || args.len() < 2 {
-        return Err("Uso: korunix storage --list [--json] | eject <dispositivo> [--heavy] [--plan] [--yes] [--json].".into());
+        return Err(
+            "Uso: korunix storage --list [--json] | transfer <unidad> --source <archivo>... [--plan|--yes] [--json] | eject <dispositivo> [--heavy] [--plan] [--yes] [--json]."
+                .into(),
+        );
     }
 
     let device = &args[1];
-    let heavy = args.iter().any(|v| v == "--heavy");
-    let plan_only = args.iter().any(|v| v == "--plan");
-    let yes = args.iter().any(|v| v == "--yes");
-    let json = args.iter().any(|v| v == "--json");
+    let heavy = args.iter().any(|value| value == "--heavy");
+    let plan_only = args.iter().any(|value| value == "--plan");
+    let yes = args.iter().any(|value| value == "--yes");
+    let json = args.iter().any(|value| value == "--json");
     let plan = storage_plan_json(raiz, device, heavy)?;
 
     if plan_only {
@@ -1967,8 +2849,8 @@ fn storage(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
     if heavy {
         emitir_progreso(json, 20, "saving_data");
         let mounts = jq_con_entrada(raiz, &["-r".into(), ".mounts[].mountPoint".into()], &plan)?;
-        for mount in mounts.lines().filter(|v| !v.is_empty()) {
-            visible(raiz, "sync", &["-f".into(), mount.into()])?;
+        for mount in mounts.lines().filter(|value| !value.is_empty()) {
+            sincronizar_sistema_archivos(Path::new(mount))?;
         }
     }
 
@@ -1979,21 +2861,24 @@ fn storage(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
         &["-r".into(), ".mounts | map(.device) | unique[]".into()],
         &plan,
     )?;
-    for dev in devices.lines().filter(|v| !v.is_empty()) {
-        visible(
+
+    for dev in devices.lines().filter(|value| !value.is_empty()) {
+        storage_tool(
             raiz,
             "udisksctl",
             &["unmount".into(), "-b".into(), dev.into()],
+            json,
         )?;
     }
 
     emitir_progreso(json, 88, "powering_off");
 
     let disk = jq_texto(raiz, &plan, ".disk")?;
-    visible(
+    storage_tool(
         raiz,
         "udisksctl",
         &["power-off".into(), "-b".into(), disk.clone()],
+        json,
     )?;
 
     emitir_progreso(json, 100, "done");
@@ -8788,6 +9673,42 @@ mod tests {
     fn almacenamiento_no_declara_sync_global() {
         let strategy = "syncfs-per-filesystem";
         assert_ne!(strategy, "sync-global");
+    }
+
+    #[test]
+    fn transferencia_local_persiste_y_verifica() {
+        let root = env::temp_dir().join(format!("korunix-transfer-test-{}", stamp()));
+        let source_dir = root.join("origen");
+        let destination = root.join("destino");
+
+        fs::create_dir_all(&source_dir).unwrap();
+        fs::create_dir_all(&destination).unwrap();
+
+        let source = source_dir.join("prueba.bin");
+        fs::write(&source, b"korunix-transferencia-segura\n").unwrap();
+
+        let sources = transfer_sources(&[source.display().to_string()]).unwrap();
+        let copied = transferir_archivos_a_directorio(&sources, &destination, false).unwrap();
+
+        assert_eq!(copied.len(), 1);
+        assert_eq!(
+            fs::read(destination.join("prueba.bin")).unwrap(),
+            b"korunix-transferencia-segura\n"
+        );
+
+        let partials = fs::read_dir(&destination)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".korunix-transfer-")
+            })
+            .count();
+
+        assert_eq!(partials, 0);
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

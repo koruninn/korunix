@@ -2394,10 +2394,68 @@ struct Estado {
 
 enum EventoMotor {
     Progreso(u8, String),
+    Transferencia(Value),
     Terminado(Result<String, String>),
 }
 
+fn texto_progreso_transferencia(idioma: Idioma, clave: &str) -> &'static str {
+    match (idioma, clave) {
+        (Idioma::Ingles, "copying_files") => "Copying files…",
+        (Idioma::BelarusLatino, "copying_files") => "Kapijavannje fajłaŭ…",
+        (Idioma::Belarus, "copying_files") => "Капіраванне файлаў…",
+        (Idioma::Catalan, "copying_files") => "Copiant fitxers…",
+        (Idioma::Checo, "copying_files") => "Kopírování souborů…",
+        (Idioma::Aleman, "copying_files") => "Dateien werden kopiert…",
+        (Idioma::Frances, "copying_files") => "Copie des fichiers…",
+        (Idioma::Gallego, "copying_files") => "Copiando ficheiros…",
+        (Idioma::Italiano, "copying_files") => "Copia dei file…",
+        (Idioma::Coreano, "copying_files") => "파일 복사 중…",
+        (Idioma::Kurdo, "copying_files") => "Pel tên kopîkirin…",
+        (Idioma::Neerlandes, "copying_files") => "Bestanden kopiëren…",
+        (Idioma::NoruegoNynorsk, "copying_files") => "Kopierer filer…",
+        (Idioma::Polaco, "copying_files") => "Kopiowanie plików…",
+        (Idioma::PortuguesBrasil, "copying_files") => "Copiando arquivos…",
+        (Idioma::Ruso, "copying_files") => "Копирование файлов…",
+        (Idioma::Sueco, "copying_files") => "Kopierar filer…",
+        (Idioma::Turco, "copying_files") => "Dosyalar kopyalanıyor…",
+        (Idioma::Ucraniano, "copying_files") => "Копіювання файлів…",
+        (Idioma::Vietnamita, "copying_files") => "Đang sao chép tệp…",
+        (Idioma::ChinoSimplificado, "copying_files") => "正在复制文件…",
+        (Idioma::Hungaro, "copying_files") => "Fájlok másolása…",
+        (Idioma::Espanol, "copying_files") => "Copiando archivos…",
+
+        (Idioma::Ingles, "verifying_transfer") => "Verifying the copy…",
+        (Idioma::BelarusLatino, "verifying_transfer") => "Pravierka kopii…",
+        (Idioma::Belarus, "verifying_transfer") => "Праверка копіі…",
+        (Idioma::Catalan, "verifying_transfer") => "Verificant la còpia…",
+        (Idioma::Checo, "verifying_transfer") => "Ověřování kopie…",
+        (Idioma::Aleman, "verifying_transfer") => "Kopie wird überprüft…",
+        (Idioma::Frances, "verifying_transfer") => "Vérification de la copie…",
+        (Idioma::Gallego, "verifying_transfer") => "Verificando a copia…",
+        (Idioma::Italiano, "verifying_transfer") => "Verifica della copia…",
+        (Idioma::Coreano, "verifying_transfer") => "복사본 확인 중…",
+        (Idioma::Kurdo, "verifying_transfer") => "Kopî tê piştrastkirin…",
+        (Idioma::Neerlandes, "verifying_transfer") => "De kopie controleren…",
+        (Idioma::NoruegoNynorsk, "verifying_transfer") => "Kontrollerer kopien…",
+        (Idioma::Polaco, "verifying_transfer") => "Weryfikowanie kopii…",
+        (Idioma::PortuguesBrasil, "verifying_transfer") => "Verificando a cópia…",
+        (Idioma::Ruso, "verifying_transfer") => "Проверка копии…",
+        (Idioma::Sueco, "verifying_transfer") => "Verifierar kopian…",
+        (Idioma::Turco, "verifying_transfer") => "Kopya doğrulanıyor…",
+        (Idioma::Ucraniano, "verifying_transfer") => "Перевірка копії…",
+        (Idioma::Vietnamita, "verifying_transfer") => "Đang xác minh bản sao…",
+        (Idioma::ChinoSimplificado, "verifying_transfer") => "正在验证副本…",
+        (Idioma::Hungaro, "verifying_transfer") => "A másolat ellenőrzése…",
+        (Idioma::Espanol, "verifying_transfer") => "Verificando la copia…",
+        _ => "Korunix",
+    }
+}
+
 fn texto_progreso(idioma: Idioma, clave: &str) -> &'static str {
+    if matches!(clave, "copying_files" | "verifying_transfer") {
+        return texto_progreso_transferencia(idioma, clave);
+    }
+
     match (idioma, clave) {
         (Idioma::Ingles, "reading") => "Reading this computer…",
         (Idioma::BelarusLatino, "reading") => "Čytannje hetaha kamp'jutara...",
@@ -2890,6 +2948,97 @@ fn mostrar_progreso(estado: &Estado, porcentaje: u8, clave: &str) {
     estado.progreso.set_reveal_child(true);
 }
 
+fn bytes_humanos(bytes: u64) -> String {
+    const KIB: f64 = 1024.0;
+    const MIB: f64 = KIB * 1024.0;
+    const GIB: f64 = MIB * 1024.0;
+
+    let bytes_f = bytes as f64;
+    if bytes_f >= GIB {
+        format!("{:.1} GiB", bytes_f / GIB)
+    } else if bytes_f >= MIB {
+        format!("{:.1} MiB", bytes_f / MIB)
+    } else if bytes_f >= KIB {
+        format!("{:.1} KiB", bytes_f / KIB)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+fn mostrar_progreso_transferencia(estado: &Estado, evento: &Value) {
+    let stage = evento
+        .get("stage")
+        .and_then(Value::as_str)
+        .unwrap_or("copying_files");
+
+    let current = evento
+        .get("current")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty());
+
+    let file_index = evento.get("fileIndex").and_then(Value::as_u64).unwrap_or(0);
+    let file_count = evento.get("fileCount").and_then(Value::as_u64).unwrap_or(0);
+
+    let mut title = texto_progreso(estado.idioma, stage).to_string();
+    if let Some(current) = current {
+        if file_count > 0 && file_index > 0 {
+            title.push_str(&format!(" · {current} · {file_index}/{file_count}"));
+        } else {
+            title.push_str(&format!(" · {current}"));
+        }
+    }
+    estado.progreso_texto.set_text(&title);
+
+    if let Some(percent) = evento
+        .get("percent")
+        .and_then(Value::as_u64)
+        .and_then(|value| u8::try_from(value).ok())
+    {
+        let percent = percent.min(100);
+        estado
+            .progreso_barra
+            .set_fraction(f64::from(percent) / 100.0);
+
+        let mut detail = format!("{percent}%");
+
+        let current_bytes = evento
+            .get("currentFileBytes")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let current_total = evento
+            .get("currentFileTotal")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+
+        if current_total > 0 {
+            detail.push_str(&format!(
+                " · {} / {}",
+                bytes_humanos(current_bytes),
+                bytes_humanos(current_total)
+            ));
+        }
+
+        if let Some(speed) = evento.get("bytesPerSecond").and_then(Value::as_f64) {
+            if speed > 0.0 {
+                detail.push_str(&format!(" · {:.1} MiB/s", speed / 1024.0 / 1024.0));
+            }
+        }
+        if let Some(eta) = evento.get("etaSeconds").and_then(Value::as_u64) {
+            detail.push_str(&format!(" · ~{eta} s"));
+        }
+
+        estado.progreso_barra.set_text(Some(&detail));
+    } else {
+        // Guardar y verificar no tienen una duración fiable de antemano.
+        // Se muestra actividad sin fabricar un porcentaje.
+        estado.progreso_barra.set_fraction(0.0);
+        estado.progreso_barra.pulse();
+        estado.progreso_barra.set_text(Some("…"));
+    }
+
+    estado.progreso.set_reveal_child(true);
+}
+
 fn ocultar_progreso(estado: &Estado) {
     estado.progreso.set_reveal_child(false);
     estado.progreso_barra.set_fraction(0.0);
@@ -2943,6 +3092,21 @@ fn ejecutar_motor_trabajador(
 
         for linea in BufReader::new(stderr).lines() {
             let linea = linea.map_err(|error| format!("No pude leer el motor: {error}"))?;
+
+            if let Some(resto) = linea.strip_prefix("KORUNIX_TRANSFER\t") {
+                match serde_json::from_str::<Value>(resto) {
+                    Ok(evento) => {
+                        let _ = emisor.send(EventoMotor::Transferencia(evento));
+                        continue;
+                    }
+                    Err(error) => {
+                        detalles.push(format!(
+                            "Korunix recibió un progreso de transferencia inválido: {error}"
+                        ));
+                        continue;
+                    }
+                }
+            }
 
             if let Some(resto) = linea.strip_prefix("KORUNIX_PROGRESS\t") {
                 let mut partes = resto.splitn(2, '\t');
@@ -3011,10 +3175,15 @@ fn ejecutar_motor(estado: &Estado, argumentos: &[&str]) -> Result<String, String
     });
 
     let contexto = glib::MainContext::default();
+    let mut hubo_transferencia = false;
     let resultado = loop {
         match receptor.try_recv() {
             Ok(EventoMotor::Progreso(porcentaje, etapa)) => {
                 mostrar_progreso(estado, porcentaje, &etapa);
+            }
+            Ok(EventoMotor::Transferencia(evento)) => {
+                hubo_transferencia = true;
+                mostrar_progreso_transferencia(estado, &evento);
             }
             Ok(EventoMotor::Terminado(resultado)) => break resultado,
             Err(TryRecvError::Empty) => {
@@ -3033,7 +3202,7 @@ fn ejecutar_motor(estado: &Estado, argumentos: &[&str]) -> Result<String, String
         mostrar_progreso(estado, 100, "done");
     }
 
-    if etapa_inicial.is_some() {
+    if etapa_inicial.is_some() || hubo_transferencia {
         ocultar_progreso(estado);
     }
 
@@ -5647,6 +5816,107 @@ fn tamano_almacenamiento_humano(valor: &str) -> String {
     valor.to_string()
 }
 
+fn texto_transferencia(idioma: Idioma, clave: &str) -> &'static str {
+    match (idioma, clave) {
+        (Idioma::Ingles, "title") => "Safe transfers",
+        (Idioma::BelarusLatino, "title") => "Biaspiečnyja pieradačy",
+        (Idioma::Belarus, "title") => "Бяспечныя перадачы",
+        (Idioma::Catalan, "title") => "Transferències segures",
+        (Idioma::Checo, "title") => "Bezpečné přenosy",
+        (Idioma::Aleman, "title") => "Sichere Übertragungen",
+        (Idioma::Frances, "title") => "Transferts sécurisés",
+        (Idioma::Gallego, "title") => "Transferencias seguras",
+        (Idioma::Italiano, "title") => "Trasferimenti sicuri",
+        (Idioma::Coreano, "title") => "안전한 전송",
+        (Idioma::Kurdo, "title") => "Veguhestinên ewle",
+        (Idioma::Neerlandes, "title") => "Veilige overdrachten",
+        (Idioma::NoruegoNynorsk, "title") => "Trygge overføringar",
+        (Idioma::Polaco, "title") => "Bezpieczne transfery",
+        (Idioma::PortuguesBrasil, "title") => "Transferências seguras",
+        (Idioma::Ruso, "title") => "Безопасные передачи",
+        (Idioma::Sueco, "title") => "Säkra överföringar",
+        (Idioma::Turco, "title") => "Güvenli aktarımlar",
+        (Idioma::Ucraniano, "title") => "Безпечні передавання",
+        (Idioma::Vietnamita, "title") => "Chuyển tệp an toàn",
+        (Idioma::ChinoSimplificado, "title") => "安全传输",
+        (Idioma::Hungaro, "title") => "Biztonságos átvitelek",
+        (Idioma::Espanol, "title") => "Transferencias seguras",
+
+        (Idioma::Ingles, "description") => "Choose files for an external drive. Korunix waits until the data is really saved and verifies the copy before reporting completion.",
+        (Idioma::BelarusLatino, "description") => "Vybierycie fajły dla zniešniaha dyska. Korunix čakaie, pakul dadzienyja sapraŭdy zapišucca, i pravieraie kopiju.",
+        (Idioma::Belarus, "description") => "Выберыце файлы для знешняга дыска. Korunix чакае фактычнага запісу даных і правярае копію.",
+        (Idioma::Catalan, "description") => "Tria fitxers per a una unitat externa. Korunix espera que les dades quedin realment desades i verifica la còpia.",
+        (Idioma::Checo, "description") => "Vyberte soubory pro externí jednotku. Korunix počká na skutečné uložení dat a kopii ověří.",
+        (Idioma::Aleman, "description") => "Wähle Dateien für ein externes Laufwerk. Korunix wartet auf die tatsächliche Speicherung und überprüft die Kopie.",
+        (Idioma::Frances, "description") => "Choisissez des fichiers pour un disque externe. Korunix attend leur enregistrement réel puis vérifie la copie.",
+        (Idioma::Gallego, "description") => "Escolle ficheiros para unha unidade externa. Korunix agarda a que os datos se garden realmente e verifica a copia.",
+        (Idioma::Italiano, "description") => "Scegli i file per un'unità esterna. Korunix attende il salvataggio effettivo dei dati e verifica la copia.",
+        (Idioma::Coreano, "description") => "외장 드라이브로 보낼 파일을 선택하세요. Korunix는 실제 저장이 끝날 때까지 기다린 뒤 복사본을 확인합니다.",
+        (Idioma::Kurdo, "description") => "Pelên ji bo ajokerek derve hilbijêrin. Korunix li benda tomarkirina rastîn dimîne û kopiyê piştrast dike.",
+        (Idioma::Neerlandes, "description") => "Kies bestanden voor een externe schijf. Korunix wacht tot de gegevens echt zijn opgeslagen en controleert de kopie.",
+        (Idioma::NoruegoNynorsk, "description") => "Vel filer til ei ekstern eining. Korunix ventar til data faktisk er lagra og kontrollerer kopien.",
+        (Idioma::Polaco, "description") => "Wybierz pliki dla dysku zewnętrznego. Korunix czeka na rzeczywisty zapis danych i weryfikuje kopię.",
+        (Idioma::PortuguesBrasil, "description") => "Escolha arquivos para uma unidade externa. O Korunix espera os dados serem realmente gravados e verifica a cópia.",
+        (Idioma::Ruso, "description") => "Выберите файлы для внешнего накопителя. Korunix ждёт фактической записи данных и проверяет копию.",
+        (Idioma::Sueco, "description") => "Välj filer för en extern enhet. Korunix väntar tills data verkligen har sparats och verifierar kopian.",
+        (Idioma::Turco, "description") => "Harici sürücü için dosyaları seçin. Korunix veriler gerçekten kaydedilene kadar bekler ve kopyayı doğrular.",
+        (Idioma::Ucraniano, "description") => "Виберіть файли для зовнішнього накопичувача. Korunix чекає фактичного запису даних і перевіряє копію.",
+        (Idioma::Vietnamita, "description") => "Chọn tệp cho ổ đĩa ngoài. Korunix chờ dữ liệu được ghi thật sự rồi xác minh bản sao.",
+        (Idioma::ChinoSimplificado, "description") => "选择要传到外部驱动器的文件。Korunix 会等待数据真正写入并验证副本。",
+        (Idioma::Hungaro, "description") => "Válassz fájlokat egy külső meghajtóhoz. A Korunix megvárja a tényleges mentést, majd ellenőrzi a másolatot.",
+        (Idioma::Espanol, "description") => "Elige archivos para una unidad externa. Korunix esperará a que los datos queden realmente guardados y verificará la copia antes de darla por terminada.",
+
+        (Idioma::Ingles, "action") => "Transfer files",
+        (Idioma::BelarusLatino, "action") => "Pieradać fajły",
+        (Idioma::Belarus, "action") => "Перадаць файлы",
+        (Idioma::Catalan, "action") => "Transferir fitxers",
+        (Idioma::Checo, "action") => "Přenést soubory",
+        (Idioma::Aleman, "action") => "Dateien übertragen",
+        (Idioma::Frances, "action") => "Transférer des fichiers",
+        (Idioma::Gallego, "action") => "Transferir ficheiros",
+        (Idioma::Italiano, "action") => "Trasferisci file",
+        (Idioma::Coreano, "action") => "파일 전송",
+        (Idioma::Kurdo, "action") => "Pelan veguhêze",
+        (Idioma::Neerlandes, "action") => "Bestanden overzetten",
+        (Idioma::NoruegoNynorsk, "action") => "Overfør filer",
+        (Idioma::Polaco, "action") => "Przenieś pliki",
+        (Idioma::PortuguesBrasil, "action") => "Transferir arquivos",
+        (Idioma::Ruso, "action") => "Передать файлы",
+        (Idioma::Sueco, "action") => "Överför filer",
+        (Idioma::Turco, "action") => "Dosyaları aktar",
+        (Idioma::Ucraniano, "action") => "Передати файли",
+        (Idioma::Vietnamita, "action") => "Chuyển tệp",
+        (Idioma::ChinoSimplificado, "action") => "传输文件",
+        (Idioma::Hungaro, "action") => "Fájlok átvitele",
+        (Idioma::Espanol, "action") => "Transferir archivos",
+
+        (Idioma::Ingles, "done") => "Transfer completed and verified. You can eject the drive now if you are finished using it.",
+        (Idioma::BelarusLatino, "done") => "Pieradača zavieršana i pravierana. Kali bolš nie karystajeciesia dyskam, jaho možna vyniać.",
+        (Idioma::Belarus, "done") => "Перадача завершана і праверана. Калі назапашвальнік больш не патрэбны, яго можна выняць.",
+        (Idioma::Catalan, "done") => "Transferència completada i verificada. Ara pots expulsar la unitat si ja no la necessites.",
+        (Idioma::Checo, "done") => "Přenos byl dokončen a ověřen. Pokud jednotku už nepotřebujete, můžete ji vysunout.",
+        (Idioma::Aleman, "done") => "Übertragung abgeschlossen und überprüft. Wenn du das Laufwerk nicht mehr brauchst, kannst du es jetzt auswerfen.",
+        (Idioma::Frances, "done") => "Transfert terminé et vérifié. Vous pouvez maintenant éjecter le disque si vous n'en avez plus besoin.",
+        (Idioma::Gallego, "done") => "Transferencia completada e verificada. Xa podes expulsar a unidade se remataches de usala.",
+        (Idioma::Italiano, "done") => "Trasferimento completato e verificato. Ora puoi espellere l'unità se hai finito di usarla.",
+        (Idioma::Coreano, "done") => "전송과 확인이 완료되었습니다. 드라이브 사용을 마쳤다면 지금 꺼낼 수 있습니다.",
+        (Idioma::Kurdo, "done") => "Veguhestin qediya û hate piştrastkirin. Heke karê te bi ajokerê qediya, dikarî niha derxî.",
+        (Idioma::Neerlandes, "done") => "Overdracht voltooid en gecontroleerd. Als je klaar bent met de schijf, kun je deze nu uitwerpen.",
+        (Idioma::NoruegoNynorsk, "done") => "Overføringa er fullført og kontrollert. Du kan løyse ut eininga no dersom du er ferdig med henne.",
+        (Idioma::Polaco, "done") => "Transfer zakończony i zweryfikowany. Jeśli nie potrzebujesz już dysku, możesz go teraz wysunąć.",
+        (Idioma::PortuguesBrasil, "done") => "Transferência concluída e verificada. Você pode ejetar a unidade agora se terminou de usá-la.",
+        (Idioma::Ruso, "done") => "Передача завершена и проверена. Если накопитель больше не нужен, его можно извлечь.",
+        (Idioma::Sueco, "done") => "Överföringen är klar och verifierad. Du kan mata ut enheten nu om du är klar med den.",
+        (Idioma::Turco, "done") => "Aktarım tamamlandı ve doğrulandı. Sürücüyle işiniz bittiyse şimdi çıkarabilirsiniz.",
+        (Idioma::Ucraniano, "done") => "Передавання завершено й перевірено. Якщо накопичувач більше не потрібен, його можна витягнути.",
+        (Idioma::Vietnamita, "done") => "Đã chuyển và xác minh xong. Nếu đã dùng xong ổ đĩa, bạn có thể đẩy ra ngay.",
+        (Idioma::ChinoSimplificado, "done") => "传输已完成并验证。如果已使用完驱动器，现在可以弹出。",
+        (Idioma::Hungaro, "done") => "Az átvitel befejeződött és ellenőrzött. Ha végeztél a meghajtóval, most kiadhatod.",
+        (Idioma::Espanol, "done") => "Transferencia completada y verificada. Si ya terminaste de usar la unidad, puedes expulsarla ahora.",
+        _ => "Korunix",
+    }
+}
+
 fn pagina_almacenamiento(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
 
@@ -5663,25 +5933,453 @@ fn pagina_almacenamiento(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesP
             .unwrap_or(false)
     });
 
-    let pesada = adw::SwitchRow::new();
-    pesada.set_title(&localizar_visible(
-        idioma_actual(),
-        "Expulsión después de archivos grandes",
-    ));
-    pesada.set_subtitle(&localizar_visible(
-        idioma_actual(),
-        "Actívalo antes de expulsar una unidad si acabas de copiar una ISO u otros archivos grandes. Korunix esperará a que los datos pendientes terminen de escribirse.",
-    ));
-
     if hay_extraibles {
+        let grupo_transferencias = adw::PreferencesGroup::new();
+        grupo_transferencias.set_title(texto_transferencia(estado.idioma, "title"));
+        grupo_transferencias
+            .set_description(Some(texto_transferencia(estado.idioma, "description")));
+
+        for dispositivo in dispositivos.iter().filter(|dispositivo| {
+            dispositivo
+                .get("removable")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        }) {
+            let ruta = dispositivo
+                .get("device")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+
+            if ruta.is_empty() {
+                continue;
+            }
+
+            let modelo = dispositivo
+                .get("model")
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or(&ruta)
+                .to_string();
+
+            let tamano = tamano_almacenamiento_humano(
+                dispositivo
+                    .get("size")
+                    .and_then(Value::as_str)
+                    .unwrap_or("—"),
+            );
+
+            let row = adw::ActionRow::new();
+            row.set_title(&modelo);
+            row.set_subtitle(&format!("{tamano} · {}", texto(estado.idioma, "removable")));
+
+            let boton = gtk::Button::with_label(texto_transferencia(estado.idioma, "action"));
+            boton.add_css_class("suggested-action");
+            boton.set_valign(gtk::Align::Center);
+            row.add_suffix(&boton);
+            grupo_transferencias.add(&row);
+
+            let estado_seleccion = Rc::clone(&estado);
+            let ruta_seleccion = ruta.clone();
+
+            boton.connect_clicked(move |boton| {
+                let ventana = boton
+                    .root()
+                    .and_then(|root| root.downcast::<gtk::Window>().ok());
+
+                let chooser = gtk::FileChooserNative::new(
+                    Some(texto_transferencia(estado_seleccion.idioma, "action")),
+                    ventana.as_ref(),
+                    gtk::FileChooserAction::Open,
+                    Some(texto_transferencia(estado_seleccion.idioma, "action")),
+                    Some(texto(estado_seleccion.idioma, "cancel")),
+                );
+
+                chooser.set_select_multiple(true);
+
+                let estado_archivos = Rc::clone(&estado_seleccion);
+                let ruta_archivos = ruta_seleccion.clone();
+                let boton_origen = boton.clone();
+
+                chooser.connect_response(move |dialogo, response| {
+                    if response != gtk::ResponseType::Accept {
+                        return;
+                    }
+
+                    let files = dialogo.files();
+                    let mut paths = Vec::<String>::new();
+
+                    for index in 0..files.n_items() {
+                        let Some(object) = files.item(index) else {
+                            continue;
+                        };
+                        let Ok(file) = object.downcast::<gio::File>() else {
+                            continue;
+                        };
+                        let Some(path) = file.path() else {
+                            continue;
+                        };
+                        paths.push(path.display().to_string());
+                    }
+
+                    if paths.is_empty() {
+                        mostrar_error(
+                            &estado_archivos,
+                            "Selecciona al menos un archivo local para transferir.",
+                        );
+                        return;
+                    }
+
+                    let mut plan_args = vec![
+                        "storage".to_string(),
+                        "transfer".to_string(),
+                        ruta_archivos.clone(),
+                    ];
+
+                    for path in &paths {
+                        plan_args.push("--source".to_string());
+                        plan_args.push(path.clone());
+                    }
+
+                    plan_args.push("--plan".to_string());
+                    plan_args.push("--json".to_string());
+
+                    let plan = match ejecutar_json_owned(&estado_archivos, &plan_args) {
+                        Ok(plan) => plan,
+                        Err(error) => {
+                            mostrar_error(&estado_archivos, error);
+                            return;
+                        }
+                    };
+
+                    let conflicts = plan
+                        .get("conflicts")
+                        .and_then(Value::as_array)
+                        .cloned()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter_map(|value| value.as_str().map(str::to_string))
+                        .collect::<Vec<_>>();
+
+                    if !conflicts.is_empty() {
+                        mostrar_error(
+                            &estado_archivos,
+                            format!(
+                                "La unidad ya contiene estos nombres y Korunix no los reemplazará: {}",
+                                conflicts.join(", ")
+                            ),
+                        );
+                        return;
+                    }
+
+                    let total = plan
+                        .get("totalBytes")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0);
+                    let count = plan
+                        .get("fileCount")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(paths.len() as u64);
+
+                    let body = format!(
+                        "{} · {count} · {}. {}",
+                        texto_transferencia(estado_archivos.idioma, "action"),
+                        bytes_humanos(total),
+                        texto_transferencia(estado_archivos.idioma, "description"),
+                    );
+
+                    let confirmacion = dialogo_accion(
+                        &boton_origen,
+                        &estado_archivos,
+                        &body,
+                        texto_transferencia(estado_archivos.idioma, "action"),
+                        false,
+                    );
+
+                    let estado_transferir = Rc::clone(&estado_archivos);
+                    let ruta_transferir = ruta_archivos.clone();
+                    let boton_final = boton_origen.clone();
+
+                    confirmacion.connect_response(None, move |_, answer| {
+                        if answer != "apply" {
+                            return;
+                        }
+
+                        let mut execute_args = plan_args.clone();
+                        execute_args.retain(|value| value != "--plan");
+                        execute_args.insert(
+                            execute_args.len().saturating_sub(1),
+                            "--yes".to_string(),
+                        );
+
+                        match ejecutar_json_owned(&estado_transferir, &execute_args) {
+                            Ok(result) => {
+                                let disk = result
+                                    .get("disk")
+                                    .and_then(Value::as_str)
+                                    .unwrap_or(&ruta_transferir)
+                                    .to_string();
+
+                                mostrar_exito(
+                                    &estado_transferir,
+                                    texto_transferencia(estado_transferir.idioma, "done"),
+                                );
+
+                                let offer = dialogo_confirmacion(
+                                    &boton_final,
+                                    estado_transferir.idioma,
+                                    texto_transferencia(estado_transferir.idioma, "done"),
+                                    texto(estado_transferir.idioma, "eject"),
+                                    false,
+                                );
+
+                                let estado_eject = Rc::clone(&estado_transferir);
+                                offer.connect_response(None, move |_, response| {
+                                    if response != "apply" {
+                                        return;
+                                    }
+
+                                    match ejecutar_json(
+                                        &estado_eject,
+                                        &[
+                                            "storage",
+                                            "eject",
+                                            &disk,
+                                            "--yes",
+                                            "--json",
+                                        ],
+                                    ) {
+                                        Ok(_) => {
+                                            mostrar_exito(
+                                                &estado_eject,
+                                                texto(
+                                                    estado_eject.idioma,
+                                                    "safe_disconnect",
+                                                ),
+                                            );
+                                            recargar(Rc::clone(&estado_eject));
+                                        }
+                                        Err(error) => mostrar_error(&estado_eject, error),
+                                    }
+                                });
+
+                                offer.present();
+                            }
+                            Err(error) => mostrar_error(&estado_transferir, error),
+                        }
+                    });
+
+                    confirmacion.present();
+                });
+
+                chooser.show();
+            });
+        }
+
+        pagina.add(&grupo_transferencias);
+
         let grupo_seguridad = adw::PreferencesGroup::new();
         grupo_seguridad.set_title(&localizar_visible(idioma_actual(), "Expulsión segura"));
         grupo_seguridad.set_description(Some(&localizar_visible(
             idioma_actual(),
             "La unidad solo se marcará como segura para desconectar después de desmontarla y apagarla correctamente.",
         )));
+
+        let pesada = adw::SwitchRow::new();
+        pesada.set_title(&localizar_visible(
+            idioma_actual(),
+            "Expulsión después de archivos grandes",
+        ));
+        pesada.set_subtitle(&localizar_visible(
+            idioma_actual(),
+            "Úsalo si copiaste archivos grandes fuera de Korunix. Las transferencias hechas con el asistente ya esperan y verifican la escritura por sí mismas.",
+        ));
         grupo_seguridad.add(&pesada);
         pagina.add(&grupo_seguridad);
+
+        let grupo = adw::PreferencesGroup::new();
+        grupo.set_title(&localizar_visible(idioma_actual(), "Unidades"));
+
+        for dispositivo in &dispositivos {
+            let ruta = dispositivo
+                .get("device")
+                .and_then(Value::as_str)
+                .unwrap_or("—")
+                .to_string();
+
+            let modelo = dispositivo
+                .get("model")
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or(&ruta)
+                .to_string();
+
+            let tamano = tamano_almacenamiento_humano(
+                dispositivo
+                    .get("size")
+                    .and_then(Value::as_str)
+                    .unwrap_or("—"),
+            );
+
+            let extraible = dispositivo
+                .get("removable")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+
+            let montajes = dispositivo
+                .get("mountPoints")
+                .and_then(Value::as_array)
+                .map(|points| {
+                    points
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .filter(|point| !point.trim().is_empty())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+
+            let disponible_inicio = dispositivo
+                .get("dataVolumes")
+                .and_then(Value::as_array)
+                .map(|volumes| {
+                    volumes.iter().any(|volume| {
+                        volume.get("managed").and_then(Value::as_bool) == Some(true)
+                            && volume.get("availableAtLogin").and_then(Value::as_bool) == Some(true)
+                    })
+                })
+                .unwrap_or(false);
+
+            let estado_unidad = if extraible {
+                if montajes.is_empty() {
+                    "Extraíble · No está disponible ahora"
+                } else {
+                    "Extraíble · Disponible ahora"
+                }
+            } else if disponible_inicio {
+                "Interna · Lista desde el inicio"
+            } else if montajes.is_empty() {
+                "Interna"
+            } else {
+                "Interna · Disponible ahora"
+            };
+
+            let row = adw::ActionRow::new();
+            row.set_title(&modelo);
+            row.set_subtitle(&localizar_visible(
+                idioma_actual(),
+                &format!("{tamano} · {estado_unidad}"),
+            ));
+
+            if extraible {
+                let boton = gtk::Button::with_label(texto(estado.idioma, "eject"));
+                boton.set_valign(gtk::Align::Center);
+                row.add_suffix(&boton);
+
+                let estado_expulsion = Rc::clone(&estado);
+                let pesada_expulsion = pesada.clone();
+                let ruta_expulsion = ruta.clone();
+
+                boton.connect_clicked(move |boton| {
+                    let modo_pesado = pesada_expulsion.is_active();
+
+                    let plan = if modo_pesado {
+                        ejecutar_json(
+                            &estado_expulsion,
+                            &[
+                                "storage",
+                                "eject",
+                                &ruta_expulsion,
+                                "--heavy",
+                                "--plan",
+                                "--json",
+                            ],
+                        )
+                    } else {
+                        ejecutar_json(
+                            &estado_expulsion,
+                            &[
+                                "storage",
+                                "eject",
+                                &ruta_expulsion,
+                                "--plan",
+                                "--json",
+                            ],
+                        )
+                    };
+
+                    if let Err(error) = plan {
+                        mostrar_error(&estado_expulsion, error);
+                        return;
+                    }
+
+                    let body = if modo_pesado {
+                        "¿Expulsar esta unidad? Korunix esperará primero a que terminen de escribirse los datos pendientes y solo entonces la apagará."
+                    } else {
+                        "¿Expulsar esta unidad de forma segura? Korunix la desmontará y apagará antes de indicar que puede desconectarse."
+                    };
+
+                    let dialogo = dialogo_confirmacion(
+                        boton,
+                        estado_expulsion.idioma,
+                        body,
+                        texto(estado_expulsion.idioma, "eject"),
+                        false,
+                    );
+
+                    let estado_aplicar = Rc::clone(&estado_expulsion);
+                    let ruta_aplicar = ruta_expulsion.clone();
+
+                    dialogo.connect_response(None, move |_, respuesta| {
+                        if respuesta != "apply" {
+                            return;
+                        }
+
+                        let result = if modo_pesado {
+                            ejecutar_json(
+                                &estado_aplicar,
+                                &[
+                                    "storage",
+                                    "eject",
+                                    &ruta_aplicar,
+                                    "--heavy",
+                                    "--yes",
+                                    "--json",
+                                ],
+                            )
+                        } else {
+                            ejecutar_json(
+                                &estado_aplicar,
+                                &[
+                                    "storage",
+                                    "eject",
+                                    &ruta_aplicar,
+                                    "--yes",
+                                    "--json",
+                                ],
+                            )
+                        };
+
+                        match result {
+                            Ok(_) => {
+                                mostrar_exito(
+                                    &estado_aplicar,
+                                    texto(estado_aplicar.idioma, "safe_disconnect"),
+                                );
+                                recargar(Rc::clone(&estado_aplicar));
+                            }
+                            Err(error) => mostrar_error(&estado_aplicar, error),
+                        }
+                    });
+
+                    dialogo.present();
+                });
+            }
+
+            grupo.add(&row);
+        }
+
+        pagina.add(&grupo);
+        return pagina;
     }
 
     let grupo = adw::PreferencesGroup::new();
@@ -5700,14 +6398,12 @@ fn pagina_almacenamiento(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesP
             .and_then(Value::as_str)
             .unwrap_or("—")
             .to_string();
-
         let modelo = dispositivo
             .get("model")
             .and_then(Value::as_str)
-            .filter(|valor| !valor.trim().is_empty())
+            .filter(|value| !value.trim().is_empty())
             .unwrap_or(&ruta)
             .to_string();
-
         let tamano = tamano_almacenamiento_humano(
             dispositivo
                 .get("size")
@@ -5715,33 +6411,21 @@ fn pagina_almacenamiento(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesP
                 .unwrap_or("—"),
         );
 
-        let extraible = dispositivo
-            .get("removable")
-            .and_then(Value::as_bool)
+        let disponible_inicio = dispositivo
+            .get("dataVolumes")
+            .and_then(Value::as_array)
+            .map(|volumes| {
+                volumes.iter().any(|volume| {
+                    volume.get("managed").and_then(Value::as_bool) == Some(true)
+                        && volume.get("availableAtLogin").and_then(Value::as_bool) == Some(true)
+                })
+            })
             .unwrap_or(false);
 
-        let montajes = dispositivo
-            .get("mountPoints")
-            .and_then(Value::as_array)
-            .map(|puntos| {
-                puntos
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .filter(|punto| !punto.trim().is_empty())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-
-        let estado_unidad = if extraible {
-            if montajes.is_empty() {
-                "Extraíble · No está montada"
-            } else {
-                "Extraíble · Disponible ahora"
-            }
-        } else if montajes.is_empty() {
-            "Interna"
+        let estado_unidad = if disponible_inicio {
+            "Interna · Lista desde el inicio"
         } else {
-            "Interna · Disponible ahora"
+            "Interna"
         };
 
         let row = adw::ActionRow::new();
@@ -5750,100 +6434,6 @@ fn pagina_almacenamiento(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesP
             idioma_actual(),
             &format!("{tamano} · {estado_unidad}"),
         ));
-
-        if extraible {
-            let boton = gtk::Button::with_label(texto(estado.idioma, "eject"));
-            boton.set_valign(gtk::Align::Center);
-            row.add_suffix(&boton);
-
-            let estado_expulsion = Rc::clone(&estado);
-            let pesada_expulsion = pesada.clone();
-            let ruta_expulsion = ruta.clone();
-
-            boton.connect_clicked(move |boton| {
-                let modo_pesado = pesada_expulsion.is_active();
-
-                let plan = if modo_pesado {
-                    ejecutar_json(
-                        &estado_expulsion,
-                        &[
-                            "storage",
-                            "eject",
-                            &ruta_expulsion,
-                            "--heavy",
-                            "--plan",
-                            "--json",
-                        ],
-                    )
-                } else {
-                    ejecutar_json(
-                        &estado_expulsion,
-                        &["storage", "eject", &ruta_expulsion, "--plan", "--json"],
-                    )
-                };
-
-                if let Err(error) = plan {
-                    mostrar_error(&estado_expulsion, error);
-                    return;
-                }
-
-                let cuerpo = if modo_pesado {
-                    "¿Expulsar esta unidad? Korunix esperará primero a que terminen de escribirse los datos pendientes y solo entonces la apagará."
-                } else {
-                    "¿Expulsar esta unidad de forma segura? Korunix la desmontará y apagará antes de indicar que puede desconectarse."
-                };
-
-                let dialogo = dialogo_confirmacion(
-                    boton,
-                    estado_expulsion.idioma,
-                    cuerpo,
-                    texto(estado_expulsion.idioma, "eject"),
-                    false,
-                );
-
-                let estado_aplicar = Rc::clone(&estado_expulsion);
-                let ruta_aplicar = ruta_expulsion.clone();
-
-                dialogo.connect_response(None, move |_, respuesta| {
-                    if respuesta != "apply" {
-                        return;
-                    }
-
-                    let resultado = if modo_pesado {
-                        ejecutar_json(
-                            &estado_aplicar,
-                            &[
-                                "storage",
-                                "eject",
-                                &ruta_aplicar,
-                                "--heavy",
-                                "--yes",
-                                "--json",
-                            ],
-                        )
-                    } else {
-                        ejecutar_json(
-                            &estado_aplicar,
-                            &["storage", "eject", &ruta_aplicar, "--yes", "--json"],
-                        )
-                    };
-
-                    match resultado {
-                        Ok(_) => {
-                            mostrar_exito(
-                                &estado_aplicar,
-                                texto(estado_aplicar.idioma, "safe_disconnect"),
-                            );
-                            recargar(Rc::clone(&estado_aplicar));
-                        }
-                        Err(error) => mostrar_error(&estado_aplicar, error),
-                    }
-                });
-
-                dialogo.present();
-            });
-        }
-
         grupo.add(&row);
     }
 
@@ -8553,7 +9143,7 @@ fn terminos_busqueda_pagina(nombre: &str) -> &'static str {
             "sonido audio altavoces auriculares micrófono microfono cámara camara webcam vídeo video"
         }
         "storage" => {
-            "almacenamiento disco discos unidad unidades usb expulsar extraíble extraible guardar datos"
+            "almacenamiento disco discos unidad unidades usb expulsar extraíble extraible guardar datos transferir copiar archivos iso transferencia segura"
         }
         "firmware" => {
             "firmware dispositivos actualizaciones bios uefi placa hardware"
