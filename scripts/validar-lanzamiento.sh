@@ -470,6 +470,16 @@ else
   fallo 'GUI perdió la recarga viva del idioma'
 fi
 
+if grep -Fq 'fn profile_simple_optional_string_value' sistema/programa/operaciones.rs \
+   && grep -Fq 'profile_simple_optional_string_value(&text, "interfaceLanguage")?' sistema/programa/operaciones.rs \
+   && grep -Fq 'Una preferencia simple del perfil no justifica evaluar Nix' sistema/programa/operaciones.rs \
+   && grep -Fq "Leer \`interfaceLanguage\` desde el perfil portable no debe disparar una evaluación" spec.md
+then
+  ok 'idioma inicial usa lectura local antes de dibujar la ventana'
+else
+  fallo 'arranque puede volver a evaluar Nix para conocer el idioma'
+fi
+
 catalogos_interfaz=0
 catalogos_interfaz_ok=1
 while IFS= read -r catalogo; do

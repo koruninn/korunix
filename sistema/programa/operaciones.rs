@@ -6887,6 +6887,53 @@ fn profile_simple_string_value(text: &str, key: &str) -> Option<String> {
     found
 }
 
+fn profile_simple_optional_string_value(
+    text: &str,
+    key: &str,
+) -> Result<Option<Option<String>>, String> {
+    let prefix = format!("{key} = ");
+    let mut found = None::<Option<String>>;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+
+        if !trimmed.starts_with(&prefix) {
+            continue;
+        }
+
+        if found.is_some() {
+            return Err(format!("El perfil contiene más de una declaración {key}."));
+        }
+
+        let value = trimmed[prefix.len()..].trim();
+        let semicolon = value.find(';').ok_or_else(|| {
+            format!("{key} no tiene una declaración simple terminada en punto y coma.")
+        })?;
+
+        let literal = value[..semicolon].trim();
+        let suffix = value[semicolon + 1..].trim();
+
+        if !suffix.is_empty() && !suffix.starts_with('#') {
+            return Err(format!(
+                "{key} contiene texto que Korunix no puede interpretar de forma segura."
+            ));
+        }
+
+        let parsed = if literal == "null" {
+            None
+        } else {
+            Some(
+                serde_json::from_str::<String>(literal)
+                    .map_err(|_| format!("{key} debe ser un texto o null."))?,
+            )
+        };
+
+        found = Some(parsed);
+    }
+
+    Ok(found)
+}
+
 fn interface_language_profile_fast(
     raiz: &Path,
 ) -> Result<Option<InterfaceLanguageProfile>, String> {
@@ -6930,17 +6977,18 @@ fn interface_language_profile_fast(
         return Ok(None);
     };
 
-    let value_text = nix_archivo_json(raiz, path)?;
-    let value: serde_json::Value =
-        serde_json::from_str(&value_text).map_err(|error| error.to_string())?;
+    let text = fs::read_to_string(path)
+        .map_err(|error| format!("No pude leer {}: {error}", path.display()))?;
+
+    // Esta ruta se ejecuta antes de dibujar la primera ventana.
+    // Una preferencia simple del perfil no justifica evaluar Nix.
+    let interface_language =
+        profile_simple_optional_string_value(&text, "interfaceLanguage")?.unwrap_or(None);
 
     Ok(Some(InterfaceLanguageProfile {
         id: id.clone(),
         account_name: account,
-        interface_language: value
-            .get("interfaceLanguage")
-            .and_then(serde_json::Value::as_str)
-            .map(ToString::to_string),
+        interface_language,
     }))
 }
 
@@ -11211,6 +11259,33 @@ mod tests {
         );
         assert_eq!(interface_language_from_locale("xx_YY"), None);
         assert_eq!(KORUNIX_INTERFACE_LANGUAGES.len(), 23);
+    }
+
+    #[test]
+    fn idioma_interfaz_lee_preferencia_simple_sin_evaluar_nix() {
+        let automatico = r#"{
+  accountName = "ana";
+  language = "es";
+  interfaceLanguage = null;
+}
+"#;
+
+        let explicito = r#"{
+  accountName = "ana";
+  language = "es";
+  interfaceLanguage = "en"; # solo Korunix
+}
+"#;
+
+        assert_eq!(
+            profile_simple_optional_string_value(automatico, "interfaceLanguage").unwrap(),
+            Some(None)
+        );
+
+        assert_eq!(
+            profile_simple_optional_string_value(explicito, "interfaceLanguage").unwrap(),
+            Some(Some("en".to_string()))
+        );
     }
 
     #[test]

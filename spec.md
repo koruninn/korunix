@@ -451,6 +451,12 @@ Flujo:
 
 No debe existir un parpadeo inicial en otro idioma antes de aplicar la detección.
 
+Resolver el idioma inicial de Korunix debe ser una operación local e inmediata.
+Leer `interfaceLanguage` desde el perfil portable no debe disparar una evaluación
+de Nix, acceso a red ni construcción de derivaciones antes de dibujar la ventana.
+Una evaluación más costosa solo puede usarse como degradación excepcional cuando
+un perfil manual no pueda interpretarse de forma segura por la ruta rápida.
+
 Si el usuario cambia el idioma dentro de Korunix, la aplicación debe traducirse en vivo siempre que técnicamente sea posible, sin reiniciarse.
 
 La preferencia explícita de idioma de la propia interfaz pertenece a la persona
