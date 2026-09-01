@@ -7,7 +7,7 @@ use adw::prelude::*;
 use adw::{gio, glib};
 use serde_json::Value;
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -2471,6 +2471,8 @@ struct Estado {
     progreso_barra: gtk::ProgressBar,
     progreso_texto: gtk::Label,
     cargando: Cell<bool>,
+    paginas_cargadas: RefCell<HashSet<String>>,
+    pagina_pendiente: RefCell<Option<(String, bool)>>,
     ocupado: Cell<bool>,
     camara_preview_activa: Cell<bool>,
     _apariencia: AparienciaViva,
@@ -4844,6 +4846,33 @@ fn texto_ocultar(idioma: Idioma) -> &'static str {
         Idioma::Hungaro => "Elrejtés",
         Idioma::Espanol => "Ocultar",
     }
+}
+
+fn pagina_cargando(idioma: Idioma) -> adw::PreferencesPage {
+    let pagina = adw::PreferencesPage::new();
+    let grupo = adw::PreferencesGroup::new();
+
+    let caja = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    caja.set_halign(gtk::Align::Center);
+    caja.set_valign(gtk::Align::Center);
+    caja.set_vexpand(true);
+    caja.set_margin_top(42);
+    caja.set_margin_bottom(42);
+
+    let indicador = gtk::Spinner::new();
+    indicador.set_spinning(true);
+    indicador.set_halign(gtk::Align::Center);
+
+    let mensaje = gtk::Label::new(Some(texto(idioma, "loading")));
+    mensaje.add_css_class("dim-label");
+    mensaje.set_wrap(true);
+    mensaje.set_justify(gtk::Justification::Center);
+
+    caja.append(&indicador);
+    caja.append(&mensaje);
+    grupo.add(&caja);
+    pagina.add(&grupo);
+    pagina
 }
 
 fn pagina_error(idioma: Idioma, detalle: &str) -> adw::PreferencesPage {
@@ -12450,269 +12479,317 @@ fn pagina_actualizaciones(
     pagina
 }
 
-fn recargar(estado: Rc<Estado>) {
+fn pagina_precarga_inicial() -> &'static str {
+    "summary"
+}
+
+fn terminar_carga_pagina(estado: Rc<Estado>, nombre: &str) {
+    estado
+        .paginas_cargadas
+        .borrow_mut()
+        .insert(nombre.to_string());
+    estado.cargando.set(false);
+
+    let pendiente = estado.pagina_pendiente.borrow_mut().take();
+
+    if let Some((siguiente, forzar)) = pendiente {
+        if siguiente != nombre || forzar {
+            cargar_pagina(estado, &siguiente, forzar);
+        }
+    }
+}
+
+fn cargar_pagina(estado: Rc<Estado>, nombre: &str, forzar: bool) {
+    if indice_pagina(nombre).is_none() {
+        return;
+    }
+
+    if !forzar && estado.paginas_cargadas.borrow().contains(nombre) {
+        return;
+    }
+
     if estado.cargando.get() || estado.ocupado.get() {
+        *estado.pagina_pendiente.borrow_mut() = Some((nombre.to_string(), forzar));
         return;
     }
 
     estado.cargando.set(true);
-    mostrar_progreso(&estado, 0, "reading");
 
-    let hardware = consultar(&estado, "hardware");
-    mostrar_progreso(&estado, 7, "reading");
-    let localization = consultar(&estado, "localization");
-    mostrar_progreso(&estado, 10, "reading");
-    let people = consultar(&estado, "users");
-    mostrar_progreso(&estado, 16, "reading");
-    let applications = ejecutar_json(&estado, &["applications", "--json"]);
-    let aplicaciones_actualizacion = applications
-        .as_ref()
-        .ok()
-        .map(ids_aplicaciones_seleccionadas)
-        .unwrap_or_default();
-    let defaults = ejecutar_json(&estado, &["defaults", "--json"]);
-    mostrar_progreso(&estado, 22, "reading");
-    let desktop = ejecutar_json(&estado, &["desktop", "--json"]);
-    let noctalia_actualizacion = desktop
-        .as_ref()
-        .ok()
-        .map(escritorio_usa_noctalia)
-        .unwrap_or(false);
-    mostrar_progreso(&estado, 28, "reading");
-    let appearance = ejecutar_json(&estado, &["appearance", "--json"]);
-    mostrar_progreso(&estado, 34, "reading");
-    let history = ejecutar_json(&estado, &["history", "--json"]);
-    mostrar_progreso(&estado, 40, "reading");
-    let channel = consultar(&estado, "channel");
-    mostrar_progreso(&estado, 46, "reading");
-    let update_plan = ejecutar_json(&estado, &["update", "--plan", "--json"]);
-    mostrar_progreso(&estado, 52, "reading");
-    let recovery = ejecutar_json(&estado, &["rollback", "--list", "--json"]);
-    mostrar_progreso(&estado, 58, "reading");
-    let clean = ejecutar_json(&estado, &["clean-preview", "--json"]);
-    mostrar_progreso(&estado, 76, "reading");
-    let clean_all = ejecutar_json(&estado, &["clean-all-preview", "--json"]);
-    mostrar_progreso(&estado, 70, "reading");
-    let storage = ejecutar_json(&estado, &["storage", "--list", "--json"]);
-    mostrar_progreso(&estado, 64, "reading");
-    let firmware_devices = ejecutar_json(&estado, &["firmware", "devices", "--json"]);
-    mostrar_progreso(&estado, 82, "reading");
-    let firmware_updates = ejecutar_json(&estado, &["firmware", "updates", "--json"]);
-    mostrar_progreso(&estado, 88, "reading");
-    let media = ejecutar_json(&estado, &["media", "status", "--json"]);
-    mostrar_progreso(&estado, 93, "reading");
-    let privileges = ejecutar_json(&estado, &["privileges", "--json"]);
-    mostrar_progreso(&estado, 97, "reading");
+    reemplazar_pagina(
+        &estado.stack,
+        nombre,
+        texto(estado.idioma, clave_titulo_pagina(nombre)),
+        &pagina_cargando(estado.idioma),
+    );
 
-    if let (Ok(hardware), Ok(people), Ok(channel)) = (&hardware, &people, &channel) {
-        reemplazar_pagina(
-            &estado.stack,
-            "summary",
-            texto(estado.idioma, "summary"),
-            &pagina_resumen(
-                Rc::clone(&estado),
-                hardware,
-                people,
-                channel,
-                history.as_ref().ok(),
-                firmware_updates.as_ref().ok(),
-                privileges.as_ref().ok(),
-            ),
-        );
-    } else {
-        reemplazar_pagina(
-            &estado.stack,
-            "summary",
-            texto(estado.idioma, "summary"),
-            &pagina_error(estado.idioma, texto(estado.idioma, "error")),
-        );
-    }
+    match nombre {
+        "summary" => {
+            let hardware = consultar(&estado, "hardware");
+            let people = consultar(&estado, "users");
+            let channel = consultar(&estado, "channel");
+            let history = ejecutar_json(&estado, &["history", "--json"]);
+            let firmware_updates = ejecutar_json(&estado, &["firmware", "updates", "--json"]);
+            let privileges = ejecutar_json(&estado, &["privileges", "--json"]);
 
-    match hardware {
-        Ok(datos) => reemplazar_pagina(
-            &estado.stack,
-            "hardware",
-            texto(estado.idioma, "hardware"),
-            &pagina_hardware(&estado, &datos),
-        ),
-        Err(error) => reemplazar_pagina(
-            &estado.stack,
-            "hardware",
-            texto(estado.idioma, "hardware"),
-            &pagina_error(estado.idioma, &error),
-        ),
-    }
-
-    match localization {
-        Ok(datos) => reemplazar_pagina(
-            &estado.stack,
-            "localization",
-            texto(estado.idioma, "localization"),
-            &pagina_localizacion(Rc::clone(&estado), &datos),
-        ),
-        Err(error) => reemplazar_pagina(
-            &estado.stack,
-            "localization",
-            texto(estado.idioma, "localization"),
-            &pagina_error(estado.idioma, &error),
-        ),
-    }
-
-    match people {
-        Ok(datos) => reemplazar_pagina(
-            &estado.stack,
-            "people",
-            texto(estado.idioma, "people"),
-            &pagina_personas(Rc::clone(&estado), &datos),
-        ),
-        Err(error) => reemplazar_pagina(
-            &estado.stack,
-            "people",
-            texto(estado.idioma, "people"),
-            &pagina_error(estado.idioma, &error),
-        ),
-    }
-
-    match applications {
-        Ok(datos) => reemplazar_pagina(
-            &estado.stack,
-            "applications",
-            texto(estado.idioma, "applications"),
-            &pagina_aplicaciones(Rc::clone(&estado), &datos, defaults.as_ref().ok()),
-        ),
-        Err(error) => reemplazar_pagina(
-            &estado.stack,
-            "applications",
-            texto(estado.idioma, "applications"),
-            &pagina_error(estado.idioma, &error),
-        ),
-    }
-
-    match (desktop, appearance) {
-        (Ok(escritorio), Ok(apariencia)) => reemplazar_pagina(
-            &estado.stack,
-            "appearance",
-            texto(estado.idioma, "appearance_desktops"),
-            &pagina_escritorio_apariencia(Rc::clone(&estado), &escritorio, &apariencia),
-        ),
-        (Err(error), _) | (_, Err(error)) => reemplazar_pagina(
-            &estado.stack,
-            "appearance",
-            texto(estado.idioma, "appearance_desktops"),
-            &pagina_error(estado.idioma, &error),
-        ),
-    }
-
-    match history {
-        Ok(datos) => reemplazar_pagina(
-            &estado.stack,
-            "backups",
-            texto(estado.idioma, "backups_history"),
-            &pagina_copias_historial(Rc::clone(&estado), &datos),
-        ),
-        Err(error) => reemplazar_pagina(
-            &estado.stack,
-            "backups",
-            texto(estado.idioma, "backups_history"),
-            &pagina_error(estado.idioma, &error),
-        ),
-    }
-
-    match (channel, update_plan) {
-        (Ok(canal), Ok(plan)) => reemplazar_pagina(
-            &estado.stack,
-            "updates",
-            texto(estado.idioma, "updates"),
-            &pagina_actualizaciones(
-                Rc::clone(&estado),
-                &canal,
-                &plan,
-                &aplicaciones_actualizacion,
-                noctalia_actualizacion,
-            ),
-        ),
-        (Err(error), _) | (_, Err(error)) => reemplazar_pagina(
-            &estado.stack,
-            "updates",
-            texto(estado.idioma, "updates"),
-            &pagina_error(estado.idioma, &error),
-        ),
-    }
-
-    match media {
-        Ok(datos) => reemplazar_pagina(
-            &estado.stack,
-            "media",
-            texto(estado.idioma, "media"),
-            &pagina_multimedia(Rc::clone(&estado), &datos),
-        ),
-        Err(error) => reemplazar_pagina(
-            &estado.stack,
-            "media",
-            texto(estado.idioma, "media"),
-            &pagina_error(estado.idioma, &error),
-        ),
-    }
-
-    match storage {
-        Ok(datos) => reemplazar_pagina(
-            &estado.stack,
-            "storage",
-            texto(estado.idioma, "storage"),
-            &pagina_almacenamiento(Rc::clone(&estado), &datos),
-        ),
-        Err(error) => reemplazar_pagina(
-            &estado.stack,
-            "storage",
-            texto(estado.idioma, "storage"),
-            &pagina_error(estado.idioma, &error),
-        ),
-    }
-
-    match (firmware_devices, firmware_updates) {
-        (Ok(dispositivos), Ok(actualizaciones)) => reemplazar_pagina(
-            &estado.stack,
-            "firmware",
-            texto(estado.idioma, "firmware_updates"),
-            &pagina_firmware(Rc::clone(&estado), &dispositivos, &actualizaciones),
-        ),
-        (Err(error), _) | (_, Err(error)) => reemplazar_pagina(
-            &estado.stack,
-            "firmware",
-            texto(estado.idioma, "firmware_updates"),
-            &pagina_error(estado.idioma, &error),
-        ),
-    }
-
-    match (recovery, clean, clean_all, privileges) {
-        (Ok(recuperacion), Ok(limpieza), Ok(limpieza_total), Ok(privilegios)) => {
-            reemplazar_pagina(
-                &estado.stack,
-                "maintenance",
-                texto(estado.idioma, "maintenance"),
-                &pagina_mantenimiento(
-                    Rc::clone(&estado),
-                    &recuperacion,
-                    &limpieza,
-                    &limpieza_total,
-                    &privilegios,
-                ),
-            );
+            if let (Ok(hardware), Ok(people), Ok(channel)) = (&hardware, &people, &channel) {
+                reemplazar_pagina(
+                    &estado.stack,
+                    "summary",
+                    texto(estado.idioma, "summary"),
+                    &pagina_resumen(
+                        Rc::clone(&estado),
+                        hardware,
+                        people,
+                        channel,
+                        history.as_ref().ok(),
+                        firmware_updates.as_ref().ok(),
+                        privileges.as_ref().ok(),
+                    ),
+                );
+            } else {
+                reemplazar_pagina(
+                    &estado.stack,
+                    "summary",
+                    texto(estado.idioma, "summary"),
+                    &pagina_error(estado.idioma, texto(estado.idioma, "error")),
+                );
+            }
         }
-        (Err(error), _, _, _)
-        | (_, Err(error), _, _)
-        | (_, _, Err(error), _)
-        | (_, _, _, Err(error)) => reemplazar_pagina(
-            &estado.stack,
-            "maintenance",
-            texto(estado.idioma, "maintenance"),
-            &pagina_error(estado.idioma, &error),
-        ),
+        "hardware" => match consultar(&estado, "hardware") {
+            Ok(datos) => reemplazar_pagina(
+                &estado.stack,
+                "hardware",
+                texto(estado.idioma, "hardware"),
+                &pagina_hardware(&estado, &datos),
+            ),
+            Err(error) => reemplazar_pagina(
+                &estado.stack,
+                "hardware",
+                texto(estado.idioma, "hardware"),
+                &pagina_error(estado.idioma, &error),
+            ),
+        },
+        "localization" => match consultar(&estado, "localization") {
+            Ok(datos) => reemplazar_pagina(
+                &estado.stack,
+                "localization",
+                texto(estado.idioma, "localization"),
+                &pagina_localizacion(Rc::clone(&estado), &datos),
+            ),
+            Err(error) => reemplazar_pagina(
+                &estado.stack,
+                "localization",
+                texto(estado.idioma, "localization"),
+                &pagina_error(estado.idioma, &error),
+            ),
+        },
+        "people" => match consultar(&estado, "users") {
+            Ok(datos) => reemplazar_pagina(
+                &estado.stack,
+                "people",
+                texto(estado.idioma, "people"),
+                &pagina_personas(Rc::clone(&estado), &datos),
+            ),
+            Err(error) => reemplazar_pagina(
+                &estado.stack,
+                "people",
+                texto(estado.idioma, "people"),
+                &pagina_error(estado.idioma, &error),
+            ),
+        },
+        "applications" => {
+            let applications = ejecutar_json(&estado, &["applications", "--json"]);
+            let defaults = ejecutar_json(&estado, &["defaults", "--json"]);
+
+            match applications {
+                Ok(datos) => reemplazar_pagina(
+                    &estado.stack,
+                    "applications",
+                    texto(estado.idioma, "applications"),
+                    &pagina_aplicaciones(Rc::clone(&estado), &datos, defaults.as_ref().ok()),
+                ),
+                Err(error) => reemplazar_pagina(
+                    &estado.stack,
+                    "applications",
+                    texto(estado.idioma, "applications"),
+                    &pagina_error(estado.idioma, &error),
+                ),
+            }
+        }
+        "appearance" => {
+            let desktop = ejecutar_json(&estado, &["desktop", "--json"]);
+            let appearance = ejecutar_json(&estado, &["appearance", "--json"]);
+
+            match (desktop, appearance) {
+                (Ok(escritorio), Ok(apariencia)) => reemplazar_pagina(
+                    &estado.stack,
+                    "appearance",
+                    texto(estado.idioma, "appearance_desktops"),
+                    &pagina_escritorio_apariencia(Rc::clone(&estado), &escritorio, &apariencia),
+                ),
+                (Err(error), _) | (_, Err(error)) => reemplazar_pagina(
+                    &estado.stack,
+                    "appearance",
+                    texto(estado.idioma, "appearance_desktops"),
+                    &pagina_error(estado.idioma, &error),
+                ),
+            }
+        }
+        "backups" => match ejecutar_json(&estado, &["history", "--json"]) {
+            Ok(datos) => reemplazar_pagina(
+                &estado.stack,
+                "backups",
+                texto(estado.idioma, "backups_history"),
+                &pagina_copias_historial(Rc::clone(&estado), &datos),
+            ),
+            Err(error) => reemplazar_pagina(
+                &estado.stack,
+                "backups",
+                texto(estado.idioma, "backups_history"),
+                &pagina_error(estado.idioma, &error),
+            ),
+        },
+        "updates" => {
+            let channel = consultar(&estado, "channel");
+            let update_plan = ejecutar_json(&estado, &["update", "--plan", "--json"]);
+            let applications = ejecutar_json(&estado, &["applications", "--json"]);
+            let desktop = ejecutar_json(&estado, &["desktop", "--json"]);
+
+            let aplicaciones_actualizacion = applications
+                .as_ref()
+                .ok()
+                .map(ids_aplicaciones_seleccionadas)
+                .unwrap_or_default();
+
+            let noctalia_actualizacion = desktop
+                .as_ref()
+                .ok()
+                .map(escritorio_usa_noctalia)
+                .unwrap_or(false);
+
+            match (channel, update_plan) {
+                (Ok(canal), Ok(plan)) => reemplazar_pagina(
+                    &estado.stack,
+                    "updates",
+                    texto(estado.idioma, "updates"),
+                    &pagina_actualizaciones(
+                        Rc::clone(&estado),
+                        &canal,
+                        &plan,
+                        &aplicaciones_actualizacion,
+                        noctalia_actualizacion,
+                    ),
+                ),
+                (Err(error), _) | (_, Err(error)) => reemplazar_pagina(
+                    &estado.stack,
+                    "updates",
+                    texto(estado.idioma, "updates"),
+                    &pagina_error(estado.idioma, &error),
+                ),
+            }
+        }
+        "media" => match ejecutar_json(&estado, &["media", "status", "--json"]) {
+            Ok(datos) => reemplazar_pagina(
+                &estado.stack,
+                "media",
+                texto(estado.idioma, "media"),
+                &pagina_multimedia(Rc::clone(&estado), &datos),
+            ),
+            Err(error) => reemplazar_pagina(
+                &estado.stack,
+                "media",
+                texto(estado.idioma, "media"),
+                &pagina_error(estado.idioma, &error),
+            ),
+        },
+        "storage" => match ejecutar_json(&estado, &["storage", "--list", "--json"]) {
+            Ok(datos) => reemplazar_pagina(
+                &estado.stack,
+                "storage",
+                texto(estado.idioma, "storage"),
+                &pagina_almacenamiento(Rc::clone(&estado), &datos),
+            ),
+            Err(error) => reemplazar_pagina(
+                &estado.stack,
+                "storage",
+                texto(estado.idioma, "storage"),
+                &pagina_error(estado.idioma, &error),
+            ),
+        },
+        "firmware" => {
+            let devices = ejecutar_json(&estado, &["firmware", "devices", "--json"]);
+            let updates = ejecutar_json(&estado, &["firmware", "updates", "--json"]);
+
+            match (devices, updates) {
+                (Ok(dispositivos), Ok(actualizaciones)) => reemplazar_pagina(
+                    &estado.stack,
+                    "firmware",
+                    texto(estado.idioma, "firmware_updates"),
+                    &pagina_firmware(Rc::clone(&estado), &dispositivos, &actualizaciones),
+                ),
+                (Err(error), _) | (_, Err(error)) => reemplazar_pagina(
+                    &estado.stack,
+                    "firmware",
+                    texto(estado.idioma, "firmware_updates"),
+                    &pagina_error(estado.idioma, &error),
+                ),
+            }
+        }
+        "maintenance" => {
+            let recovery = ejecutar_json(&estado, &["rollback", "--list", "--json"]);
+            let clean = ejecutar_json(&estado, &["clean-preview", "--json"]);
+            let clean_all = ejecutar_json(&estado, &["clean-all-preview", "--json"]);
+            let privileges = ejecutar_json(&estado, &["privileges", "--json"]);
+
+            match (recovery, clean, clean_all, privileges) {
+                (Ok(recuperacion), Ok(limpieza), Ok(limpieza_total), Ok(privilegios)) => {
+                    reemplazar_pagina(
+                        &estado.stack,
+                        "maintenance",
+                        texto(estado.idioma, "maintenance"),
+                        &pagina_mantenimiento(
+                            Rc::clone(&estado),
+                            &recuperacion,
+                            &limpieza,
+                            &limpieza_total,
+                            &privilegios,
+                        ),
+                    )
+                }
+                (Err(error), _, _, _)
+                | (_, Err(error), _, _)
+                | (_, _, Err(error), _)
+                | (_, _, _, Err(error)) => reemplazar_pagina(
+                    &estado.stack,
+                    "maintenance",
+                    texto(estado.idioma, "maintenance"),
+                    &pagina_error(estado.idioma, &error),
+                ),
+            }
+        }
+        _ => {}
     }
 
-    mostrar_progreso(&estado, 100, "done");
-    ocultar_progreso(&estado);
-    estado.cargando.set(false);
+    terminar_carga_pagina(estado, nombre);
+}
+
+fn recargar(estado: Rc<Estado>) {
+    let nombre = estado
+        .stack
+        .visible_child_name()
+        .map(|valor| valor.to_string())
+        .unwrap_or_else(|| pagina_precarga_inicial().to_string());
+
+    {
+        let mut cargadas = estado.paginas_cargadas.borrow_mut();
+        cargadas.remove(&nombre);
+
+        // Una mutación en cualquier área puede modificar las alertas del resumen.
+        // Se invalida su caché, pero no se vuelve a consultar hasta que se abra.
+        cargadas.remove("summary");
+    }
+
+    cargar_pagina(estado, &nombre, true);
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -13096,7 +13173,7 @@ fn construir_ventana_con_idioma(
     ];
 
     for (nombre, clave, _) in paginas {
-        let pagina = pagina_error(idioma, texto(idioma, "loading"));
+        let pagina = pagina_cargando(idioma);
         stack.add_titled(&pagina, Some(nombre), texto(idioma, clave));
     }
 
@@ -13341,6 +13418,8 @@ fn construir_ventana_con_idioma(
         progreso_barra,
         progreso_texto,
         cargando: Cell::new(false),
+        paginas_cargadas: RefCell::new(HashSet::new()),
+        pagina_pendiente: RefCell::new(None),
         ocupado: Cell::new(false),
         camara_preview_activa: Cell::new(false),
         _apariencia: apariencia,
@@ -13351,12 +13430,26 @@ fn construir_ventana_con_idioma(
         recargar(Rc::clone(&estado_clon));
     });
 
+    let estado_navegacion = Rc::clone(&estado);
+    lista.connect_row_selected(move |_, fila| {
+        let Some(fila) = fila else {
+            return;
+        };
+
+        let indice = fila.index() as usize;
+        let Some((nombre, _, _)) = paginas.get(indice) else {
+            return;
+        };
+
+        cargar_pagina(Rc::clone(&estado_navegacion), nombre, false);
+    });
+
     // El cascarón de Korunix y sus estados de carga se muestran antes de
     // consultar todas las áreas. ejecutar_motor ya mantiene vivo el MainContext
     // mientras espera cada consulta, así que la ventana puede dibujarse y seguir
     // respondiendo durante la carga inicial.
     ventana.present();
-    recargar(estado);
+    cargar_pagina(estado, pagina_precarga_inicial(), false);
 }
 
 #[cfg(test)]
@@ -13421,6 +13514,11 @@ mod pruebas_roles_predeterminados_gui {
         assert_eq!(asuntos[0].destino, "backups");
         assert_eq!(asuntos[1].destino, "firmware");
         assert_eq!(asuntos[2].destino, "maintenance");
+    }
+
+    #[test]
+    fn arranque_precarga_solo_resumen() {
+        assert_eq!(pagina_precarga_inicial(), "summary");
     }
 
     #[test]

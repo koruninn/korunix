@@ -485,20 +485,29 @@ linea_presentar="$(
     | tail -n 1 \
     | cut -d: -f1
 )"
-linea_recargar="$(
-  grep -nF '    recargar(estado);' sistema/interfaz/principal.rs \
+linea_precarga="$(
+  grep -nF '    cargar_pagina(estado, pagina_precarga_inicial(), false);' \
+    sistema/interfaz/principal.rs \
     | tail -n 1 \
     | cut -d: -f1
 )"
 
 if [[ "$linea_presentar" =~ ^[0-9]+$ ]] \
-   && [[ "$linea_recargar" =~ ^[0-9]+$ ]] \
-   && (( linea_presentar < linea_recargar )) \
-   && grep -Fq 'datos no puede retrasar el primer dibujo de la ventana' spec.md
+   && [[ "$linea_precarga" =~ ^[0-9]+$ ]] \
+   && (( linea_presentar < linea_precarga )) \
+   && grep -Fq 'fn pagina_precarga_inicial()' sistema/interfaz/principal.rs \
+   && grep -Fq 'fn cargar_pagina(estado: Rc<Estado>, nombre: &str, forzar: bool)' sistema/interfaz/principal.rs \
+   && grep -Fq 'paginas_cargadas: RefCell<HashSet<String>>' sistema/interfaz/principal.rs \
+   && grep -Fq 'pagina_pendiente: RefCell<Option<(String, bool)>>' sistema/interfaz/principal.rs \
+   && grep -Fq 'let pagina = pagina_cargando(idioma);' sistema/interfaz/principal.rs \
+   && ! grep -Fq 'let pagina = pagina_error(idioma, texto(idioma, "loading"));' sistema/interfaz/principal.rs \
+   && ! grep -Fq 'mostrar_progreso(&estado, 97, "reading");' sistema/interfaz/principal.rs \
+   && grep -Fq 'Korunix no inicia una recarga global de todas las áreas' spec.md \
+   && grep -Fq 'Navegar a Hardware no debe esperar' spec.md
 then
-  ok 'GUI presenta la ventana antes de la recarga completa'
+  ok 'GUI carga Resumen primero y cada sección bajo demanda'
 else
-  fallo 'la recarga completa puede volver a retrasar el primer dibujo'
+  fallo 'la GUI puede volver a precargar todas las secciones o fingir progreso global'
 fi
 
 catalogos_interfaz=0

@@ -388,11 +388,17 @@ El design system debe definir como mínimo componentes equivalentes a:
 - UpdateRow.
 
 En el arranque cotidiano, el cascarón de la ventana y sus `LoadingState` deben
-presentarse antes de iniciar la recarga completa de hardware, aplicaciones,
-actualizaciones, almacenamiento, firmware y demás áreas. La obtención de esos
-datos no puede retrasar el primer dibujo de la ventana. Mostrar primero el estado
-de carga no autoriza fabricar datos ni porcentajes: cada página se completa con
-información real a medida que el motor responde.
+presentarse de inmediato. Korunix no inicia una recarga global de todas las áreas:
+precarga únicamente `Resumen` y cada sección obtiene y construye sus propios datos
+cuando la persona entra en ella. Una sección ya leída puede conservarse en memoria
+hasta que una acción la invalide o la persona solicite actualizarla.
+
+La lectura normal de páginas no utiliza un porcentaje global ficticio. Cada área
+muestra su propio `LoadingState` mientras obtiene información real. La barra de
+progreso queda reservada para operaciones que sí tienen fases o progreso propios,
+como aplicar, actualizar o transferir. Navegar a Hardware no debe esperar a que
+Aplicaciones, Firmware, Mantenimiento u otra sección no visitada terminen de
+consultarse.
 
 Una pantalla debe poder responder inmediatamente:
 
