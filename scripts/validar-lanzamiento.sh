@@ -280,6 +280,14 @@ else
   fallo 'la especificación perdió el contrato de autorización/progreso'
 fi
 
+if rg -U -q '"nixos-rebuild",\n[[:space:]]*&\["switch"\.into\(\), "--flake"\.into\(\), flake\],\n[[:space:]]*!json,' "$operaciones" \
+   && grep -Fq 'stdout queda reservado para el JSON final' "$operaciones"
+then
+  ok 'apply JSON aísla stdout del proceso privilegiado'
+else
+  fallo 'apply JSON puede volver a mezclar salida humana con el documento final'
+fi
+
 if grep -Fq 'if let Err(error) = validate_quiet(raiz)' sistema/programa/operaciones.rs \
    && ! grep -Fq 'estado.stack.set_sensitive(false);' sistema/interfaz/principal.rs \
    && grep -Fq 'let indicador_busqueda = gtk::Spinner::new();' sistema/interfaz/principal.rs \

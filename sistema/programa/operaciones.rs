@@ -2737,11 +2737,13 @@ fn change_cycle(raiz: &Path, command: &str, args: &[String]) -> Result<ExitCode,
     // de arranque antes de activarla. La candidata ya fue construida durante
     // la fase anterior, así que Nix reutiliza el resultado cuando la fuente no
     // cambió.
+    // En terminal dejamos visible la salida de nixos-rebuild. En modo JSON se
+    // captura para que stdout siga reservado exclusivamente al documento final.
     let _ = privileged(
         raiz,
         "nixos-rebuild",
         &["switch".into(), "--flake".into(), flake],
-        true,
+        !json,
     )?;
 
     emitir_fase(
