@@ -5397,12 +5397,85 @@ fn pagina_personas(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage {
     confirmar.set_title(&localizar_visible(idioma_actual(), "Confirmar contraseña"));
     grupo_nueva.add(&confirmar);
 
-    let avatar = adw::EntryRow::new();
-    avatar.set_title(&localizar_visible(
+    let avatar_seleccion = Rc::new(RefCell::new(None::<PathBuf>));
+    let avatar = adw::ActionRow::new();
+    avatar.set_title(&localizar_visible(idioma_actual(), "Avatar"));
+    avatar.set_subtitle(&localizar_visible(
         idioma_actual(),
-        "Avatar opcional · ruta PNG/JPEG/WebP",
+        "Opcional · elige una imagen PNG, JPEG o WebP.",
     ));
+
+    let elegir_avatar =
+        gtk::Button::with_label(&localizar_visible(idioma_actual(), "Elegir imagen"));
+    elegir_avatar.set_valign(gtk::Align::Center);
+    avatar.add_suffix(&elegir_avatar);
     grupo_nueva.add(&avatar);
+
+    {
+        let avatar_seleccion_boton = Rc::clone(&avatar_seleccion);
+        let avatar_fila = avatar.clone();
+        let estado_avatar = Rc::clone(&estado);
+
+        elegir_avatar.connect_clicked(move |boton| {
+            let ventana = boton
+                .root()
+                .and_then(|root| root.downcast::<gtk::Window>().ok());
+
+            let chooser = gtk::FileChooserNative::new(
+                Some(&localizar_visible(idioma_actual(), "Elegir avatar")),
+                ventana.as_ref(),
+                gtk::FileChooserAction::Open,
+                Some(&localizar_visible(idioma_actual(), "Elegir imagen")),
+                Some(texto(estado_avatar.idioma, "cancel")),
+            );
+
+            let avatar_seleccion_respuesta = Rc::clone(&avatar_seleccion_boton);
+            let avatar_fila_respuesta = avatar_fila.clone();
+            let estado_respuesta = Rc::clone(&estado_avatar);
+
+            chooser.connect_response(move |dialogo, response| {
+                if response != gtk::ResponseType::Accept {
+                    return;
+                }
+
+                let Some(path) = dialogo.file().and_then(|archivo| archivo.path()) else {
+                    mostrar_error(
+                        &estado_respuesta,
+                        "Korunix no pudo obtener la imagen seleccionada.",
+                    );
+                    return;
+                };
+
+                let extension = path
+                    .extension()
+                    .and_then(|valor| valor.to_str())
+                    .map(str::to_ascii_lowercase)
+                    .unwrap_or_default();
+
+                if !matches!(extension.as_str(), "png" | "jpg" | "jpeg" | "webp") {
+                    mostrar_error(
+                        &estado_respuesta,
+                        "El avatar debe ser una imagen PNG, JPEG o WebP.",
+                    );
+                    return;
+                }
+
+                let nombre = path
+                    .file_name()
+                    .and_then(|valor| valor.to_str())
+                    .unwrap_or("Imagen seleccionada")
+                    .to_string();
+
+                *avatar_seleccion_respuesta.borrow_mut() = Some(path);
+                avatar_fila_respuesta.set_subtitle(&localizar_visible(
+                    idioma_actual(),
+                    &format!("Imagen seleccionada: {nombre}"),
+                ));
+            });
+
+            chooser.show();
+        });
+    }
 
     let roles = gtk::StringList::new(&["Estándar", "Administrador"]);
     let rol = adw::ComboRow::new();
@@ -5427,7 +5500,11 @@ fn pagina_personas(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage {
         let display = nombre.text().trim().to_string();
         let secreto = password.text().to_string();
         let repetido = confirmar.text().to_string();
-        let avatar_path = avatar.text().trim().to_string();
+        let avatar_path = avatar_seleccion
+            .borrow()
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default();
         let role = if rol.selected() == 1 {
             "admin"
         } else {
@@ -11014,6 +11091,47 @@ fn pagina_escritorio_apariencia(
     pagina
 }
 
+fn nombre_aplicacion_historial(id: &str) -> String {
+    let interno = id
+        .strip_prefix("nixpkgs:")
+        .or_else(|| id.strip_prefix("flatpak:"))
+        .unwrap_or(id);
+    let nombre = interno.rsplit('.').next().unwrap_or(interno);
+    nombre_desde_id(nombre)
+}
+
+fn resumen_historial_humano(resumen: &str) -> String {
+    for prefijo in [
+        "Preparaste la instalación de ",
+        "Preparaste la eliminación de ",
+    ] {
+        if let Some(id) = resumen.strip_prefix(prefijo) {
+            if id.starts_with("nixpkgs:") || id.starts_with("flatpak:") {
+                return format!("{prefijo}{}", nombre_aplicacion_historial(id));
+            }
+        }
+    }
+
+    if let Some(resto) = resumen.strip_prefix("Preparaste la apariencia ") {
+        if let Some((estilo, modo)) = resto.split_once(" en modo ") {
+            let estilo = match estilo {
+                "dynamic" => "Dinámica",
+                "everforest" => "Everforest",
+                _ => "Predeterminada",
+            };
+            let modo = match modo {
+                "light" => "Claro",
+                "dark" => "Oscuro",
+                _ => "Automático",
+            };
+
+            return format!("Preparaste la apariencia {estilo} en modo {modo}");
+        }
+    }
+
+    resumen.to_string()
+}
+
 fn pagina_copias_historial(estado: Rc<Estado>, historial: &Value) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
 
@@ -11096,9 +11214,82 @@ fn pagina_copias_historial(estado: Rc<Estado>, historial: &Value) -> adw::Prefer
         "Korunix valida la copia y respalda la configuración actual antes de sustituirla.",
     )));
 
-    let ruta = adw::EntryRow::new();
+    let copia_seleccion = Rc::new(RefCell::new(None::<PathBuf>));
+    let ruta = adw::ActionRow::new();
     ruta.set_title(&localizar_visible(idioma_actual(), "Archivo de copia"));
+    ruta.set_subtitle(&localizar_visible(
+        idioma_actual(),
+        "Elige una copia portable creada por Korunix.",
+    ));
+
+    let elegir_copia =
+        gtk::Button::with_label(&localizar_visible(idioma_actual(), "Elegir archivo"));
+    elegir_copia.set_valign(gtk::Align::Center);
+    ruta.add_suffix(&elegir_copia);
     grupo_restaurar.add(&ruta);
+
+    {
+        let copia_seleccion_boton = Rc::clone(&copia_seleccion);
+        let ruta_fila = ruta.clone();
+        let estado_copia = Rc::clone(&estado);
+
+        elegir_copia.connect_clicked(move |boton| {
+            let ventana = boton
+                .root()
+                .and_then(|root| root.downcast::<gtk::Window>().ok());
+
+            let chooser = gtk::FileChooserNative::new(
+                Some(&localizar_visible(
+                    idioma_actual(),
+                    "Elegir copia de Korunix",
+                )),
+                ventana.as_ref(),
+                gtk::FileChooserAction::Open,
+                Some(&localizar_visible(idioma_actual(), "Elegir archivo")),
+                Some(texto(estado_copia.idioma, "cancel")),
+            );
+
+            let copia_seleccion_respuesta = Rc::clone(&copia_seleccion_boton);
+            let ruta_fila_respuesta = ruta_fila.clone();
+            let estado_respuesta = Rc::clone(&estado_copia);
+
+            chooser.connect_response(move |dialogo, response| {
+                if response != gtk::ResponseType::Accept {
+                    return;
+                }
+
+                let Some(path) = dialogo.file().and_then(|archivo| archivo.path()) else {
+                    mostrar_error(
+                        &estado_respuesta,
+                        "Korunix no pudo obtener el archivo seleccionado.",
+                    );
+                    return;
+                };
+
+                if !path.is_file() {
+                    mostrar_error(
+                        &estado_respuesta,
+                        "Selecciona un archivo de copia existente.",
+                    );
+                    return;
+                }
+
+                let nombre = path
+                    .file_name()
+                    .and_then(|valor| valor.to_str())
+                    .unwrap_or("Copia seleccionada")
+                    .to_string();
+
+                *copia_seleccion_respuesta.borrow_mut() = Some(path);
+                ruta_fila_respuesta.set_subtitle(&localizar_visible(
+                    idioma_actual(),
+                    &format!("Copia seleccionada: {nombre}"),
+                ));
+            });
+
+            chooser.show();
+        });
+    }
 
     let restaurar_fila = adw::ActionRow::new();
     restaurar_fila.set_title(&localizar_visible(
@@ -11114,7 +11305,11 @@ fn pagina_copias_historial(estado: Rc<Estado>, historial: &Value) -> adw::Prefer
 
     let estado_restaurar = Rc::clone(&estado);
     restaurar.connect_clicked(move |boton| {
-        let archivo = ruta.text().trim().to_string();
+        let archivo = copia_seleccion
+            .borrow()
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default();
 
         if archivo.is_empty() {
             mostrar_error(
@@ -11184,10 +11379,12 @@ fn pagina_copias_historial(estado: Rc<Estado>, historial: &Value) -> adw::Prefer
         ));
     } else {
         for entrada in entradas.iter().rev().take(12) {
-            let resumen = entrada
-                .get("summary")
-                .and_then(Value::as_str)
-                .unwrap_or("Acción de Korunix");
+            let resumen = resumen_historial_humano(
+                entrada
+                    .get("summary")
+                    .and_then(Value::as_str)
+                    .unwrap_or("Acción de Korunix"),
+            );
 
             let cuando = entrada
                 .get("timestamp")
@@ -11195,7 +11392,7 @@ fn pagina_copias_historial(estado: Rc<Estado>, historial: &Value) -> adw::Prefer
                 .map(tiempo_relativo)
                 .unwrap_or_default();
 
-            grupo_historial.add(&fila(resumen, cuando));
+            grupo_historial.add(&fila(&resumen, cuando));
         }
 
         if entradas.len() > 12 {

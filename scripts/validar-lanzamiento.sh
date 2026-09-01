@@ -365,6 +365,36 @@ else
   fallo 'la búsqueda de aplicaciones perdió su prioridad de fuentes'
 fi
 
+if grep -Fq 'let avatar_seleccion = Rc::new(RefCell::new(None::<PathBuf>));' sistema/interfaz/principal.rs \
+   && grep -Fq 'Elegir avatar' sistema/interfaz/principal.rs \
+   && ! grep -Fq 'Avatar opcional · ruta PNG/JPEG/WebP' sistema/interfaz/principal.rs \
+   && grep -Fq 'selector de' spec.md \
+   && grep -Fq 'No debe tener que escribir ni conocer una ruta del sistema' spec.md
+then
+  ok 'Personas selecciona el avatar sin pedir rutas técnicas'
+else
+  fallo 'Personas volvió a exponer la ruta del avatar como entrada normal'
+fi
+
+if grep -Fq 'let copia_seleccion = Rc::new(RefCell::new(None::<PathBuf>));' sistema/interfaz/principal.rs \
+   && grep -Fq 'Elegir copia de Korunix' sistema/interfaz/principal.rs \
+   && grep -Fq 'Restaurar una copia desde la interfaz normal utiliza un selector de archivo' spec.md
+then
+  ok 'Copias restaura mediante selector de archivo'
+else
+  fallo 'Copias volvió a exigir escribir una ruta para restaurar'
+fi
+
+if grep -Fq 'fn resumen_historial_humano(resumen: &str) -> String' sistema/interfaz/principal.rs \
+   && grep -Fq 'nombre_aplicacion_historial' sistema/interfaz/principal.rs \
+   && grep -Fq 'Preparaste la apariencia {estilo} en modo {modo}' sistema/interfaz/principal.rs \
+   && grep -Fq 'la vista normal debe traducirlos a lenguaje humano' spec.md
+then
+  ok 'historial heredado oculta identificadores internos en la vista normal'
+else
+  fallo 'historial puede volver a mostrar identificadores internos heredados'
+fi
+
 ssh_activo="$(
   nix eval \
     --json \

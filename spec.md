@@ -925,6 +925,11 @@ Korunix no debe añadir usuarios indiscriminadamente a grupos sensibles si ningu
 
 El avatar pertenece al usuario, no a Noctalia.
 
+En la interfaz normal, la persona selecciona el avatar mediante un selector de
+imagen. No debe tener que escribir ni conocer una ruta del sistema. La ruta
+concreta solo es un detalle interno o avanzado. Korunix valida el formato
+seleccionado antes de incorporarlo a la identidad administrada.
+
 La imagen actual de un usuario debe poder reutilizarse en:
 
 - GDM;
@@ -1837,6 +1842,10 @@ Korunix debe permitir:
 
 La página **Copias e historial** debe mostrar el estado de la copia portable más reciente cuando Korunix pueda conocerlo, ofrecer crear/exportar una nueva copia y dejar clara la ruta de restauración. Una caja vacía no debe ser la única representación del historial.
 
+Restaurar una copia desde la interfaz normal utiliza un selector de archivo. La
+persona no debe copiar ni escribir manualmente una ruta para realizar una
+operación cotidiana de restauración.
+
 Las credenciales nunca se incluyen en una copia portable normal.
 
 ## 37. Perfiles portables
@@ -2019,6 +2028,11 @@ Korunix debe mantener un historial comprensible de acciones relevantes, por ejem
 La vista normal muestra primero las acciones recientes con fecha y resultado humano, permite ampliar el historial cuando exista más contenido y utiliza un estado vacío específico únicamente cuando todavía no se haya registrado ninguna acción.
 
 No debe convertirse en un log técnico. Los detalles pueden desplegarse cuando sean útiles para diagnóstico.
+
+Si una entrada heredada conserva identificadores internos de una aplicación,
+apariencia u otra decisión, la vista normal debe traducirlos a lenguaje humano
+al leerla. No es necesario reescribir el registro histórico solo para mejorar su
+presentación; el dato original puede conservarse para diagnóstico.
 
 Nunca se registran contraseñas ni secretos.
 
