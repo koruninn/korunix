@@ -143,12 +143,12 @@
       "vlc"
       "vscode"
       "wget"
+      "nixpkgs:legacyPackages.x86_64-linux.blender"
     ];
 
     services = {
       avahi = true;
       bluetooth = true;
-      ssh = true;
       sunshine = true;
       printing = true;
       virtualization = true;

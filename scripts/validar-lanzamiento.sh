@@ -258,6 +258,45 @@ else
   fallo 'la especificación perdió el contrato de autorización/progreso'
 fi
 
+if grep -Fq 'if let Err(error) = validate_quiet(raiz)' sistema/programa/operaciones.rs \
+   && ! grep -Fq 'estado.stack.set_sensitive(false);' sistema/interfaz/principal.rs \
+   && grep -Fq 'let indicador_busqueda = gtk::Spinner::new();' sistema/interfaz/principal.rs \
+   && grep -Fq '(_, "both") => "Ambos lados"' sistema/interfaz/principal.rs \
+   && grep -Fq 'for boton in botones {' sistema/interfaz/principal.rs \
+   && grep -Fq 'Una operación larga en una página no debe volver insensibles las demás áreas' spec.md
+then
+  ok 'GUI conserva navegación, JSON limpio y serializa pruebas de sonido'
+else
+  fallo 'la GUI puede volver a bloquearse, contaminar JSON o solapar pruebas de sonido'
+fi
+
+ssh_activo="$(
+  nix eval \
+    --json \
+    '.#nixosConfigurations.korunix.config.services.openssh.enable' \
+    2>/dev/null \
+    || true
+)"
+
+ssh_firewall="$(
+  nix eval \
+    --json \
+    '.#nixosConfigurations.korunix.config.services.openssh.openFirewall' \
+    2>/dev/null \
+    || true
+)"
+
+if [[ "$ssh_activo" == 'true' ]] \
+   && [[ "$ssh_firewall" == 'true' ]] \
+   && grep -Fq 'SSH es una decisión deliberada y permanente de producto' spec.md \
+   && grep -Fq 'Korunix no ofrece una opción para desactivarlo' spec.md \
+   && ! grep -Fq 'puede desactivarse desde Korunix' spec.md
+then
+  ok 'SSH permanece activo por contrato y acompañado del firewall'
+else
+  fallo 'SSH dejó de ser permanente o la especificación volvió a hacerlo desactivable'
+fi
+
 personas='sistema/personas.nix'
 escritorio='sistema/escritorio.nix'
 

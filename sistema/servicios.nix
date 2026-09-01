@@ -17,7 +17,14 @@ in {
   options.korunix.services = {
     avahi = serviceOption "avahi" "Descubrimiento de dispositivos en la red local.";
     bluetooth = serviceOption "bluetooth" "Bluetooth.";
-    ssh = serviceOption "ssh" "Acceso remoto mediante SSH.";
+    # Compatibilidad de lectura para configuraciones anteriores. El valor ya
+    # no gobierna el servicio: SSH es una capacidad permanente de Korunix.
+    ssh = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      visible = false;
+      description = "Campo histórico conservado solo para migración; SSH permanece activo.";
+    };
     sunshine = serviceOption "sunshine" "Transmisión de juegos y escritorio con Sunshine.";
     printing = serviceOption "printing" "Impresión y escaneo.";
     virtualization = serviceOption "virtualization" "Máquinas virtuales.";
@@ -61,9 +68,11 @@ in {
     # parte del equipo; evita pedir otra decisión al conectar un mando Xbox luego.
     hardware.xpadneo.enable = cfg.bluetooth;
 
+    # SSH forma parte permanente de Korunix. No depende de una preferencia
+    # del host: el firewall sigue activo y abre únicamente la regla de OpenSSH.
     services.openssh = {
-      enable = cfg.ssh;
-      openFirewall = cfg.ssh;
+      enable = true;
+      openFirewall = true;
     };
 
     services.sunshine = {

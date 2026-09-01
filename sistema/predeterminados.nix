@@ -132,9 +132,9 @@
   };
 
   services = {
-    # Descubrimiento local y SSH forman parte de la instalación inicial.
+    # El descubrimiento local forma parte de la instalación inicial. SSH no
+    # aparece aquí porque ya no es una preferencia: Korunix lo mantiene activo.
     avahi = true;
-    ssh = true;
 
     # Estas capacidades necesitan hardware, periféricos o una decisión humana.
     bluetooth = false;

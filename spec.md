@@ -124,6 +124,12 @@ La ausencia de porcentaje exacto no justifica una interfaz muda. Cuando Nix no
 ofrezca una medida fiable, Korunix debe mostrar la fase y una señal periódica de
 actividad sin inventar porcentajes de trabajo completado.
 
+Una operación larga en una página no debe volver insensibles las demás áreas del
+panel. La persona puede seguir navegando y consultando información que no dependa
+de la operación activa. Si otra acción es incompatible mientras el motor está
+ocupado, Korunix debe indicarlo en el control afectado sin convertir toda la
+interfaz en una superficie bloqueada.
+
 En modo estructurado, stdout se reserva para el resultado JSON final. El
 progreso viaja por un canal separado que la GUI puede consumir sin contaminar
 ese documento. Cuando el mismo comando se ejecuta directamente en una terminal,
@@ -1459,7 +1465,7 @@ La regla general es:
 
 > Si una capacidad tiene un coste técnico bajo, un riesgo bajo y elimina una fricción frecuente, Korunix debe preferir habilitarla como parte de la experiencia recomendada.
 
-Los servicios que exponen el equipo a la red se evalúan aparte. En Korunix, SSH es una decisión deliberada de producto y está habilitado por defecto. Debe funcionar acompañado del firewall y de una configuración segura, ser visible como capacidad activa y poder desactivarse desde Korunix. Este valor predeterminado de SSH no implica que otros servicios que expongan el equipo a la red deban habilitarse automáticamente.
+Los servicios que exponen el equipo a la red se evalúan aparte. En Korunix, SSH es una decisión deliberada y permanente de producto: permanece activo siempre, sin excepción y sin un interruptor de desactivación en Korunix. Debe funcionar acompañado del firewall y de una configuración segura y puede mostrarse como capacidad activa para que su existencia nunca sea una sorpresa. Este valor predeterminado de SSH no implica que otros servicios que expongan el equipo a la red deban habilitarse automáticamente.
 
 Cuando una capacidad como KDE Connect, Sunshine u otro servicio local necesite reglas de firewall, la persona no administra puertos manualmente:
 
@@ -2134,7 +2140,7 @@ Korunix debe preferir defaults útiles, pero “oculto” no significa “sin co
 Reglas mínimas:
 
 - firewall activado por defecto;
-- SSH está activado por defecto como decisión explícita de producto; el firewall permanece activo y la persona puede desactivarlo;
+- SSH permanece activado siempre como decisión explícita de producto; el firewall permanece activo y Korunix no ofrece una opción para desactivarlo;
 - la GUI no corre completa como root;
 - Polkit/helper privilegiado para operaciones de sistema;
 - credenciales fuera de Git y fuera de perfiles exportables;
@@ -3102,6 +3108,8 @@ D consume exclusivamente ese contrato estructurado. Una cámara virtual sin
 productor permanece visible como **Esperando una fuente de vídeo** y su prueba
 queda deshabilitada hasta que el motor la declare disponible.
 
+Mientras la página multimedia permanezca abierta, Korunix debe volver a consultar ese estado de manera no bloqueante para que activar o detener una cámara virtual pueda reflejarse sin reiniciar la aplicación.
+
 La apariencia viva de Noctalia usa primero su IPC `theme-mode-get`, que devuelve
 la variante **resuelta** `dark` o `light`, incluso cuando la preferencia es
 `auto`. Los archivos `config.toml` y `settings.toml` quedan como respaldo de
@@ -3112,7 +3120,9 @@ aunque no exista una nueva escritura de archivo.
 D.4 debe presentar en la GUI, mediante el motor común ya cerrado en C.6, el
 entorno completo de prueba de sonido y micrófono. La salida seleccionada debe
 poder probarse sin convertirla en predeterminada y debe ofrecer prueba de canales
-cuando corresponda. El micrófono seleccionado debe disponer de medidor de nivel
+cuando corresponda.
+
+Las acciones Izquierda, Derecha y Ambos lados pertenecen a una misma prueba de salida. Mientras una de ellas está en curso, las otras deben esperar o quedar temporalmente no disponibles; pulsarlas seguidamente no debe generar un error genérico de concurrencia. El micrófono seleccionado debe disponer de medidor de nivel
 en vivo que se inicia y se detiene manualmente mediante el mismo control, sin
 una duración fija impuesta por Korunix, y de un flujo explícito
 **Probar micrófono** con **Grabar prueba**,

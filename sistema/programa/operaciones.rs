@@ -4124,7 +4124,7 @@ fn aplicar_configuracion_host(raiz: &Path, nombre: &str, nuevo: &str) -> Result<
         return Err(error);
     }
 
-    if let Err(error) = validate(raiz) {
+    if let Err(error) = validate_quiet(raiz) {
         let recovery = rollback_pending_transaction(raiz);
         return match recovery {
             Ok(_) => Err(format!(
@@ -4322,6 +4322,22 @@ fn appearance_state_json(raiz: &Path) -> Result<String, String> {
     )
 }
 
+fn appearance_style_human(style: &str) -> &'static str {
+    match style {
+        "dynamic" => "Dinámica",
+        "everforest" => "Everforest",
+        _ => "Predeterminada",
+    }
+}
+
+fn appearance_mode_human(mode: &str) -> &'static str {
+    match mode {
+        "light" => "Claro",
+        "dark" => "Oscuro",
+        _ => "Automático",
+    }
+}
+
 fn appearance_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
     if args.is_empty() {
         pretty(raiz, &appearance_state_json(raiz)?)?;
@@ -4439,7 +4455,8 @@ fn appearance_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, String
         "appearance-prepared",
         &format!(
             "Preparaste la apariencia {} en modo {}",
-            style_final, mode_final
+            appearance_style_human(style_final),
+            appearance_mode_human(mode_final)
         ),
     )?;
 
@@ -8748,6 +8765,16 @@ mod tests {
         assert!(nuevo.contains(r#"style = "everforest";"#));
         assert!(nuevo.contains(r#"mode = "light";"#));
         assert_eq!(nuevo.matches("appearance = {").count(), 1);
+    }
+
+    #[test]
+    fn apariencia_historial_no_filtra_identificadores_internos() {
+        assert_eq!(appearance_style_human("default"), "Predeterminada");
+        assert_eq!(appearance_style_human("dynamic"), "Dinámica");
+        assert_eq!(appearance_style_human("everforest"), "Everforest");
+        assert_eq!(appearance_mode_human("light"), "Claro");
+        assert_eq!(appearance_mode_human("dark"), "Oscuro");
+        assert_eq!(appearance_mode_human("auto"), "Automático");
     }
 
     #[test]

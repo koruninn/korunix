@@ -2997,12 +2997,6 @@ fn ejecutar_motor(estado: &Estado, argumentos: &[&str]) -> Result<String, String
         mostrar_progreso(estado, 5, etapa);
     }
 
-    let es_multimedia = argumentos.first().copied() == Some("media");
-    let sensible_anterior = estado.stack.is_sensitive();
-    if !es_multimedia {
-        estado.stack.set_sensitive(false);
-    }
-
     let motor = estado.motor.clone();
     let raiz = estado.raiz.clone();
     let argumentos_hilo = argumentos
@@ -3043,9 +3037,6 @@ fn ejecutar_motor(estado: &Estado, argumentos: &[&str]) -> Result<String, String
         ocultar_progreso(estado);
     }
 
-    if !es_multimedia {
-        estado.stack.set_sensitive(sensible_anterior);
-    }
     estado.ocupado.set(false);
 
     resultado
@@ -7074,27 +7065,27 @@ fn texto_prueba_multimedia(idioma: Idioma, clave: &str) -> &'static str {
         (Idioma::ChinoSimplificado, "output_detail") => {
             "仅通过选定的输出播放短信号。它不会更改默认输出。"
         }
-        (Idioma::Ingles, "both") => "Test sound",
-        (Idioma::BelarusLatino, "both") => "Test huku",
-        (Idioma::Belarus, "both") => "Тэст гуку",
-        (Idioma::Catalan, "both") => "Prova de so",
-        (Idioma::Checo, "both") => "Testovací zvuk",
-        (Idioma::Aleman, "both") => "Ton testen",
-        (Idioma::Frances, "both") => "Tester le son",
-        (Idioma::Gallego, "both") => "Proba de son",
-        (Idioma::Italiano, "both") => "Prova il suono",
-        (Idioma::Coreano, "both") => "테스트 사운드",
-        (Idioma::Kurdo, "both") => "Dengê testê",
-        (Idioma::Neerlandes, "both") => "Geluid testen",
-        (Idioma::NoruegoNynorsk, "both") => "Test lyd",
-        (Idioma::Polaco, "both") => "Testuj dźwięk",
-        (Idioma::PortuguesBrasil, "both") => "Teste de som",
-        (Idioma::Ruso, "both") => "Тестовый звук",
-        (Idioma::Sueco, "both") => "Testljud",
-        (Idioma::Turco, "both") => "Sesi test et",
-        (Idioma::Ucraniano, "both") => "Тестовий звук",
-        (Idioma::Vietnamita, "both") => "Kiểm tra âm thanh",
-        (Idioma::ChinoSimplificado, "both") => "测试声音",
+        (Idioma::Ingles, "both") => "Both sides",
+        (Idioma::BelarusLatino, "both") => "Abodva baki",
+        (Idioma::Belarus, "both") => "Абодва бакі",
+        (Idioma::Catalan, "both") => "Tots dos costats",
+        (Idioma::Checo, "both") => "Obě strany",
+        (Idioma::Aleman, "both") => "Beide Seiten",
+        (Idioma::Frances, "both") => "Les deux côtés",
+        (Idioma::Gallego, "both") => "Ambos os lados",
+        (Idioma::Italiano, "both") => "Entrambi i lati",
+        (Idioma::Coreano, "both") => "양쪽",
+        (Idioma::Kurdo, "both") => "Her du alî",
+        (Idioma::Neerlandes, "both") => "Beide kanten",
+        (Idioma::NoruegoNynorsk, "both") => "Begge sider",
+        (Idioma::Polaco, "both") => "Obie strony",
+        (Idioma::PortuguesBrasil, "both") => "Ambos os lados",
+        (Idioma::Ruso, "both") => "Обе стороны",
+        (Idioma::Sueco, "both") => "Båda sidor",
+        (Idioma::Turco, "both") => "Her iki taraf",
+        (Idioma::Ucraniano, "both") => "Обидві сторони",
+        (Idioma::Vietnamita, "both") => "Cả hai bên",
+        (Idioma::ChinoSimplificado, "both") => "两侧",
         (Idioma::Ingles, "left") => "Left",
         (Idioma::BelarusLatino, "left") => "nałjeva",
         (Idioma::Belarus, "left") => "Злева",
@@ -7542,7 +7533,7 @@ fn texto_prueba_multimedia(idioma: Idioma, clave: &str) -> &'static str {
         (Idioma::Hungaro, "output_detail") => {
             "Rövid jelet játszik le csak a kiválasztott kimeneten. Nem módosítja az alapértelmezett kimenetet."
         }
-        (Idioma::Hungaro, "both") => "Hang tesztelése",
+        (Idioma::Hungaro, "both") => "Mindkét oldal",
         (Idioma::Hungaro, "left") => "Bal",
         (Idioma::Hungaro, "right") => "Jobb",
         (Idioma::Hungaro, "output_done") => "A hangkimenet tesztje befejeződött.",
@@ -7570,7 +7561,7 @@ fn texto_prueba_multimedia(idioma: Idioma, clave: &str) -> &'static str {
         (_, "output_detail") => {
             "Reproduce una señal breve solo por la salida elegida. No cambia la salida predeterminada."
         }
-        (_, "both") => "Probar sonido",
+        (_, "both") => "Ambos lados",
         (_, "left") => "Izquierda",
         (_, "right") => "Derecha",
         (_, "output_done") => "Prueba de salida completada.",
@@ -7728,13 +7719,23 @@ fn medir_microfono_gui(
     resultado_final
 }
 
-fn ejecutar_prueba_salida_gui(estado: &Estado, selector: &adw::ComboRow, ids: &[u32], canal: &str) {
+fn ejecutar_prueba_salida_gui(
+    estado: &Estado,
+    selector: &adw::ComboRow,
+    ids: &[u32],
+    canal: &str,
+    botones: &[gtk::Button],
+) {
     let Some(id) = ids.get(selector.selected() as usize).copied() else {
         return;
     };
 
+    for boton in botones {
+        boton.set_sensitive(false);
+    }
+
     let id = id.to_string();
-    match ejecutar_json(
+    let resultado = ejecutar_json(
         estado,
         &[
             "media",
@@ -7748,7 +7749,13 @@ fn ejecutar_prueba_salida_gui(estado: &Estado, selector: &adw::ComboRow, ids: &[
             "--yes",
             "--json",
         ],
-    ) {
+    );
+
+    for boton in botones {
+        boton.set_sensitive(true);
+    }
+
+    match resultado {
         Ok(_) => mostrar_exito(
             estado,
             texto_prueba_multimedia(estado.idioma, "output_done"),
@@ -8393,8 +8400,9 @@ fn pagina_multimedia(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage 
 
         let botones = gtk::Box::new(gtk::Orientation::Horizontal, 4);
         botones.set_valign(gtk::Align::Center);
-        botones.set_halign(gtk::Align::End);
-        botones.set_hexpand(false);
+        botones.set_halign(gtk::Align::Center);
+        botones.set_hexpand(true);
+        botones.set_homogeneous(true);
         let ambos = gtk::Button::with_label(texto_prueba_multimedia(estado.idioma, "both"));
         ambos.add_css_class("suggested-action");
         ambos.set_valign(gtk::Align::Center);
@@ -8406,19 +8414,28 @@ fn pagina_multimedia(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage 
         botones.append(&izquierda);
         botones.append(&ambos);
         botones.append(&derecha);
-        canales.add_suffix(&botones);
+
+        let botones_prueba = Rc::new(vec![izquierda.clone(), ambos.clone(), derecha.clone()]);
+
         grupo_prueba_salida.add(&canales);
+        botones.set_margin_top(4);
+        botones.set_margin_bottom(4);
+        botones.set_margin_start(8);
+        botones.set_margin_end(8);
+        grupo_prueba_salida.add(&botones);
 
         {
             let estado_prueba = Rc::clone(&estado);
             let selector_prueba = selector.clone();
             let ids_prueba = Rc::clone(&ids);
+            let botones_prueba = Rc::clone(&botones_prueba);
             ambos.connect_clicked(move |_| {
                 ejecutar_prueba_salida_gui(
                     &estado_prueba,
                     &selector_prueba,
                     ids_prueba.as_slice(),
                     "both",
+                    botones_prueba.as_slice(),
                 );
             });
         }
@@ -8427,12 +8444,14 @@ fn pagina_multimedia(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage 
             let estado_prueba = Rc::clone(&estado);
             let selector_prueba = selector.clone();
             let ids_prueba = Rc::clone(&ids);
+            let botones_prueba = Rc::clone(&botones_prueba);
             izquierda.connect_clicked(move |_| {
                 ejecutar_prueba_salida_gui(
                     &estado_prueba,
                     &selector_prueba,
                     ids_prueba.as_slice(),
                     "left",
+                    botones_prueba.as_slice(),
                 );
             });
         }
@@ -8441,12 +8460,14 @@ fn pagina_multimedia(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage 
             let estado_prueba = Rc::clone(&estado);
             let selector_prueba = selector.clone();
             let ids_prueba = Rc::clone(&ids);
+            let botones_prueba = Rc::clone(&botones_prueba);
             derecha.connect_clicked(move |_| {
                 ejecutar_prueba_salida_gui(
                     &estado_prueba,
                     &selector_prueba,
                     ids_prueba.as_slice(),
                     "right",
+                    botones_prueba.as_slice(),
                 );
             });
         }
@@ -10131,8 +10152,19 @@ fn pagina_aplicaciones(
     ));
     buscar_mas.set_sensitive(false);
 
+    let fila_busqueda_externa = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    fila_busqueda_externa.set_hexpand(true);
+
+    let indicador_busqueda = gtk::Spinner::new();
+    indicador_busqueda.set_visible(false);
+    indicador_busqueda.set_valign(gtk::Align::Center);
+
+    buscar_mas.set_hexpand(true);
+    fila_busqueda_externa.append(&buscar_mas);
+    fila_busqueda_externa.append(&indicador_busqueda);
+
     caja_busqueda.append(&consulta);
-    caja_busqueda.append(&buscar_mas);
+    caja_busqueda.append(&fila_busqueda_externa);
     grupo_busqueda.add(&caja_busqueda);
     pagina.add(&grupo_busqueda);
 
@@ -10241,8 +10273,9 @@ fn pagina_aplicaciones(
     let estado_buscar = Rc::clone(&estado);
     let consulta_externa = consulta.clone();
     let seleccionados_buscar = seleccionados.clone();
+    let indicador_buscar = indicador_busqueda.clone();
 
-    buscar_mas.connect_clicked(move |_| {
+    buscar_mas.connect_clicked(move |boton| {
         while let Some(hijo) = resultados_externos.first_child() {
             resultados_externos.remove(&hijo);
         }
@@ -10253,9 +10286,15 @@ fn pagina_aplicaciones(
             return;
         }
 
+        boton.set_sensitive(false);
+        consulta_externa.set_sensitive(false);
+        indicador_buscar.set_visible(true);
+        indicador_buscar.start();
+
         let mut encontrados = 0usize;
         let mut fuentes_disponibles = 0usize;
         let mut ultimo_error = None::<String>;
+        let mut vistos = std::collections::HashSet::<String>::new();
 
         for fuente in ["nixpkgs", "flatpak"] {
             let datos = ejecutar_json(
@@ -10282,6 +10321,11 @@ fn pagina_aplicaciones(
             };
 
             for resultado in resultados_aplicaciones_externas(&datos, fuente) {
+                let clave = format!("{}:{}", resultado.fuente, resultado.nombre.to_lowercase());
+                if !vistos.insert(clave) {
+                    continue;
+                }
+
                 let token = format!("{}:{}", resultado.fuente, resultado.id);
                 let activa = seleccionados_buscar.iter().any(|actual| actual == &token);
 
@@ -10296,6 +10340,11 @@ fn pagina_aplicaciones(
                 encontrados += 1;
             }
         }
+
+        indicador_buscar.stop();
+        indicador_buscar.set_visible(false);
+        consulta_externa.set_sensitive(true);
+        boton.set_sensitive(!consulta_externa.text().trim().is_empty());
 
         if fuentes_disponibles == 0 {
             if let Some(error) = ultimo_error {
