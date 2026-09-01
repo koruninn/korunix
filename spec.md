@@ -478,6 +478,25 @@ Cuando sea fiable, debe detectar y proponer valores. La interfaz debe favorecer 
 
 Se deben admitir múltiples idiomas y múltiples distribuciones de teclado cuando el sistema lo permita.
 
+Los idiomas preferidos del sistema forman una lista ordenada: el primero es el
+idioma base y los siguientes son alternativas que las aplicaciones pueden usar
+cuando disponen de ellas. Cambiar esa lista no cambia por sí solo la región, los
+formatos ni el idioma de la propia interfaz de Korunix.
+
+La interfaz normal presenta nombres humanos y conserva los códigos de locale,
+región, zona horaria, layout y variante como detalle interno. Las colecciones
+grandes deben poder buscarse por nombre en vez de exigir memorizar un código.
+
+El catálogo de teclados no es una lista histórica mantenida a mano por Korunix.
+Debe obtenerse de `xkeyboard-config` perteneciente a la revisión efectiva de
+Nixpkgs, incluyendo sus layouts y variantes. De este modo una distribución
+soportada por el sistema no queda fuera solamente porque Korunix no la haya
+enumerado antes.
+
+Las zonas horarias se obtienen de la `tzdata` efectiva del sistema. Las regiones
+se modelan con identificadores ISO 3166-1 internos, pero la vista normal muestra
+sus nombres humanos.
+
 ### 9.1. Teclas muertas, diacríticos y métodos de composición
 
 La distribución XKB y el método de composición son capas distintas.

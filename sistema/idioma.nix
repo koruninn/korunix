@@ -12,6 +12,13 @@
   systemLocale = localeFor cfg.systemLanguage cfg.region;
   formatLocale = localeFor cfg.formats.language cfg.formats.region;
 
+  # LANGUAGE conserva un orden de preferencias para aplicaciones que pueden
+  # ofrecer más de un idioma sin alterar el locale base ni los formatos.
+  preferredLanguages =
+    if cfg.preferredLanguages == null
+    then [cfg.systemLanguage]
+    else cfg.preferredLanguages;
+
   # La primera distribución es la principal. Las adicionales mantienen el mismo
   # orden en NixOS, Niri, Hyprland y las etiquetas humanas de Noctalia.
   keyboardLayouts =
@@ -35,6 +42,16 @@ in {
       description = ''
         Idioma base del sistema. No representa la preferencia portable de una
         persona concreta.
+      '';
+    };
+
+    preferredLanguages = lib.mkOption {
+      type = lib.types.nullOr (lib.types.listOf lib.types.str);
+      default = null;
+      description = ''
+        Idiomas preferidos del sistema en orden. El primero coincide con
+        systemLanguage. null conserva compatibilidad y equivale a usar solo el
+        idioma base.
       '';
     };
 
@@ -142,6 +159,18 @@ in {
           + "compatible con locale, por ejemplo es, en o pt.";
       }
       {
+        assertion =
+          preferredLanguages
+          != []
+          && builtins.all validLanguage preferredLanguages
+          && builtins.head preferredLanguages == cfg.systemLanguage
+          && builtins.length preferredLanguages
+          == builtins.length (lib.unique preferredLanguages);
+        message =
+          "korunix.localization.preferredLanguages debe contener idiomas "
+          + "válidos, sin repetir, y comenzar por systemLanguage.";
+      }
+      {
         assertion = validRegion cfg.region;
         message =
           "korunix.localization.region debe ser un código regional de dos "
@@ -190,6 +219,9 @@ in {
     # LANG conserva el idioma base del sistema. Los formatos regionales pueden
     # evolucionar de forma independiente sin alterar los mensajes de interfaz.
     i18n.defaultLocale = systemLocale;
+
+    environment.sessionVariables.LANGUAGE =
+      lib.concatStringsSep ":" preferredLanguages;
 
     i18n.extraLocaleSettings = {
       LC_ADDRESS = formatLocale;

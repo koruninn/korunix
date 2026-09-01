@@ -62,6 +62,7 @@
       # El idioma del sistema, los formatos y la región son estado de este host.
       # La preferencia de idioma de cada persona sigue viviendo en configuracion/personas/.
       systemLanguage = "es";
+      preferredLanguages = ["es"];
       region = "PE";
 
       formats = {

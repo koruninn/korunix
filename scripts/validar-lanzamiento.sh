@@ -395,6 +395,38 @@ else
   fallo 'historial puede volver a mostrar identificadores internos heredados'
 fi
 
+if grep -Fq 'preferredLanguages = lib.mkOption' sistema/idioma.nix \
+   && grep -Fq 'environment.sessionVariables.LANGUAGE' sistema/idioma.nix \
+   && grep -Fq 'preferredLanguages = ["es"];' configuracion/equipos/korunix.nix \
+   && grep -Fq 'fn localization_catalog_json' sistema/programa/operaciones.rs \
+   && grep -Fq 'xkeyboard_config.outPath' sistema/programa/operaciones.rs \
+   && grep -Fq 'tzdata.outPath' sistema/programa/operaciones.rs
+then
+  ok 'localización modela idiomas preferidos y catálogos efectivos'
+else
+  fallo 'localización perdió idiomas preferidos o sus catálogos reales'
+fi
+
+if grep -Fq 'struct OpcionLocalizacion' sistema/interfaz/principal.rs \
+   && grep -Fq 'set_enable_search(true)' sistema/interfaz/principal.rs \
+   && grep -Fq -- '--preferred-languages-json' sistema/interfaz/principal.rs \
+   && grep -Fq -- '--keyboards-json' sistema/interfaz/principal.rs \
+   && ! grep -Fq 'Los identificadores técnicos solo se muestran aquí porque esta edición avanzada' sistema/interfaz/principal.rs
+then
+  ok 'Idioma y región usa selectores humanos buscables'
+else
+  fallo 'Idioma y región volvió a exponer edición técnica o perdió selección múltiple'
+fi
+
+if grep -Fq 'El catálogo de teclados no es una lista histórica' spec.md \
+   && grep -Fq "Las zonas horarias se obtienen de la \`tzdata\` efectiva" spec.md \
+   && grep -Fq 'Los idiomas preferidos del sistema forman una lista ordenada' spec.md
+then
+  ok 'especificación protege localización humana y catálogos reales'
+else
+  fallo 'spec perdió el contrato de localización humana'
+fi
+
 ssh_activo="$(
   nix eval \
     --json \

@@ -8,7 +8,7 @@
 //! fabrica un pseudo-TTY ni se automatiza una contraseña.
 
 use super::*;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
 
 fn args_texto(args: &[OsString]) -> Vec<String> {
@@ -6683,6 +6683,694 @@ fn desktop_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct LocalizationKeyboard {
+    layout: String,
+    variant: String,
+    label: String,
+}
+
+fn localization_language_valid(value: &str) -> bool {
+    (2..=3).contains(&value.len()) && value.bytes().all(|c| c.is_ascii_lowercase())
+}
+
+fn localization_xkb_token_valid(value: &str, empty_ok: bool) -> bool {
+    (empty_ok || !value.is_empty())
+        && value
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'+' | b'.'))
+}
+
+fn localization_preferred_languages(raw: &str) -> Result<Vec<String>, String> {
+    let values = serde_json::from_str::<Vec<String>>(raw).map_err(|_| {
+        "--preferred-languages-json debe ser una lista JSON de idiomas.".to_string()
+    })?;
+
+    if values.is_empty() {
+        return Err("Selecciona al menos un idioma preferido.".to_string());
+    }
+
+    let mut seen = BTreeSet::<String>::new();
+    for value in &values {
+        if !localization_language_valid(value) {
+            return Err(format!("Código de idioma inválido: {value}"));
+        }
+        if !seen.insert(value.clone()) {
+            return Err(format!("El idioma {value} está repetido."));
+        }
+    }
+
+    Ok(values)
+}
+
+fn localization_keyboards(raw: &str) -> Result<Vec<LocalizationKeyboard>, String> {
+    let value: serde_json::Value = serde_json::from_str(raw)
+        .map_err(|_| "--keyboards-json debe ser una lista JSON de teclados.".to_string())?;
+
+    let items = value
+        .as_array()
+        .ok_or_else(|| "--keyboards-json debe contener una lista.".to_string())?;
+
+    if items.is_empty() {
+        return Err("Selecciona al menos un teclado.".to_string());
+    }
+
+    let mut seen = BTreeSet::<(String, String)>::new();
+    let mut result = Vec::<LocalizationKeyboard>::new();
+
+    for item in items {
+        let layout = item
+            .get("layout")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_string();
+
+        let variant = item
+            .get("variant")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_string();
+
+        let label = item
+            .get("label")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_string();
+
+        if !localization_xkb_token_valid(&layout, false) {
+            return Err(format!("Distribución XKB inválida: {layout}"));
+        }
+
+        if !localization_xkb_token_valid(&variant, true) {
+            return Err(format!("Variante XKB inválida: {variant}"));
+        }
+
+        if label.is_empty() || label.contains('\n') || label.contains('\r') {
+            return Err("Cada teclado necesita un nombre humano válido.".to_string());
+        }
+
+        if !seen.insert((layout.clone(), variant.clone())) {
+            return Err(format!("El teclado {layout} ({variant}) está repetido."));
+        }
+
+        result.push(LocalizationKeyboard {
+            layout,
+            variant,
+            label,
+        });
+    }
+
+    Ok(result)
+}
+
+fn lista_nix_render(indent: usize, key: &str, values: &[String]) -> Vec<String> {
+    let mut lines = vec![format!("{}{} = [", " ".repeat(indent), key)];
+
+    for value in values {
+        lines.push(format!("{}{}", " ".repeat(indent + 2), json_texto(value)));
+    }
+
+    lines.push(format!("{}];", " ".repeat(indent)));
+    lines
+}
+
+fn reemplazar_o_insertar_lista_nix(
+    texto: &str,
+    indent: usize,
+    key: &str,
+    values: &[String],
+    anchor: &str,
+) -> Result<String, String> {
+    let mut lines = texto.lines().map(ToString::to_string).collect::<Vec<_>>();
+    let prefix = format!("{}{} = ", " ".repeat(indent), key);
+
+    let positions = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| line.starts_with(&prefix).then_some(index))
+        .collect::<Vec<_>>();
+
+    if positions.len() > 1 {
+        return Err(format!(
+            "La configuración contiene más de una lista editable {key}."
+        ));
+    }
+
+    let replacement = lista_nix_render(indent, key, values);
+
+    if let Some(&start) = positions.first() {
+        let after = lines[start][prefix.len()..].trim();
+
+        let end = if after.starts_with('[') && after.ends_with("];") {
+            start
+        } else if after == "[" {
+            let closing = format!("{}];", " ".repeat(indent));
+            lines
+                .iter()
+                .enumerate()
+                .skip(start + 1)
+                .find_map(|(index, line)| (line == &closing).then_some(index))
+                .ok_or_else(|| format!("La lista {key} no tiene cierre reconocible."))?
+        } else {
+            return Err(format!(
+                "La lista {key} usa una forma manual que Korunix no modificará."
+            ));
+        };
+
+        if end > start + 1
+            && lines[start + 1..end]
+                .iter()
+                .any(|line| line.trim_start().starts_with('#'))
+        {
+            return Err(format!(
+                "La lista {key} contiene comentarios manuales; Korunix no los borrará."
+            ));
+        }
+
+        lines.splice(start..=end, replacement);
+        return Ok(lines.join("\n") + "\n");
+    }
+
+    let anchor_prefix = format!("{}{} = ", " ".repeat(indent), anchor);
+    let anchors = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| line.starts_with(&anchor_prefix).then_some(index))
+        .collect::<Vec<_>>();
+
+    if anchors.len() != 1 {
+        return Err(format!(
+            "No encontré un punto seguro para insertar la lista {key}."
+        ));
+    }
+
+    let insert_at = anchors[0] + 1;
+    for (offset, line) in replacement.into_iter().enumerate() {
+        lines.insert(insert_at + offset, line);
+    }
+
+    Ok(lines.join("\n") + "\n")
+}
+
+fn parse_xkb_rules(raw: &str) -> Vec<LocalizationKeyboard> {
+    let mut section = "";
+    let mut layouts = BTreeMap::<String, String>::new();
+    let mut variants = Vec::<(String, String, String)>::new();
+
+    for original in raw.lines() {
+        let line = original.trim();
+
+        if line.starts_with('!') {
+            section = if line.starts_with("! layout") {
+                "layout"
+            } else if line.starts_with("! variant") {
+                "variant"
+            } else {
+                ""
+            };
+            continue;
+        }
+
+        if line.is_empty() || section.is_empty() {
+            continue;
+        }
+
+        if section == "layout" {
+            let mut parts = line.split_whitespace();
+            let Some(layout) = parts.next() else {
+                continue;
+            };
+            let label = parts.collect::<Vec<_>>().join(" ");
+
+            if localization_xkb_token_valid(layout, false) && !label.is_empty() {
+                layouts.insert(layout.to_string(), label);
+            }
+            continue;
+        }
+
+        let mut parts = line.split_whitespace();
+        let Some(variant) = parts.next() else {
+            continue;
+        };
+        let rest = parts.collect::<Vec<_>>().join(" ");
+        let Some((layout, label)) = rest.split_once(':') else {
+            continue;
+        };
+
+        let layout = layout.trim();
+        let label = label.trim();
+
+        if localization_xkb_token_valid(layout, false)
+            && localization_xkb_token_valid(variant, false)
+            && !label.is_empty()
+        {
+            variants.push((layout.to_string(), variant.to_string(), label.to_string()));
+        }
+    }
+
+    let mut result = layouts
+        .iter()
+        .map(|(layout, label)| LocalizationKeyboard {
+            layout: layout.clone(),
+            variant: String::new(),
+            label: label.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    for (layout, variant, label) in variants {
+        if layouts.contains_key(&layout) {
+            result.push(LocalizationKeyboard {
+                layout,
+                variant,
+                label,
+            });
+        }
+    }
+
+    result.sort_by(|left, right| {
+        left.label
+            .to_ascii_lowercase()
+            .cmp(&right.label.to_ascii_lowercase())
+            .then_with(|| left.layout.cmp(&right.layout))
+            .then_with(|| left.variant.cmp(&right.variant))
+    });
+
+    result
+}
+
+const KORUNIX_LANGUAGE_CATALOG: &[(&str, &str)] = &[
+    ("be", "Беларуская"),
+    ("ca", "Català"),
+    ("cs", "Čeština"),
+    ("de", "Deutsch"),
+    ("en", "English"),
+    ("es", "Español"),
+    ("fr", "Français"),
+    ("gl", "Galego"),
+    ("hu", "Magyar"),
+    ("it", "Italiano"),
+    ("ko", "한국어"),
+    ("ku", "Kurdî"),
+    ("nl", "Nederlands"),
+    ("nn", "Norsk nynorsk"),
+    ("pl", "Polski"),
+    ("pt", "Português"),
+    ("ru", "Русский"),
+    ("sv", "Svenska"),
+    ("tr", "Türkçe"),
+    ("uk", "Українська"),
+    ("vi", "Tiếng Việt"),
+    ("zh", "简体中文"),
+];
+
+const KORUNIX_REGION_CATALOG: &[(&str, &str)] = &[
+    ("AF", "Afghanistan"),
+    ("AL", "Albania"),
+    ("DZ", "Algeria"),
+    ("AS", "American Samoa"),
+    ("AD", "Andorra"),
+    ("AO", "Angola"),
+    ("AI", "Anguilla"),
+    ("AQ", "Antarctica"),
+    ("AG", "Antigua and Barbuda"),
+    ("AR", "Argentina"),
+    ("AM", "Armenia"),
+    ("AW", "Aruba"),
+    ("AU", "Australia"),
+    ("AT", "Austria"),
+    ("AZ", "Azerbaijan"),
+    ("BS", "Bahamas"),
+    ("BH", "Bahrain"),
+    ("BD", "Bangladesh"),
+    ("BB", "Barbados"),
+    ("BY", "Belarus"),
+    ("BE", "Belgium"),
+    ("BZ", "Belize"),
+    ("BJ", "Benin"),
+    ("BM", "Bermuda"),
+    ("BT", "Bhutan"),
+    ("BO", "Bolivia, Plurinational State of"),
+    ("BQ", "Bonaire, Sint Eustatius and Saba"),
+    ("BA", "Bosnia and Herzegovina"),
+    ("BW", "Botswana"),
+    ("BV", "Bouvet Island"),
+    ("BR", "Brazil"),
+    ("IO", "British Indian Ocean Territory"),
+    ("BN", "Brunei Darussalam"),
+    ("BG", "Bulgaria"),
+    ("BF", "Burkina Faso"),
+    ("BI", "Burundi"),
+    ("CV", "Cabo Verde"),
+    ("KH", "Cambodia"),
+    ("CM", "Cameroon"),
+    ("CA", "Canada"),
+    ("KY", "Cayman Islands"),
+    ("CF", "Central African Republic"),
+    ("TD", "Chad"),
+    ("CL", "Chile"),
+    ("CN", "China"),
+    ("CX", "Christmas Island"),
+    ("CC", "Cocos (Keeling) Islands"),
+    ("CO", "Colombia"),
+    ("KM", "Comoros"),
+    ("CG", "Congo"),
+    ("CD", "Congo, The Democratic Republic of the"),
+    ("CK", "Cook Islands"),
+    ("CR", "Costa Rica"),
+    ("HR", "Croatia"),
+    ("CU", "Cuba"),
+    ("CW", "Curaçao"),
+    ("CY", "Cyprus"),
+    ("CZ", "Czechia"),
+    ("CI", "Côte d'Ivoire"),
+    ("DK", "Denmark"),
+    ("DJ", "Djibouti"),
+    ("DM", "Dominica"),
+    ("DO", "Dominican Republic"),
+    ("EC", "Ecuador"),
+    ("EG", "Egypt"),
+    ("SV", "El Salvador"),
+    ("GQ", "Equatorial Guinea"),
+    ("ER", "Eritrea"),
+    ("EE", "Estonia"),
+    ("SZ", "Eswatini"),
+    ("ET", "Ethiopia"),
+    ("FK", "Falkland Islands (Malvinas)"),
+    ("FO", "Faroe Islands"),
+    ("FJ", "Fiji"),
+    ("FI", "Finland"),
+    ("FR", "France"),
+    ("GF", "French Guiana"),
+    ("PF", "French Polynesia"),
+    ("TF", "French Southern Territories"),
+    ("GA", "Gabon"),
+    ("GM", "Gambia"),
+    ("GE", "Georgia"),
+    ("DE", "Germany"),
+    ("GH", "Ghana"),
+    ("GI", "Gibraltar"),
+    ("GR", "Greece"),
+    ("GL", "Greenland"),
+    ("GD", "Grenada"),
+    ("GP", "Guadeloupe"),
+    ("GU", "Guam"),
+    ("GT", "Guatemala"),
+    ("GG", "Guernsey"),
+    ("GN", "Guinea"),
+    ("GW", "Guinea-Bissau"),
+    ("GY", "Guyana"),
+    ("HT", "Haiti"),
+    ("HM", "Heard Island and McDonald Islands"),
+    ("VA", "Holy See (Vatican City State)"),
+    ("HN", "Honduras"),
+    ("HK", "Hong Kong"),
+    ("HU", "Hungary"),
+    ("IS", "Iceland"),
+    ("IN", "India"),
+    ("ID", "Indonesia"),
+    ("IR", "Iran, Islamic Republic of"),
+    ("IQ", "Iraq"),
+    ("IE", "Ireland"),
+    ("IM", "Isle of Man"),
+    ("IL", "Israel"),
+    ("IT", "Italy"),
+    ("JM", "Jamaica"),
+    ("JP", "Japan"),
+    ("JE", "Jersey"),
+    ("JO", "Jordan"),
+    ("KZ", "Kazakhstan"),
+    ("KE", "Kenya"),
+    ("KI", "Kiribati"),
+    ("KP", "Korea, Democratic People's Republic of"),
+    ("KR", "Korea, Republic of"),
+    ("KW", "Kuwait"),
+    ("KG", "Kyrgyzstan"),
+    ("LA", "Lao People's Democratic Republic"),
+    ("LV", "Latvia"),
+    ("LB", "Lebanon"),
+    ("LS", "Lesotho"),
+    ("LR", "Liberia"),
+    ("LY", "Libya"),
+    ("LI", "Liechtenstein"),
+    ("LT", "Lithuania"),
+    ("LU", "Luxembourg"),
+    ("MO", "Macao"),
+    ("MG", "Madagascar"),
+    ("MW", "Malawi"),
+    ("MY", "Malaysia"),
+    ("MV", "Maldives"),
+    ("ML", "Mali"),
+    ("MT", "Malta"),
+    ("MH", "Marshall Islands"),
+    ("MQ", "Martinique"),
+    ("MR", "Mauritania"),
+    ("MU", "Mauritius"),
+    ("YT", "Mayotte"),
+    ("MX", "Mexico"),
+    ("FM", "Micronesia, Federated States of"),
+    ("MD", "Moldova, Republic of"),
+    ("MC", "Monaco"),
+    ("MN", "Mongolia"),
+    ("ME", "Montenegro"),
+    ("MS", "Montserrat"),
+    ("MA", "Morocco"),
+    ("MZ", "Mozambique"),
+    ("MM", "Myanmar"),
+    ("NA", "Namibia"),
+    ("NR", "Nauru"),
+    ("NP", "Nepal"),
+    ("NL", "Netherlands"),
+    ("NC", "New Caledonia"),
+    ("NZ", "New Zealand"),
+    ("NI", "Nicaragua"),
+    ("NE", "Niger"),
+    ("NG", "Nigeria"),
+    ("NU", "Niue"),
+    ("NF", "Norfolk Island"),
+    ("MK", "North Macedonia"),
+    ("MP", "Northern Mariana Islands"),
+    ("NO", "Norway"),
+    ("OM", "Oman"),
+    ("PK", "Pakistan"),
+    ("PW", "Palau"),
+    ("PS", "Palestine, State of"),
+    ("PA", "Panama"),
+    ("PG", "Papua New Guinea"),
+    ("PY", "Paraguay"),
+    ("PE", "Peru"),
+    ("PH", "Philippines"),
+    ("PN", "Pitcairn"),
+    ("PL", "Poland"),
+    ("PT", "Portugal"),
+    ("PR", "Puerto Rico"),
+    ("QA", "Qatar"),
+    ("RO", "Romania"),
+    ("RU", "Russian Federation"),
+    ("RW", "Rwanda"),
+    ("RE", "Réunion"),
+    ("BL", "Saint Barthélemy"),
+    ("SH", "Saint Helena, Ascension and Tristan da Cunha"),
+    ("KN", "Saint Kitts and Nevis"),
+    ("LC", "Saint Lucia"),
+    ("MF", "Saint Martin (French part)"),
+    ("PM", "Saint Pierre and Miquelon"),
+    ("VC", "Saint Vincent and the Grenadines"),
+    ("WS", "Samoa"),
+    ("SM", "San Marino"),
+    ("ST", "Sao Tome and Principe"),
+    ("SA", "Saudi Arabia"),
+    ("SN", "Senegal"),
+    ("RS", "Serbia"),
+    ("SC", "Seychelles"),
+    ("SL", "Sierra Leone"),
+    ("SG", "Singapore"),
+    ("SX", "Sint Maarten (Dutch part)"),
+    ("SK", "Slovakia"),
+    ("SI", "Slovenia"),
+    ("SB", "Solomon Islands"),
+    ("SO", "Somalia"),
+    ("ZA", "South Africa"),
+    ("GS", "South Georgia and the South Sandwich Islands"),
+    ("SS", "South Sudan"),
+    ("ES", "Spain"),
+    ("LK", "Sri Lanka"),
+    ("SD", "Sudan"),
+    ("SR", "Suriname"),
+    ("SJ", "Svalbard and Jan Mayen"),
+    ("SE", "Sweden"),
+    ("CH", "Switzerland"),
+    ("SY", "Syrian Arab Republic"),
+    ("TW", "Taiwan, Province of China"),
+    ("TJ", "Tajikistan"),
+    ("TZ", "Tanzania, United Republic of"),
+    ("TH", "Thailand"),
+    ("TL", "Timor-Leste"),
+    ("TG", "Togo"),
+    ("TK", "Tokelau"),
+    ("TO", "Tonga"),
+    ("TT", "Trinidad and Tobago"),
+    ("TN", "Tunisia"),
+    ("TM", "Turkmenistan"),
+    ("TC", "Turks and Caicos Islands"),
+    ("TV", "Tuvalu"),
+    ("TR", "Türkiye"),
+    ("UG", "Uganda"),
+    ("UA", "Ukraine"),
+    ("AE", "United Arab Emirates"),
+    ("GB", "United Kingdom"),
+    ("US", "United States"),
+    ("UM", "United States Minor Outlying Islands"),
+    ("UY", "Uruguay"),
+    ("UZ", "Uzbekistan"),
+    ("VU", "Vanuatu"),
+    ("VE", "Venezuela, Bolivarian Republic of"),
+    ("VN", "Viet Nam"),
+    ("VG", "Virgin Islands, British"),
+    ("VI", "Virgin Islands, U.S."),
+    ("WF", "Wallis and Futuna"),
+    ("EH", "Western Sahara"),
+    ("YE", "Yemen"),
+    ("ZM", "Zambia"),
+    ("ZW", "Zimbabwe"),
+    ("AX", "Åland Islands"),
+];
+
+fn localization_timezone_label(value: &str) -> String {
+    let parts = value.split('/').collect::<Vec<_>>();
+    let city = parts.last().copied().unwrap_or(value).replace('_', " ");
+
+    if parts.len() >= 3 {
+        let middle = parts[parts.len() - 2].replace('_', " ");
+        format!("{city} — {middle}")
+    } else if let Some(area) = parts.first() {
+        format!("{city} — {}", area.replace('_', " "))
+    } else {
+        city
+    }
+}
+
+fn localization_catalog_json(raiz: &Path) -> Result<String, String> {
+    let host = resolver_equipo(raiz)?;
+
+    let xkb_root = flake_raw(
+        raiz,
+        &format!("nixosConfigurations.{host}.pkgs.xkeyboard_config.outPath"),
+    )?;
+
+    let xkb_candidates = [
+        PathBuf::from(&xkb_root).join("share/X11/xkb/rules/evdev.lst"),
+        PathBuf::from(&xkb_root).join("share/X11/xkb/rules/base.lst"),
+    ];
+
+    let xkb_file = xkb_candidates
+        .iter()
+        .find(|path| path.is_file())
+        .ok_or_else(|| {
+            "No pude localizar el catálogo XKB de la revisión actual de Nixpkgs.".to_string()
+        })?;
+
+    let xkb_raw = fs::read_to_string(xkb_file)
+        .map_err(|error| format!("No pude leer {}: {error}", xkb_file.display()))?;
+    let keyboards = parse_xkb_rules(&xkb_raw);
+
+    if keyboards.is_empty() {
+        return Err("El catálogo XKB actual no contiene teclados utilizables.".to_string());
+    }
+
+    let tz_root = flake_raw(
+        raiz,
+        &format!("nixosConfigurations.{host}.pkgs.tzdata.outPath"),
+    )?;
+
+    let timezone_candidates = [
+        PathBuf::from(&tz_root).join("share/zoneinfo/zone1970.tab"),
+        PathBuf::from(&tz_root).join("share/zoneinfo/zone.tab"),
+    ];
+
+    let timezone_file = timezone_candidates
+        .iter()
+        .find(|path| path.is_file())
+        .ok_or_else(|| "No pude localizar el catálogo de zonas horarias.".to_string())?;
+
+    let timezone_raw = fs::read_to_string(timezone_file)
+        .map_err(|error| format!("No pude leer {}: {error}", timezone_file.display()))?;
+
+    let mut timezone_ids = BTreeSet::<String>::new();
+    for line in timezone_raw.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        let columns = line.split('\t').collect::<Vec<_>>();
+        if let Some(zone) = columns.get(2).map(|value| value.trim()) {
+            if zone.contains('/') && !zone.contains("..") {
+                timezone_ids.insert(zone.to_string());
+            }
+        }
+    }
+
+    let languages = KORUNIX_LANGUAGE_CATALOG
+        .iter()
+        .map(|(code, label)| {
+            serde_json::json!({
+                "code": code,
+                "label": label
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let regions = KORUNIX_REGION_CATALOG
+        .iter()
+        .map(|(code, label)| {
+            serde_json::json!({
+                "code": code,
+                "label": label
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let time_zones = timezone_ids
+        .iter()
+        .map(|id| {
+            serde_json::json!({
+                "id": id,
+                "label": localization_timezone_label(id)
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let keyboard_values = keyboards
+        .iter()
+        .map(|keyboard| {
+            serde_json::json!({
+                "layout": keyboard.layout.clone(),
+                "variant": keyboard.variant.clone(),
+                "label": keyboard.label.clone()
+            })
+        })
+        .collect::<Vec<_>>();
+
+    Ok(serde_json::json!({
+        "schemaVersion": 1,
+        "kind": "korunix-localization-catalog",
+        "source": {
+            "languages": "korunix-noctalia-language-family",
+            "regions": "iso-3166-1",
+            "timeZones": "tzdata",
+            "keyboards": "xkeyboard-config"
+        },
+        "languages": languages,
+        "regions": regions,
+        "timeZones": time_zones,
+        "keyboards": keyboard_values
+    })
+    .to_string())
+}
+
 fn localization_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
     if args.is_empty() {
         localization_human(raiz)?;
@@ -6694,20 +7382,27 @@ fn localization_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, Stri
         return Ok(ExitCode::SUCCESS);
     }
 
+    if args == ["catalog", "--json"] {
+        println!("{}", localization_catalog_json(raiz)?);
+        return Ok(ExitCode::SUCCESS);
+    }
+
     if args.first().map(String::as_str) != Some("set") {
         return Err(
-            "Uso: korunix localization [--json] | set [--language xx] [--region XX] [--formats-language xx] [--formats-region XX] [--timezone Zona/Ciudad] [--keyboard layout] [--variant variante] [--plan] [--yes] [--json]."
+            "Uso: korunix localization [--json] | catalog --json | set [--language xx] [--preferred-languages-json lista] [--region XX] [--formats-language xx] [--formats-region XX] [--timezone Zona/Ciudad] [--keyboard layout] [--variant variante] [--keyboards-json lista] [--plan] [--yes] [--json]."
                 .to_string(),
         );
     }
 
     let mut language = None::<String>;
+    let mut preferred_languages = None::<Vec<String>>;
     let mut region = None::<String>;
     let mut formats_language = None::<String>;
     let mut formats_region = None::<String>;
     let mut timezone = None::<String>;
     let mut keyboard = None::<String>;
     let mut variant = None::<String>;
+    let mut keyboards = None::<Vec<LocalizationKeyboard>>;
     let mut plan_only = false;
     let mut yes = false;
     let mut json = false;
@@ -6722,6 +7417,13 @@ fn localization_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, Stri
                         .cloned()
                         .ok_or_else(|| "Falta idioma.".to_string())?,
                 );
+            }
+            "--preferred-languages-json" => {
+                i += 1;
+                let raw = args
+                    .get(i)
+                    .ok_or_else(|| "Falta la lista de idiomas preferidos.".to_string())?;
+                preferred_languages = Some(localization_preferred_languages(raw)?);
             }
             "--region" => {
                 i += 1;
@@ -6771,82 +7473,235 @@ fn localization_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, Stri
                         .ok_or_else(|| "Falta variante de teclado.".to_string())?,
                 );
             }
+            "--keyboards-json" => {
+                i += 1;
+                let raw = args
+                    .get(i)
+                    .ok_or_else(|| "Falta la lista de teclados.".to_string())?;
+                keyboards = Some(localization_keyboards(raw)?);
+            }
             "--plan" => plan_only = true,
             "--yes" => yes = true,
             "--json" => json = true,
-            otro => return Err(format!("Opción de localización desconocida: {otro}")),
+            other => return Err(format!("Opción de localización desconocida: {other}")),
         }
         i += 1;
     }
 
     if language.is_none()
+        && preferred_languages.is_none()
         && region.is_none()
         && formats_language.is_none()
         && formats_region.is_none()
         && timezone.is_none()
         && keyboard.is_none()
         && variant.is_none()
+        && keyboards.is_none()
     {
         return Err("No se indicó ningún cambio de localización.".to_string());
     }
 
-    if let Some(valor) = &language {
-        if valor.len() < 2 || valor.len() > 3 || !valor.bytes().all(|c| c.is_ascii_lowercase()) {
+    if let Some(value) = language.as_deref() {
+        if !localization_language_valid(value) {
             return Err("Código de idioma inválido.".to_string());
         }
     }
-    for valor in [&region, &formats_region].into_iter().flatten() {
-        if valor.len() != 2 || !valor.bytes().all(|c| c.is_ascii_uppercase()) {
+
+    if let Some(value) = formats_language.as_deref() {
+        if !localization_language_valid(value) {
+            return Err("Código de idioma de formatos inválido.".to_string());
+        }
+    }
+
+    for value in [&region, &formats_region].into_iter().flatten() {
+        if value.len() != 2 || !value.bytes().all(|c| c.is_ascii_uppercase()) {
             return Err("Código de región inválido.".to_string());
         }
     }
-    if let Some(valor) = &timezone {
-        if !valor.contains('/') || valor.contains("..") {
+
+    if let Some(value) = timezone.as_deref() {
+        if !value.contains('/') || value.contains("..") {
             return Err("Zona horaria inválida.".to_string());
         }
     }
 
-    let antes = nix_config_json(raiz, "localization")?;
+    let before_raw = nix_config_json(raiz, "localization")?;
+    let before: serde_json::Value =
+        serde_json::from_str(&before_raw).map_err(|error| error.to_string())?;
+
+    if preferred_languages.is_none() {
+        if let Some(new_language) = language.as_ref() {
+            let mut existing = before
+                .get("preferredLanguages")
+                .and_then(serde_json::Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(serde_json::Value::as_str)
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+
+            existing.retain(|value| value != new_language);
+            existing.insert(0, new_language.clone());
+            preferred_languages = Some(existing);
+        }
+    }
+
+    if let Some(values) = preferred_languages.as_ref() {
+        if language.is_none() {
+            language = values.first().cloned();
+        }
+
+        if values.first().map(String::as_str) != language.as_deref() {
+            return Err(
+                "El primer idioma preferido debe ser el idioma principal del sistema.".to_string(),
+            );
+        }
+    }
+
+    if keyboards.is_some() && (keyboard.is_some() || variant.is_some()) {
+        return Err("--keyboards-json no se combina con --keyboard ni --variant.".to_string());
+    }
+
+    if let Some(values) = keyboards.as_ref() {
+        let first = values
+            .first()
+            .ok_or_else(|| "Selecciona al menos un teclado.".to_string())?;
+        keyboard = Some(first.layout.clone());
+        variant = Some(first.variant.clone());
+    }
+
+    if let Some(value) = keyboard.as_deref() {
+        if !localization_xkb_token_valid(value, false) {
+            return Err("Distribución de teclado inválida.".to_string());
+        }
+    }
+
+    if let Some(value) = variant.as_deref() {
+        if !localization_xkb_token_valid(value, true) {
+            return Err("Variante de teclado inválida.".to_string());
+        }
+    }
+
     let ruta = host_config_path(raiz)?;
-    let mut nuevo = fs::read_to_string(&ruta).map_err(|e| e.to_string())?;
+    let mut nuevo = fs::read_to_string(&ruta).map_err(|error| error.to_string())?;
 
-    if let Some(valor) = &language {
-        nuevo = reemplazar_linea_string(&nuevo, 6, "systemLanguage", valor)?;
-    }
-    if let Some(valor) = &region {
-        nuevo = reemplazar_linea_string(&nuevo, 6, "region", valor)?;
-    }
-    if let Some(valor) = &formats_language {
-        nuevo = reemplazar_linea_string(&nuevo, 8, "language", valor)?;
-    }
-    if let Some(valor) = &formats_region {
-        nuevo = reemplazar_linea_string(&nuevo, 8, "region", valor)?;
-    }
-    if let Some(valor) = &timezone {
-        nuevo = reemplazar_linea_string(&nuevo, 6, "timeZone", valor)?;
-    }
-    if let Some(valor) = &keyboard {
-        nuevo = reemplazar_linea_string(&nuevo, 8, "layout", valor)?;
-    }
-    if let Some(valor) = &variant {
-        nuevo = reemplazar_linea_string(&nuevo, 8, "variant", valor)?;
+    if let Some(value) = language.as_ref() {
+        nuevo = reemplazar_linea_string(&nuevo, 6, "systemLanguage", value)?;
     }
 
-    let cambios = serde_json::json!({
+    if let Some(values) = preferred_languages.as_ref() {
+        nuevo = reemplazar_o_insertar_lista_nix(
+            &nuevo,
+            6,
+            "preferredLanguages",
+            values,
+            "systemLanguage",
+        )?;
+    }
+
+    if let Some(value) = region.as_ref() {
+        nuevo = reemplazar_linea_string(&nuevo, 6, "region", value)?;
+    }
+
+    if let Some(value) = formats_language.as_ref() {
+        nuevo = reemplazar_linea_string(&nuevo, 8, "language", value)?;
+    }
+
+    if let Some(value) = formats_region.as_ref() {
+        nuevo = reemplazar_linea_string(&nuevo, 8, "region", value)?;
+    }
+
+    if let Some(value) = timezone.as_ref() {
+        nuevo = reemplazar_linea_string(&nuevo, 6, "timeZone", value)?;
+    }
+
+    if let Some(value) = keyboard.as_ref() {
+        nuevo = reemplazar_linea_string(&nuevo, 8, "layout", value)?;
+    }
+
+    if let Some(value) = variant.as_ref() {
+        nuevo = reemplazar_linea_string(&nuevo, 8, "variant", value)?;
+    }
+
+    if let Some(values) = keyboards.as_ref() {
+        let additional_layouts = values
+            .iter()
+            .skip(1)
+            .map(|value| value.layout.clone())
+            .collect::<Vec<_>>();
+
+        let additional_variants = values
+            .iter()
+            .skip(1)
+            .map(|value| value.variant.clone())
+            .collect::<Vec<_>>();
+
+        let display_names = values
+            .iter()
+            .map(|value| value.label.clone())
+            .collect::<Vec<_>>();
+
+        nuevo = reemplazar_o_insertar_lista_nix(
+            &nuevo,
+            8,
+            "additionalLayouts",
+            &additional_layouts,
+            "variant",
+        )?;
+        nuevo = reemplazar_o_insertar_lista_nix(
+            &nuevo,
+            8,
+            "additionalVariants",
+            &additional_variants,
+            "additionalLayouts",
+        )?;
+        nuevo = reemplazar_o_insertar_lista_nix(
+            &nuevo,
+            8,
+            "displayNames",
+            &display_names,
+            "additionalVariants",
+        )?;
+    }
+
+    let keyboard_changes = keyboards.as_ref().map(|values| {
+        serde_json::Value::Array(
+            values
+                .iter()
+                .map(|value| {
+                    serde_json::json!({
+                        "layout": value.layout.clone(),
+                        "variant": value.variant.clone(),
+                        "label": value.label.clone()
+                    })
+                })
+                .collect(),
+        )
+    });
+
+    let changes = serde_json::json!({
         "language": language,
+        "preferredLanguages": preferred_languages,
         "region": region,
         "formatsLanguage": formats_language,
         "formatsRegion": formats_region,
         "timeZone": timezone,
         "keyboard": keyboard,
-        "variant": variant
+        "variant": variant,
+        "keyboards": keyboard_changes
     });
 
-    let plan = format!(
-        "{{\"schemaVersion\":1,\"kind\":\"korunix-localization-change-plan\",\"before\":{},\"changes\":{},\"requiresSystemApply\":true}}",
-        antes,
-        cambios
-    );
+    let plan = serde_json::json!({
+        "schemaVersion": 2,
+        "kind": "korunix-localization-change-plan",
+        "before": before,
+        "changes": changes,
+        "requiresSystemApply": true
+    })
+    .to_string();
 
     if let Some(code) = salida_plan_o_confirmacion(
         raiz,
@@ -6854,7 +7709,7 @@ fn localization_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, Stri
         plan_only,
         yes,
         json,
-        "¿Preparar estos cambios de idioma y región?",
+        "¿Preparar estos cambios de idioma, región y teclado?",
     )? {
         return Ok(code);
     }
@@ -6867,8 +7722,14 @@ fn localization_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, Stri
 
     if json {
         println!(
-            "{{\"schemaVersion\":1,\"kind\":\"korunix-localization-change-result\",\"changed\":true,\"requiresSystemApply\":true,\"backup\":{}}}",
-            json_texto(&backup.display().to_string())
+            "{}",
+            serde_json::json!({
+                "schemaVersion": 2,
+                "kind": "korunix-localization-change-result",
+                "changed": true,
+                "requiresSystemApply": true,
+                "backup": backup.display().to_string()
+            })
         );
     } else {
         println!("✓ localización preparada; falta aplicar la configuración");
@@ -9673,6 +10534,73 @@ mod tests {
     fn almacenamiento_no_declara_sync_global() {
         let strategy = "syncfs-per-filesystem";
         assert_ne!(strategy, "sync-global");
+    }
+
+    #[test]
+    fn localizacion_reemplaza_lista_de_una_linea_sin_perder_el_resto() {
+        let source = "      systemLanguage = \"es\";\n      preferredLanguages = [\"es\"];\n      region = \"PE\";\n";
+        let values = vec!["es".to_string(), "en".to_string()];
+
+        let result = reemplazar_o_insertar_lista_nix(
+            source,
+            6,
+            "preferredLanguages",
+            &values,
+            "systemLanguage",
+        )
+        .unwrap();
+
+        assert!(result.contains("preferredLanguages = ["));
+        assert!(result.contains("\"es\""));
+        assert!(result.contains("\"en\""));
+        assert!(result.contains("region = \"PE\";"));
+    }
+
+    #[test]
+    fn localizacion_inserta_lista_ausente_de_forma_controlada() {
+        let source = "      systemLanguage = \"es\";\n      region = \"PE\";\n";
+        let values = vec!["es".to_string()];
+
+        let result = reemplazar_o_insertar_lista_nix(
+            source,
+            6,
+            "preferredLanguages",
+            &values,
+            "systemLanguage",
+        )
+        .unwrap();
+
+        assert_eq!(result.matches("preferredLanguages = [").count(), 1);
+        assert!(
+            result.find("systemLanguage").unwrap() < result.find("preferredLanguages").unwrap()
+        );
+    }
+
+    #[test]
+    fn catalogo_xkb_conserva_layout_y_variantes() {
+        let raw = r#"
+! layout
+  us              English (US)
+  es              Spanish
+  latam           Spanish (Latin American)
+! variant
+  deadtilde       es: Spanish (dead tilde)
+  nodeadkeys      es: Spanish (no dead keys)
+"#;
+
+        let catalog = parse_xkb_rules(raw);
+
+        assert!(catalog.iter().any(|item| {
+            item.layout == "es" && item.variant.is_empty() && item.label == "Spanish"
+        }));
+        assert!(catalog.iter().any(|item| {
+            item.layout == "es"
+                && item.variant == "deadtilde"
+                && item.label == "Spanish (dead tilde)"
+        }));
+        assert!(catalog
+            .iter()
+            .any(|item| { item.layout == "latam" && item.variant.is_empty() }));
     }
 
     #[test]

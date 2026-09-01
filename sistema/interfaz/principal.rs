@@ -5095,18 +5095,248 @@ fn pagina_hardware(estado: &Estado, hardware: &Value) -> adw::PreferencesPage {
     pagina
 }
 
+#[derive(Clone, Debug)]
+struct OpcionLocalizacion {
+    id: String,
+    label: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct OpcionTecladoGui {
+    layout: String,
+    variant: String,
+    label: String,
+}
+
+fn opciones_catalogo(
+    catalogo: &Value,
+    collection: &str,
+    id_key: &str,
+    label_key: &str,
+) -> Vec<OpcionLocalizacion> {
+    let mut values = catalogo
+        .get(collection)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|item| {
+            let id = item.get(id_key)?.as_str()?.to_string();
+            let label = item
+                .get(label_key)
+                .and_then(Value::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or(&id)
+                .to_string();
+
+            Some(OpcionLocalizacion { id, label })
+        })
+        .collect::<Vec<_>>();
+
+    values.sort_by(|left, right| {
+        left.label
+            .to_lowercase()
+            .cmp(&right.label.to_lowercase())
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    values.dedup_by(|left, right| left.id == right.id);
+    values
+}
+
+fn modelo_opciones(values: &[OpcionLocalizacion]) -> gtk::StringList {
+    let refs = values
+        .iter()
+        .map(|value| value.label.as_str())
+        .collect::<Vec<_>>();
+    gtk::StringList::new(&refs)
+}
+
+fn indice_opcion(values: &[OpcionLocalizacion], id: &str) -> u32 {
+    values.iter().position(|value| value.id == id).unwrap_or(0) as u32
+}
+
+fn asegurar_opcion(values: &mut Vec<OpcionLocalizacion>, id: &str, label: String) {
+    if values.iter().any(|value| value.id == id) {
+        return;
+    }
+
+    values.push(OpcionLocalizacion {
+        id: id.to_string(),
+        label,
+    });
+
+    values.sort_by(|left, right| {
+        left.label
+            .to_lowercase()
+            .cmp(&right.label.to_lowercase())
+            .then_with(|| left.id.cmp(&right.id))
+    });
+}
+
+fn etiqueta_idioma_catalogo(idioma: Idioma, code: &str, fallback: &str) -> String {
+    let visible = idioma_humano(idioma, code);
+    if visible == code {
+        fallback.to_string()
+    } else {
+        visible
+    }
+}
+
+fn etiqueta_region_catalogo(idioma: Idioma, code: &str, fallback: &str) -> String {
+    let visible = region_humana(idioma, code);
+    if visible == code {
+        fallback.to_string()
+    } else {
+        visible
+    }
+}
+
+fn etiqueta_zona_catalogo(idioma: Idioma, id: &str, fallback: &str) -> String {
+    let visible = zona_horaria_humana(idioma, id);
+    if visible == id {
+        fallback.to_string()
+    } else {
+        visible
+    }
+}
+
+fn etiqueta_teclado_catalogo(
+    idioma: Idioma,
+    layout: &str,
+    variant: &str,
+    fallback: &str,
+) -> String {
+    let layout_visible = teclado_humano(idioma, layout);
+
+    if variant.is_empty() {
+        if layout_visible == layout {
+            fallback.to_string()
+        } else {
+            layout_visible
+        }
+    } else {
+        let variant_visible = variante_teclado_humana(variant);
+
+        if layout_visible == layout && variant_visible == nombre_desde_id(variant) {
+            fallback.to_string()
+        } else {
+            format!("{layout_visible} · {variant_visible}")
+        }
+    }
+}
+
+fn opciones_teclado_catalogo(idioma: Idioma, catalogo: &Value) -> Vec<OpcionTecladoGui> {
+    let mut values = catalogo
+        .get("keyboards")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|item| {
+            let layout = item.get("layout")?.as_str()?.to_string();
+            let variant = item
+                .get("variant")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let fallback = item.get("label").and_then(Value::as_str).unwrap_or(&layout);
+
+            Some(OpcionTecladoGui {
+                label: etiqueta_teclado_catalogo(idioma, &layout, &variant, fallback),
+                layout,
+                variant,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    values.sort_by(|left, right| {
+        left.label
+            .to_lowercase()
+            .cmp(&right.label.to_lowercase())
+            .then_with(|| left.layout.cmp(&right.layout))
+            .then_with(|| left.variant.cmp(&right.variant))
+    });
+
+    values.dedup_by(|left, right| left.layout == right.layout && left.variant == right.variant);
+
+    values
+}
+
+fn modelo_teclados(values: &[OpcionTecladoGui]) -> gtk::StringList {
+    let refs = values
+        .iter()
+        .map(|value| value.label.as_str())
+        .collect::<Vec<_>>();
+    gtk::StringList::new(&refs)
+}
+
+fn indice_teclado(values: &[OpcionTecladoGui], layout: &str, variant: &str) -> u32 {
+    values
+        .iter()
+        .position(|value| value.layout == layout && value.variant == variant)
+        .unwrap_or(0) as u32
+}
+
+fn agregar_teclado_adicional_gui(
+    grupo: &adw::PreferencesGroup,
+    seleccionados: &Rc<RefCell<Vec<OpcionTecladoGui>>>,
+    teclado: OpcionTecladoGui,
+) {
+    if seleccionados
+        .borrow()
+        .iter()
+        .any(|actual| actual.layout == teclado.layout && actual.variant == teclado.variant)
+    {
+        return;
+    }
+
+    seleccionados.borrow_mut().push(teclado.clone());
+
+    let row = adw::ActionRow::new();
+    row.set_title(&teclado.label);
+    row.set_subtitle(&localizar_visible(
+        idioma_actual(),
+        "Disponible para alternar junto al teclado principal.",
+    ));
+
+    let quitar = gtk::Button::with_label(&localizar_visible(idioma_actual(), "Quitar"));
+    quitar.set_valign(gtk::Align::Center);
+    row.add_suffix(&quitar);
+    grupo.add(&row);
+
+    let row_quitar = row.clone();
+    let seleccionados_quitar = Rc::clone(seleccionados);
+    let layout = teclado.layout.clone();
+    let variant = teclado.variant.clone();
+
+    quitar.connect_clicked(move |_| {
+        seleccionados_quitar
+            .borrow_mut()
+            .retain(|actual| !(actual.layout == layout && actual.variant == variant));
+        row_quitar.set_visible(false);
+    });
+}
+
 fn pagina_localizacion(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
-    let grupo = adw::PreferencesGroup::new();
-    grupo.set_title(&localizar_visible(
-        idioma_actual(),
-        "Idioma, región y teclado",
-    ));
 
     let actual_idioma = valor(datos, "/declared/systemLanguage");
     let actual_region = valor(datos, "/declared/region");
     let actual_zona = valor(datos, "/declared/timeZone");
-    let actual_teclado = datos
+
+    let formato_idioma_actual = datos
+        .pointer("/declared/formats/language")
+        .and_then(Value::as_str)
+        .unwrap_or(actual_idioma.as_str())
+        .to_string();
+
+    let formato_region_actual = datos
+        .pointer("/declared/formats/region")
+        .and_then(Value::as_str)
+        .unwrap_or(actual_region.as_str())
+        .to_string();
+
+    let actual_layout = datos
         .pointer("/declared/keyboard/layout")
         .and_then(Value::as_str)
         .or_else(|| {
@@ -5117,171 +5347,582 @@ fn pagina_localizacion(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPag
         .unwrap_or("es")
         .to_string();
 
-    let resumen = format!(
-        "{} · {} · {} · {}",
+    let actual_variant = datos
+        .pointer("/declared/keyboard/variant")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+
+    let mut preferred_actuales = datos
+        .pointer("/declared/preferredLanguages")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    if preferred_actuales.is_empty() {
+        preferred_actuales.push(actual_idioma.clone());
+    }
+
+    if preferred_actuales.first().map(String::as_str) != Some(actual_idioma.as_str()) {
+        preferred_actuales.retain(|value| value != &actual_idioma);
+        preferred_actuales.insert(0, actual_idioma.clone());
+    }
+
+    let catalogo =
+        ejecutar_json(&estado, &["localization", "catalog", "--json"]).unwrap_or_else(|_| {
+            serde_json::json!({
+                "languages": [{
+                    "code": actual_idioma.clone(),
+                    "label": idioma_humano(estado.idioma, &actual_idioma)
+                }],
+                "regions": [{
+                    "code": actual_region.clone(),
+                    "label": region_humana(estado.idioma, &actual_region)
+                }],
+                "timeZones": [{
+                    "id": actual_zona.clone(),
+                    "label": zona_horaria_humana(estado.idioma, &actual_zona)
+                }],
+                "keyboards": [{
+                    "layout": actual_layout.clone(),
+                    "variant": actual_variant.clone(),
+                    "label": format!(
+                        "{} · {}",
+                        teclado_humano(estado.idioma, &actual_layout),
+                        variante_teclado_humana(&actual_variant)
+                    )
+                }]
+            })
+        });
+
+    let mut idiomas = opciones_catalogo(&catalogo, "languages", "code", "label")
+        .into_iter()
+        .map(|mut value| {
+            value.label = etiqueta_idioma_catalogo(estado.idioma, &value.id, &value.label);
+            value
+        })
+        .collect::<Vec<_>>();
+
+    asegurar_opcion(
+        &mut idiomas,
+        &actual_idioma,
         idioma_humano(estado.idioma, &actual_idioma),
-        region_humana(estado.idioma, &actual_region),
-        zona_horaria_humana(estado.idioma, &actual_zona),
-        teclado_humano(estado.idioma, &actual_teclado),
     );
+    asegurar_opcion(
+        &mut idiomas,
+        &formato_idioma_actual,
+        idioma_humano(estado.idioma, &formato_idioma_actual),
+    );
+
+    for language in &preferred_actuales {
+        asegurar_opcion(
+            &mut idiomas,
+            language,
+            idioma_humano(estado.idioma, language),
+        );
+    }
+
+    let mut regiones = opciones_catalogo(&catalogo, "regions", "code", "label")
+        .into_iter()
+        .map(|mut value| {
+            value.label = etiqueta_region_catalogo(estado.idioma, &value.id, &value.label);
+            value
+        })
+        .collect::<Vec<_>>();
+
+    asegurar_opcion(
+        &mut regiones,
+        &actual_region,
+        region_humana(estado.idioma, &actual_region),
+    );
+    asegurar_opcion(
+        &mut regiones,
+        &formato_region_actual,
+        region_humana(estado.idioma, &formato_region_actual),
+    );
+
+    let mut zonas = opciones_catalogo(&catalogo, "timeZones", "id", "label")
+        .into_iter()
+        .map(|mut value| {
+            value.label = etiqueta_zona_catalogo(estado.idioma, &value.id, &value.label);
+            value
+        })
+        .collect::<Vec<_>>();
+
+    asegurar_opcion(
+        &mut zonas,
+        &actual_zona,
+        zona_horaria_humana(estado.idioma, &actual_zona),
+    );
+
+    let mut teclados = opciones_teclado_catalogo(estado.idioma, &catalogo);
+
+    let display_names = datos
+        .pointer("/declared/keyboard/displayNames")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|value| value.as_str().map(str::to_string))
+        .collect::<Vec<_>>();
+
+    let layouts_adicionales = datos
+        .pointer("/declared/keyboard/additionalLayouts")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|value| value.as_str().map(str::to_string))
+        .collect::<Vec<_>>();
+
+    let variantes_adicionales = datos
+        .pointer("/declared/keyboard/additionalVariants")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|value| value.as_str().map(str::to_string))
+        .collect::<Vec<_>>();
+
+    let principal_label = display_names.first().cloned().unwrap_or_else(|| {
+        format!(
+            "{} · {}",
+            teclado_humano(estado.idioma, &actual_layout),
+            variante_teclado_humana(&actual_variant)
+        )
+    });
+
+    if !teclados
+        .iter()
+        .any(|value| value.layout == actual_layout && value.variant == actual_variant)
+    {
+        teclados.push(OpcionTecladoGui {
+            layout: actual_layout.clone(),
+            variant: actual_variant.clone(),
+            label: principal_label.clone(),
+        });
+    }
+
+    for (index, layout) in layouts_adicionales.iter().enumerate() {
+        let variant = variantes_adicionales
+            .get(index)
+            .cloned()
+            .unwrap_or_default();
+
+        if teclados
+            .iter()
+            .any(|value| value.layout == *layout && value.variant == variant)
+        {
+            continue;
+        }
+
+        let label = display_names.get(index + 1).cloned().unwrap_or_else(|| {
+            format!(
+                "{} · {}",
+                teclado_humano(estado.idioma, layout),
+                variante_teclado_humana(&variant)
+            )
+        });
+
+        teclados.push(OpcionTecladoGui {
+            layout: layout.clone(),
+            variant,
+            label,
+        });
+    }
+
+    teclados.sort_by(|left, right| {
+        left.label
+            .to_lowercase()
+            .cmp(&right.label.to_lowercase())
+            .then_with(|| left.layout.cmp(&right.layout))
+            .then_with(|| left.variant.cmp(&right.variant))
+    });
 
     let grupo_actual = adw::PreferencesGroup::new();
     grupo_actual.set_title(&localizar_visible(idioma_actual(), "Configuración actual"));
     grupo_actual.set_description(Some(&localizar_visible(
         idioma_actual(),
-        "Idioma, región, hora y teclado son decisiones independientes.",
+        "El idioma de Korunix, los idiomas del sistema, la región, los formatos y los teclados son decisiones separadas.",
     )));
+
     grupo_actual.add(&fila(
-        "Idioma del sistema",
-        idioma_humano(estado.idioma, &actual_idioma),
+        "Idioma de Korunix",
+        idioma_humano(estado.idioma, idioma_tag(estado.idioma)),
     ));
+
+    let idiomas_visibles = preferred_actuales
+        .iter()
+        .map(|value| idioma_humano(estado.idioma, value))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    grupo_actual.add(&fila("Idiomas preferidos", idiomas_visibles));
     grupo_actual.add(&fila(
         "País o región",
         region_humana(estado.idioma, &actual_region),
+    ));
+    grupo_actual.add(&fila(
+        "Formatos",
+        format!(
+            "{} · {}",
+            idioma_humano(estado.idioma, &formato_idioma_actual),
+            region_humana(estado.idioma, &formato_region_actual)
+        ),
     ));
     grupo_actual.add(&fila(
         "Hora local",
         zona_horaria_humana(estado.idioma, &actual_zona),
     ));
 
-    let variante_actual = datos
-        .pointer("/declared/keyboard/variant")
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    let teclado_visible = format!(
-        "{} · {}",
-        teclado_humano(estado.idioma, &actual_teclado),
-        variante_teclado_humana(variante_actual),
-    );
-    grupo_actual.add(&fila("Teclado", teclado_visible));
-
-    let personalizar_fila = adw::ActionRow::new();
-    personalizar_fila.set_title(&localizar_visible(idioma_actual(), "Personalizar"));
-    personalizar_fila.set_subtitle(&localizar_visible(
-        idioma_actual(),
-        "Cambia idioma, formatos, zona horaria o teclado por separado.",
-    ));
-    let personalizar = gtk::Button::with_label(&localizar_visible(idioma_actual(), "Personalizar"));
-    personalizar.set_valign(gtk::Align::Center);
-    personalizar_fila.add_suffix(&personalizar);
-    grupo_actual.add(&personalizar_fila);
+    let mut teclados_visibles = vec![principal_label.clone()];
+    for (index, layout) in layouts_adicionales.iter().enumerate() {
+        teclados_visibles.push(display_names.get(index + 1).cloned().unwrap_or_else(|| {
+            let variant = variantes_adicionales
+                .get(index)
+                .map(String::as_str)
+                .unwrap_or("");
+            etiqueta_teclado_catalogo(estado.idioma, layout, variant, layout)
+        }));
+    }
+    grupo_actual.add(&fila("Teclados", teclados_visibles.join(", ")));
     pagina.add(&grupo_actual);
 
-    grupo.set_title(&localizar_visible(idioma_actual(), "Personalizar"));
-    grupo.set_description(Some(&format!(
-        "{resumen}. Los identificadores técnicos solo se muestran aquí porque esta edición avanzada todavía trabaja directamente con los valores del sistema."
-    )));
-    grupo.set_visible(false);
-
-    let idioma = adw::EntryRow::new();
-    idioma.set_title(&localizar_visible(idioma_actual(), "Idioma del sistema"));
-    idioma.set_text(&valor(datos, "/declared/systemLanguage"));
-    grupo.add(&idioma);
-
-    let region = adw::EntryRow::new();
-    region.set_title(&localizar_visible(idioma_actual(), "Región"));
-    region.set_text(&valor(datos, "/declared/region"));
-    grupo.add(&region);
-
-    let formatos_idioma = adw::EntryRow::new();
-    formatos_idioma.set_title(&localizar_visible(idioma_actual(), "Idioma de formatos"));
-    let formato_idioma_actual = datos
-        .pointer("/declared/formats/language")
-        .and_then(Value::as_str)
-        .or_else(|| {
-            datos
-                .pointer("/declared/systemLanguage")
-                .and_then(Value::as_str)
-        })
-        .unwrap_or("es");
-    formatos_idioma.set_text(formato_idioma_actual);
-    grupo.add(&formatos_idioma);
-
-    let formatos_region = adw::EntryRow::new();
-    formatos_region.set_title(&localizar_visible(idioma_actual(), "Región de formatos"));
-    let formato_region_actual = datos
-        .pointer("/declared/formats/region")
-        .and_then(Value::as_str)
-        .or_else(|| datos.pointer("/declared/region").and_then(Value::as_str))
-        .unwrap_or("PE");
-    formatos_region.set_text(formato_region_actual);
-    grupo.add(&formatos_region);
-
-    let zona = adw::EntryRow::new();
-    zona.set_title(&localizar_visible(idioma_actual(), "Zona horaria"));
-    zona.set_text(&valor(datos, "/declared/timeZone"));
-    grupo.add(&zona);
-
-    let teclado = adw::EntryRow::new();
-    teclado.set_title(&localizar_visible(
+    let grupo_idiomas = adw::PreferencesGroup::new();
+    grupo_idiomas.set_title(&localizar_visible(idioma_actual(), "Idiomas del sistema"));
+    grupo_idiomas.set_description(Some(&localizar_visible(
         idioma_actual(),
-        "Distribución de teclado",
-    ));
-    let teclado_actual = datos
-        .pointer("/declared/keyboard/layout")
-        .and_then(Value::as_str)
-        .or_else(|| {
-            datos
-                .pointer("/derived/keyboard/layout")
-                .and_then(Value::as_str)
-        })
-        .unwrap_or("es");
-    teclado.set_text(teclado_actual);
-    grupo.add(&teclado);
+        "El primero es el idioma principal. Puedes conservar otros idiomas en orden de preferencia.",
+    )));
 
-    let variante = adw::EntryRow::new();
-    variante.set_title(&localizar_visible(idioma_actual(), "Variante"));
-    variante.set_text(
-        datos
-            .pointer("/declared/keyboard/variant")
-            .and_then(Value::as_str)
-            .unwrap_or(""),
+    let idioma_principal = adw::ComboRow::new();
+    idioma_principal.set_title(&localizar_visible(idioma_actual(), "Idioma principal"));
+    idioma_principal.set_model(Some(&modelo_opciones(&idiomas)));
+    idioma_principal.set_enable_search(true);
+    idioma_principal.set_selected(indice_opcion(&idiomas, &actual_idioma));
+    grupo_idiomas.add(&idioma_principal);
+
+    let checks_idiomas = Rc::new(
+        idiomas
+            .iter()
+            .map(|option| {
+                let row = adw::ActionRow::new();
+                row.set_title(&option.label);
+
+                let check = gtk::CheckButton::new();
+                check.set_active(
+                    option.id != actual_idioma
+                        && preferred_actuales.iter().any(|value| value == &option.id),
+                );
+                check.set_sensitive(option.id != actual_idioma);
+                check.set_valign(gtk::Align::Center);
+
+                if option.id == actual_idioma {
+                    row.set_subtitle(&localizar_visible(idioma_actual(), "Principal"));
+                } else if check.is_active() {
+                    row.set_subtitle(&localizar_visible(idioma_actual(), "Preferido"));
+                }
+
+                {
+                    let row_check = row.clone();
+                    check.connect_toggled(move |check| {
+                        if !check.is_sensitive() {
+                            return;
+                        }
+
+                        row_check.set_subtitle(&localizar_visible(
+                            idioma_actual(),
+                            if check.is_active() { "Preferido" } else { "" },
+                        ));
+                    });
+                }
+
+                row.add_suffix(&check);
+                grupo_idiomas.add(&row);
+                (option.id.clone(), check, row)
+            })
+            .collect::<Vec<_>>(),
     );
-    grupo.add(&variante);
 
+    {
+        let idiomas_primary = idiomas.clone();
+        let checks_primary = Rc::clone(&checks_idiomas);
+
+        idioma_principal.connect_selected_notify(move |selector| {
+            let Some(primary) = idiomas_primary.get(selector.selected() as usize) else {
+                return;
+            };
+
+            for (id, check, row) in checks_primary.iter() {
+                let is_primary = id == &primary.id;
+                check.set_sensitive(!is_primary);
+
+                if is_primary {
+                    check.set_active(false);
+                    row.set_subtitle(&localizar_visible(idioma_actual(), "Principal"));
+                } else {
+                    row.set_subtitle(&localizar_visible(
+                        idioma_actual(),
+                        if check.is_active() { "Preferido" } else { "" },
+                    ));
+                }
+            }
+        });
+    }
+
+    pagina.add(&grupo_idiomas);
+
+    let grupo_region = adw::PreferencesGroup::new();
+    grupo_region.set_title(&localizar_visible(idioma_actual(), "Región y formatos"));
+    grupo_region.set_description(Some(&localizar_visible(
+        idioma_actual(),
+        "La región y los formatos no cambian automáticamente el idioma principal.",
+    )));
+
+    let region = adw::ComboRow::new();
+    region.set_title(&localizar_visible(idioma_actual(), "País o región"));
+    region.set_model(Some(&modelo_opciones(&regiones)));
+    region.set_enable_search(true);
+    region.set_selected(indice_opcion(&regiones, &actual_region));
+    grupo_region.add(&region);
+
+    let formatos_idioma = adw::ComboRow::new();
+    formatos_idioma.set_title(&localizar_visible(idioma_actual(), "Idioma de formatos"));
+    formatos_idioma.set_model(Some(&modelo_opciones(&idiomas)));
+    formatos_idioma.set_enable_search(true);
+    formatos_idioma.set_selected(indice_opcion(&idiomas, &formato_idioma_actual));
+    grupo_region.add(&formatos_idioma);
+
+    let formatos_region = adw::ComboRow::new();
+    formatos_region.set_title(&localizar_visible(idioma_actual(), "Región de formatos"));
+    formatos_region.set_model(Some(&modelo_opciones(&regiones)));
+    formatos_region.set_enable_search(true);
+    formatos_region.set_selected(indice_opcion(&regiones, &formato_region_actual));
+    grupo_region.add(&formatos_region);
+
+    let zona = adw::ComboRow::new();
+    zona.set_title(&localizar_visible(idioma_actual(), "Zona horaria"));
+    zona.set_model(Some(&modelo_opciones(&zonas)));
+    zona.set_enable_search(true);
+    zona.set_selected(indice_opcion(&zonas, &actual_zona));
+    grupo_region.add(&zona);
+
+    pagina.add(&grupo_region);
+
+    let grupo_teclados = adw::PreferencesGroup::new();
+    grupo_teclados.set_title(&localizar_visible(idioma_actual(), "Teclados"));
+    grupo_teclados.set_description(Some(&localizar_visible(
+        idioma_actual(),
+        "Korunix usa el catálogo XKB de la revisión actual del sistema y permite mantener varios teclados.",
+    )));
+
+    let teclado_principal = adw::ComboRow::new();
+    teclado_principal.set_title(&localizar_visible(idioma_actual(), "Teclado principal"));
+    teclado_principal.set_model(Some(&modelo_teclados(&teclados)));
+    teclado_principal.set_enable_search(true);
+    teclado_principal.set_selected(indice_teclado(&teclados, &actual_layout, &actual_variant));
+    grupo_teclados.add(&teclado_principal);
+
+    let adicionales = Rc::new(RefCell::new(Vec::<OpcionTecladoGui>::new()));
+
+    for (index, layout) in layouts_adicionales.iter().enumerate() {
+        let variant = variantes_adicionales
+            .get(index)
+            .cloned()
+            .unwrap_or_default();
+
+        let label = display_names
+            .get(index + 1)
+            .cloned()
+            .or_else(|| {
+                teclados
+                    .iter()
+                    .find(|value| value.layout == *layout && value.variant == variant)
+                    .map(|value| value.label.clone())
+            })
+            .unwrap_or_else(|| etiqueta_teclado_catalogo(estado.idioma, layout, &variant, layout));
+
+        agregar_teclado_adicional_gui(
+            &grupo_teclados,
+            &adicionales,
+            OpcionTecladoGui {
+                layout: layout.clone(),
+                variant,
+                label,
+            },
+        );
+    }
+
+    let agregar_selector = adw::ComboRow::new();
+    agregar_selector.set_title(&localizar_visible(idioma_actual(), "Añadir teclado"));
+    agregar_selector.set_model(Some(&modelo_teclados(&teclados)));
+    agregar_selector.set_enable_search(true);
+    grupo_teclados.add(&agregar_selector);
+
+    let fila_agregar = adw::ActionRow::new();
+    fila_agregar.set_title(&localizar_visible(idioma_actual(), "Otro teclado"));
+    fila_agregar.set_subtitle(&localizar_visible(
+        idioma_actual(),
+        "Se añadirá como alternativa; el principal no cambia.",
+    ));
+    let agregar = gtk::Button::with_label(&localizar_visible(idioma_actual(), "Añadir"));
+    agregar.set_valign(gtk::Align::Center);
+    fila_agregar.add_suffix(&agregar);
+    grupo_teclados.add(&fila_agregar);
+
+    {
+        let teclados_agregar = teclados.clone();
+        let selector_agregar = agregar_selector.clone();
+        let principal_agregar = teclado_principal.clone();
+        let grupo_agregar = grupo_teclados.clone();
+        let adicionales_agregar = Rc::clone(&adicionales);
+        let estado_agregar = Rc::clone(&estado);
+
+        agregar.connect_clicked(move |_| {
+            let Some(choice) = teclados_agregar
+                .get(selector_agregar.selected() as usize)
+                .cloned()
+            else {
+                return;
+            };
+
+            let principal = teclados_agregar.get(principal_agregar.selected() as usize);
+
+            if principal
+                .map(|value| value.layout == choice.layout && value.variant == choice.variant)
+                .unwrap_or(false)
+            {
+                mostrar_error(&estado_agregar, "Ese teclado ya es el principal.");
+                return;
+            }
+
+            agregar_teclado_adicional_gui(&grupo_agregar, &adicionales_agregar, choice);
+        });
+    }
+
+    pagina.add(&grupo_teclados);
+
+    let grupo_guardar = adw::PreferencesGroup::new();
     let fila_guardar = adw::ActionRow::new();
     fila_guardar.set_title(&localizar_visible(idioma_actual(), "Guardar localización"));
     fila_guardar.set_subtitle(&localizar_visible(
         idioma_actual(),
-        "Korunix valida los códigos y la configuración antes de aplicarla.",
+        "Korunix valida las selecciones antes de aplicar la configuración.",
     ));
+
     let guardar = gtk::Button::with_label(texto(estado.idioma, "save_apply"));
     guardar.add_css_class("suggested-action");
     guardar.set_valign(gtk::Align::Center);
     fila_guardar.add_suffix(&guardar);
-    grupo.add(&fila_guardar);
-
-    pagina.add(&grupo);
-
-    let grupo_personalizar = grupo.clone();
-    personalizar.connect_clicked(move |boton| {
-        let visible = !grupo_personalizar.is_visible();
-        grupo_personalizar.set_visible(visible);
-        boton.set_label(&localizar_visible(
-            idioma_actual(),
-            if visible { "Ocultar" } else { "Personalizar" },
-        ));
-    });
+    grupo_guardar.add(&fila_guardar);
+    pagina.add(&grupo_guardar);
 
     let estado_guardar = Rc::clone(&estado);
+    let idiomas_guardar = idiomas.clone();
+    let regiones_guardar = regiones.clone();
+    let zonas_guardar = zonas.clone();
+    let teclados_guardar = teclados.clone();
+    let checks_guardar = Rc::clone(&checks_idiomas);
+    let adicionales_guardar = Rc::clone(&adicionales);
+
     guardar.connect_clicked(move |boton| {
+        let Some(primary_language) = idiomas_guardar.get(idioma_principal.selected() as usize)
+        else {
+            mostrar_error(&estado_guardar, "Selecciona un idioma principal.");
+            return;
+        };
+
+        let mut preferred = vec![primary_language.id.clone()];
+        for (id, check, _) in checks_guardar.iter() {
+            if check.is_active() && id != &primary_language.id && !preferred.contains(id) {
+                preferred.push(id.clone());
+            }
+        }
+
+        let Some(region_value) = regiones_guardar.get(region.selected() as usize) else {
+            mostrar_error(&estado_guardar, "Selecciona una región.");
+            return;
+        };
+
+        let Some(formats_language_value) = idiomas_guardar.get(formatos_idioma.selected() as usize)
+        else {
+            mostrar_error(&estado_guardar, "Selecciona un idioma de formatos.");
+            return;
+        };
+
+        let Some(formats_region_value) = regiones_guardar.get(formatos_region.selected() as usize)
+        else {
+            mostrar_error(&estado_guardar, "Selecciona una región de formatos.");
+            return;
+        };
+
+        let Some(timezone_value) = zonas_guardar.get(zona.selected() as usize) else {
+            mostrar_error(&estado_guardar, "Selecciona una zona horaria.");
+            return;
+        };
+
+        let Some(primary_keyboard) = teclados_guardar
+            .get(teclado_principal.selected() as usize)
+            .cloned()
+        else {
+            mostrar_error(&estado_guardar, "Selecciona un teclado principal.");
+            return;
+        };
+
+        let mut keyboard_values = vec![primary_keyboard.clone()];
+        for value in adicionales_guardar.borrow().iter() {
+            if value.layout == primary_keyboard.layout && value.variant == primary_keyboard.variant
+            {
+                continue;
+            }
+
+            if !keyboard_values
+                .iter()
+                .any(|current| current.layout == value.layout && current.variant == value.variant)
+            {
+                keyboard_values.push(value.clone());
+            }
+        }
+
+        let preferred_json = serde_json::to_string(&preferred).unwrap_or_else(|_| "[]".to_string());
+
+        let keyboards_json = serde_json::Value::Array(
+            keyboard_values
+                .iter()
+                .map(|value| {
+                    serde_json::json!({
+                        "layout": value.layout.clone(),
+                        "variant": value.variant.clone(),
+                        "label": value.label.clone()
+                    })
+                })
+                .collect(),
+        )
+        .to_string();
+
         let args = vec![
             "localization".to_string(),
             "set".to_string(),
             "--language".to_string(),
-            idioma.text().trim().to_string(),
+            primary_language.id.clone(),
+            "--preferred-languages-json".to_string(),
+            preferred_json,
             "--region".to_string(),
-            region.text().trim().to_string(),
+            region_value.id.clone(),
             "--formats-language".to_string(),
-            formatos_idioma.text().trim().to_string(),
+            formats_language_value.id.clone(),
             "--formats-region".to_string(),
-            formatos_region.text().trim().to_string(),
+            formats_region_value.id.clone(),
             "--timezone".to_string(),
-            zona.text().trim().to_string(),
-            "--keyboard".to_string(),
-            teclado.text().trim().to_string(),
-            "--variant".to_string(),
-            variante.text().trim().to_string(),
+            timezone_value.id.clone(),
+            "--keyboards-json".to_string(),
+            keyboards_json,
             "--plan".to_string(),
             "--json".to_string(),
         ];
@@ -5306,7 +5947,7 @@ fn pagina_localizacion(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPag
             }
 
             let mut ejecutar = args.clone();
-            ejecutar.retain(|v| v != "--plan");
+            ejecutar.retain(|value| value != "--plan");
             ejecutar.insert(ejecutar.len() - 1, "--yes".to_string());
 
             match ejecutar_json_owned(&estado_ejecutar, &ejecutar)
