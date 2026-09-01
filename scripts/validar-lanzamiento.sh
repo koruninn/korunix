@@ -54,9 +54,31 @@ ejecutar \
   'pruebas del motor' \
   cargo test --locked --no-default-features --bin korunix
 
-ejecutar \
-  'GUI Rust' \
-  cargo check --locked --features interfaz --bin korunix-interfaz
+gui_rust_log="$(mktemp)"
+if cargo check --locked --features interfaz --bin korunix-interfaz \
+    2> >(tee "$gui_rust_log" >&2)
+then
+  if grep -q '^warning:' "$gui_rust_log" \
+     && grep -q 'sistema/interfaz/principal.rs' "$gui_rust_log"
+  then
+    fallo 'GUI Rust conserva advertencias propias'
+  else
+    ok 'GUI Rust sin advertencias propias'
+  fi
+else
+  fallo 'GUI Rust'
+fi
+rm -f "$gui_rust_log"
+
+if rg -n 'stdenv\.(isLinux|isDarwin)' \
+    --glob '*.nix' \
+    --glob '!result/**' \
+    .
+then
+  fallo 'Korunix usa propiedades stdenv obsoletas'
+else
+  ok 'Korunix no usa propiedades stdenv obsoletas'
+fi
 
 # El contrato de producto debe probar el binario que acabamos de construir,
 # nunca un target/debug antiguo encontrado por scripts/korunix.
