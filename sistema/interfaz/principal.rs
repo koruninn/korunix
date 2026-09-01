@@ -13351,8 +13351,12 @@ fn construir_ventana_con_idioma(
         recargar(Rc::clone(&estado_clon));
     });
 
-    recargar(estado);
+    // El cascarón de Korunix y sus estados de carga se muestran antes de
+    // consultar todas las áreas. ejecutar_motor ya mantiene vivo el MainContext
+    // mientras espera cada consulta, así que la ventana puede dibujarse y seguir
+    // respondiendo durante la carga inicial.
     ventana.present();
+    recargar(estado);
 }
 
 #[cfg(test)]

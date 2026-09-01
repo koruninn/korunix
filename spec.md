@@ -387,6 +387,13 @@ El design system debe definir como mínimo componentes equivalentes a:
 - LoadingState;
 - UpdateRow.
 
+En el arranque cotidiano, el cascarón de la ventana y sus `LoadingState` deben
+presentarse antes de iniciar la recarga completa de hardware, aplicaciones,
+actualizaciones, almacenamiento, firmware y demás áreas. La obtención de esos
+datos no puede retrasar el primer dibujo de la ventana. Mostrar primero el estado
+de carga no autoriza fabricar datos ni porcentajes: cada página se completa con
+información real a medida que el motor responde.
+
 Una pantalla debe poder responder inmediatamente:
 
 1. ¿Dónde estoy?

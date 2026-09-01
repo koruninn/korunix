@@ -480,6 +480,27 @@ else
   fallo 'arranque puede volver a evaluar Nix para conocer el idioma'
 fi
 
+linea_presentar="$(
+  grep -nF '    ventana.present();' sistema/interfaz/principal.rs \
+    | tail -n 1 \
+    | cut -d: -f1
+)"
+linea_recargar="$(
+  grep -nF '    recargar(estado);' sistema/interfaz/principal.rs \
+    | tail -n 1 \
+    | cut -d: -f1
+)"
+
+if [[ "$linea_presentar" =~ ^[0-9]+$ ]] \
+   && [[ "$linea_recargar" =~ ^[0-9]+$ ]] \
+   && (( linea_presentar < linea_recargar )) \
+   && grep -Fq 'datos no puede retrasar el primer dibujo de la ventana' spec.md
+then
+  ok 'GUI presenta la ventana antes de la recarga completa'
+else
+  fallo 'la recarga completa puede volver a retrasar el primer dibujo'
+fi
+
 catalogos_interfaz=0
 catalogos_interfaz_ok=1
 while IFS= read -r catalogo; do
