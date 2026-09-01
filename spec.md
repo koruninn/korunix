@@ -622,6 +622,30 @@ La disponibilidad de un estilo se calcula sobre todos los escritorios selecciona
 
 Un gestor global de apariencia debe alimentar toda la aplicación. Ninguna página debe mantener su propia lógica de tema.
 
+### 10.2.1. GTK4 y Nautilus siguen el modo en vivo
+
+En Niri y Hyprland, las aplicaciones GTK4 de la experiencia Noctalia —incluido
+Nautilus— deben recibir los cambios claro/oscuro sin cerrarse, reabrirse ni
+esperar una regeneración del sistema.
+
+La cadena de estado es única:
+
+```text
+Noctalia efectivo → perfil dconf de Noctalia → portal GTK → aplicaciones GTK4
+```
+
+El portal GTK debe observar la misma base dconf que utiliza Noctalia. No puede
+depender únicamente de variables `XDG_*` que un servicio systemd de usuario
+puede no conservar. Mientras `noctalia.service` esté activo, el portal GTK de
+esa sesión utiliza `DCONF_PROFILE=noctalia`.
+
+Korunix puede reforzar la publicación de `color-scheme` e `icon-theme` a partir
+del IPC efectivo de Noctalia, pero no debe inventar una segunda preferencia ni
+deducir el modo leyendo archivos parciales. La prueba de aceptación mantiene
+Nautilus abierto y verifica claro → oscuro → claro sin reiniciar Nautilus ni los
+portales. El cambio visual debe ocurrir en la misma interacción, no varios
+segundos después.
+
 ### 10.3. Transiciones
 
 Los cambios visuales deben ser suaves y cortos cuando GTK permita hacerlo de forma fiable.

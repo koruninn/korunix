@@ -572,34 +572,35 @@
     user-db:plasma
   '';
 
-  # Hatter Slate acompaña la apariencia predeterminada y las paletas generadas
-  # desde el fondo. Hatter Green solo corresponde a Everforest cuando esa es la
-  # selección efectiva de Noctalia, incluidos los cambios guardados por su GUI.
-  applyNoctaliaIconTheme = pkgs.writeShellScript "korunix-noctalia-icon-theme" ''
+  # El portal GTK y Noctalia deben observar exactamente la misma base dconf.
+  # Noctalia ya publica su modo por IPC y sincroniza GSettings; Korunix refuerza
+  # esa frontera usando el estado efectivo, nunca deduciendo archivos parciales.
+  # Así GTK4, incluido Nautilus, recibe claro/oscuro en la misma interacción.
+  applyNoctaliaPortalSettings = pkgs.writeShellScript "korunix-noctalia-portal-settings" ''
     set -eu
 
     mode="''${1:---default}"
     selection=""
+    visual_mode=""
 
     case "$mode" in
       --default)
-        # Antes de iniciar Noctalia no inferimos preferencias desde archivos
-        # parciales: Slate es siempre el valor seguro y predeterminado.
+        # Antes de iniciar Noctalia no inferimos estado mutable desde archivos.
+        # Slate es seguro; el modo solo se publica si la decisión Nix es explícita.
+        visual_mode=${lib.escapeShellArg noctaliaThemeMode}
         ;;
       --resolved)
         attempt=0
-
-        # La GUI guarda primero su estado y después lo publica por IPC. Esta
-        # espera breve evita leer la selección anterior durante ese relevo.
-        while [ "$attempt" -lt 40 ]; do
+        while [ "$attempt" -lt 20 ]; do
           selection="$(${lib.getExe noctaliaPackage} msg color-scheme-get 2>/dev/null || true)"
+          visual_mode="$(${lib.getExe noctaliaPackage} msg theme-mode-get 2>/dev/null || true)"
 
-          if [ -n "$selection" ]; then
+          if [ -n "$selection" ] && [ -n "$visual_mode" ]; then
             break
           fi
 
           attempt=$((attempt + 1))
-          ${pkgs.coreutils}/bin/sleep 0.1
+          ${pkgs.coreutils}/bin/sleep 0.05
         done
         ;;
       *)
@@ -614,43 +615,49 @@
         ${pkgs.coreutils}/bin/tr '[:upper:]' '[:lower:]'
     )"
 
-    case "$selection" in
-      "community everforest")
-        theme="Hatter-Green"
-        ;;
-      *)
-        theme="Hatter-Slate"
-        ;;
-    esac
+    visual_mode="$(
+      printf '%s\n' "$visual_mode" |
+        ${pkgs.coreutils}/bin/head -n 1 |
+        ${pkgs.coreutils}/bin/tr '[:upper:]' '[:lower:]'
+    )"
 
-    case "$theme" in
-      Hatter-Slate|Hatter-Green)
-        ;;
-      *)
-        echo "Korunix: variante de iconos no válida: $theme" >&2
-        exit 1
-        ;;
+    case "$selection" in
+      "community everforest") icon_theme="Hatter-Green" ;;
+      *) icon_theme="Hatter-Slate" ;;
     esac
 
     DCONF_PROFILE=noctalia \
       ${lib.getExe' pkgs.glib "gsettings"} set \
-      org.gnome.desktop.interface \
-      icon-theme \
-      "$theme"
+      org.gnome.desktop.interface icon-theme "$icon_theme"
 
-    if [ -n "$selection" ]; then
-      echo "Korunix: Noctalia usa $theme para '$selection'."
-    else
-      echo "Korunix: Noctalia usa Hatter-Slate como variante predeterminada."
+    case "$visual_mode" in
+      light) color_scheme="prefer-light" ;;
+      dark) color_scheme="prefer-dark" ;;
+      auto|"") color_scheme="" ;;
+      *) color_scheme="" ;;
+    esac
+
+    if [ -n "$color_scheme" ]; then
+      DCONF_PROFILE=noctalia \
+        ${lib.getExe' pkgs.glib "gsettings"} set \
+        org.gnome.desktop.interface color-scheme "$color_scheme"
     fi
+
+    echo "Korunix: portal GTK sincronizado con Noctalia."
   '';
 
-  # GTK4 consulta el tema de iconos mediante el portal y no directamente desde
-  # el proceso de la aplicación. Los portales comparten unidades entre todos los
-  # escritorios, así que el perfil debe elegirse al arrancar cada sesión.
+  # GTK4 consulta color-scheme e icon-theme mediante el portal. El perfil no
+  # puede depender solo de XDG_*: systemd --user puede iniciar servicios sin
+  # conservar esas variables. Noctalia activo identifica directamente la sesión.
   portalSessionWrapper = name: executable:
     pkgs.writeShellScript name ''
-      case ":''${XDG_CURRENT_DESKTOP:-}:''${XDG_SESSION_DESKTOP:-}:''${DESKTOP_SESSION:-}:" in
+      if ${config.systemd.package}/bin/systemctl --user --quiet is-active noctalia.service 2>/dev/null; then
+        export DCONF_PROFILE=noctalia
+        ${lib.optionalString cinnamonEnabled ''
+        export NIX_GSETTINGS_OVERRIDES_DIR=${lib.escapeShellArg neutralGSettingsSchemaDir}
+      ''}
+      else
+        case ":''${XDG_CURRENT_DESKTOP:-}:''${XDG_SESSION_DESKTOP:-}:''${DESKTOP_SESSION:-}:" in
         *:niri:*|*:Niri:*|*:Hyprland:*|*:hyprland:*|*:hyprland-uwsm:*)
           export DCONF_PROFILE=noctalia
           ${lib.optionalString cinnamonEnabled ''
@@ -669,13 +676,14 @@
         export NIX_GSETTINGS_OVERRIDES_DIR=${lib.escapeShellArg neutralGSettingsSchemaDir}
       ''}
           ;;
-        *)
-          export DCONF_PROFILE=user
-          ${lib.optionalString cinnamonEnabled ''
+          *)
+            export DCONF_PROFILE=user
+            ${lib.optionalString cinnamonEnabled ''
         export NIX_GSETTINGS_OVERRIDES_DIR=${lib.escapeShellArg neutralGSettingsSchemaDir}
       ''}
-          ;;
-      esac
+            ;;
+        esac
+      fi
 
       exec ${executable}
     '';
@@ -1426,14 +1434,14 @@ in {
       serviceConfig = {
         Type = "oneshot";
         ExecCondition = noctaliaSessionCheck;
-        ExecStart = "${applyNoctaliaIconTheme} --default";
+        ExecStart = "${applyNoctaliaPortalSettings} --default";
       };
     };
 
     # Después de iniciar Noctalia, su IPC informa la selección efectiva. Así las
     # preferencias guardadas por la GUI tienen prioridad sobre el archivo base.
     systemd.user.services.korunix-noctalia-icon-theme-sync = lib.mkIf noctaliaEnabled {
-      description = "Sincroniza Hatter con la paleta efectiva de Noctalia";
+      description = "Sincroniza GTK4 con la apariencia efectiva de Noctalia";
 
       wantedBy = ["graphical-session.target"];
       after = ["noctalia.service"];
@@ -1442,7 +1450,7 @@ in {
       serviceConfig = {
         Type = "oneshot";
         ExecCondition = noctaliaSessionCheck;
-        ExecStart = "${applyNoctaliaIconTheme} --resolved";
+        ExecStart = "${applyNoctaliaPortalSettings} --resolved";
       };
     };
 

@@ -528,6 +528,19 @@ else
   fallo 'spec perdió el contrato independiente del idioma de interfaz'
 fi
 
+if grep -Fq 'applyNoctaliaPortalSettings' sistema/escritorio.nix \
+   && grep -Fq 'msg theme-mode-get' sistema/escritorio.nix \
+   && grep -Fq 'org.gnome.desktop.interface color-scheme' sistema/escritorio.nix \
+   && grep -Fq 'systemctl --user --quiet is-active noctalia.service' sistema/escritorio.nix \
+   && grep -Fq 'export DCONF_PROFILE=noctalia' sistema/escritorio.nix \
+   && grep -Fq 'Nautilus— deben recibir los cambios claro/oscuro' spec.md \
+   && grep -Fq 'portal GTK debe observar la misma base dconf' spec.md
+then
+  ok 'GTK4 y Nautilus siguen la apariencia efectiva de Noctalia'
+else
+  fallo 'se perdió el contrato de cambio vivo GTK4/Noctalia'
+fi
+
 ssh_activo="$(
   nix eval \
     --json \
