@@ -14,7 +14,12 @@
   # puede definir una excepción local si ese nombre ya está ocupado.
   accountName = "koru";
   fullName = "André";
+  # Idioma personal de sesión. No controla la interfaz de Korunix.
   language = "es";
+
+  # null = seguir el locale actual al abrir Korunix.
+  # Un código explícito cambia solo la interfaz de Korunix.
+  interfaceLanguage = null;
 
   # Los métodos de entrada avanzados son una preferencia portable.
   # Una lista vacía significa que esta persona solo necesita el teclado normal.

@@ -36,6 +36,7 @@ Uso:
   korunix defaults [--json | set --person <id> [--browser firefox|google-chrome] [--plasma-text-editor kwrite|kate] [--plan] [--yes] [--json]]
   korunix hardware [--json]
   korunix localization [operación]
+  korunix interface-language [--json | set <idioma|auto> [--plan] [--yes] [--json]]
   korunix backup [operación]
   korunix history [--json]
   korunix channel [opciones]
@@ -1746,6 +1747,7 @@ fn perfil_base_json(raiz: &Path, ruta: &Path, id: &str) -> Result<String, String
                 accountName: ($u.accountName // $id),
                 fullName: ($u.fullName // ""),
                 language: ($u.language // null),
+                interfaceLanguage: ($u.interfaceLanguage // null),
                 inputMethods: ($u.inputMethods // []),
                 capabilities: ($u.capabilities // []),
                 avatarPath: ($u.avatar // null)
@@ -2003,10 +2005,10 @@ fn usuarios_json(raiz: &Path) -> Result<String, String> {
             "\"repositoryStoresPasswords\":false,",
             "\"newPasswordMethod\":\"system-passwd\",",
             "\"androidAccessModel\":\"systemd-uaccess\",",
-            "\"portableProfileSchemaVersion\":2,",
-            "\"compatiblePortableProfileSchemaVersions\":[1,2],",
+            "\"portableProfileSchemaVersion\":3,",
+            "\"compatiblePortableProfileSchemaVersions\":[1,2,3],",
             "\"portableFields\":[",
-            "\"id\",\"accountName\",\"fullName\",\"language\",",
+            "\"id\",\"accountName\",\"fullName\",\"language\",\"interfaceLanguage\",",
             "\"inputMethods\",\"capabilities\",\"avatar\"",
             "],",
             "\"hostLocalFields\":[",

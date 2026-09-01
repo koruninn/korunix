@@ -453,6 +453,26 @@ No debe existir un parpadeo inicial en otro idioma antes de aplicar la detecció
 
 Si el usuario cambia el idioma dentro de Korunix, la aplicación debe traducirse en vivo siempre que técnicamente sea posible, sin reiniciarse.
 
+La preferencia explícita de idioma de la propia interfaz pertenece a la persona
+y se guarda en el perfil portable como `interfaceLanguage`. Este campo es
+distinto de `language`: `language` conserva la preferencia personal de sesión que
+ya utiliza Korunix para integraciones de usuario, mientras `interfaceLanguage`
+solo decide cómo se presenta Korunix.
+
+`interfaceLanguage = null` o un campo ausente significa modo automático: en cada
+inicio se aplica la detección descrita al principio de esta sección. Un código
+explícito debe pertenecer a una localización de interfaz realmente publicada.
+
+Cambiar `interfaceLanguage` no modifica `systemLanguage`, idiomas preferidos,
+región, formatos, zona horaria, teclados, métodos de entrada ni nombres
+localizados de otros componentes de la sesión. Tampoco requiere construir ni
+aplicar una generación de NixOS, cerrar sesión o reiniciar.
+
+La GUI persiste primero la preferencia portable y después vuelve a construir su
+presentación dentro del mismo proceso con el catálogo elegido. Si la escritura
+falla, conserva el idioma anterior. La preferencia debe sobrevivir a la
+exportación e importación de perfiles portables.
+
 Los idiomas soportados de Korunix deben alinearse con la lista real de idiomas soportados por Noctalia cuando se implemente esta capa. La lista debe verificarse contra la versión de Noctalia utilizada; no se debe codificar una cifra histórica sin comprobación.
 
 Para la revisión de Noctalia fijada actualmente en `flake.lock` (`4b8c722e0c82816ca50a28ab4695ab765f3f4ab0`), la verificación de producto encontró estas localizaciones publicadas: `be-Latn`, `be`, `ca`, `cs`, `de`, `en`, `es`, `fr`, `gl-ES`, `hu`, `it`, `ko`, `ku`, `nl`, `nn`, `pl`, `pt-BR`, `ru`, `sv`, `tr`, `uk-UA`, `vi` y `zh-Hans`. Cambiar la revisión de Noctalia obliga a volver a obtener la lista; esta enumeración es evidencia de la revisión fijada, no una cifra permanente.

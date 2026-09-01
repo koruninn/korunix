@@ -51,61 +51,115 @@ enum Idioma {
     ChinoSimplificado,
 }
 
-fn idioma_actual() -> Idioma {
-    let valor = env::var("LANG")
-        .unwrap_or_default()
-        .to_ascii_lowercase()
-        .replace('-', "_");
+static IDIOMA_INTERFAZ_VIVO: OnceLock<Mutex<Option<Idioma>>> = OnceLock::new();
 
-    if valor.starts_with("be_latn") {
-        Idioma::BelarusLatino
+fn idioma_desde_tag(valor: &str) -> Option<Idioma> {
+    let valor = valor.trim().to_ascii_lowercase().replace('-', "_");
+
+    if valor.starts_with("be_latn") || (valor.starts_with("be_") && valor.contains("@latin")) {
+        Some(Idioma::BelarusLatino)
     } else if valor.starts_with("be") {
-        Idioma::Belarus
+        Some(Idioma::Belarus)
     } else if valor.starts_with("ca") {
-        Idioma::Catalan
+        Some(Idioma::Catalan)
     } else if valor.starts_with("cs") {
-        Idioma::Checo
+        Some(Idioma::Checo)
     } else if valor.starts_with("de") {
-        Idioma::Aleman
+        Some(Idioma::Aleman)
     } else if valor.starts_with("en") {
-        Idioma::Ingles
+        Some(Idioma::Ingles)
     } else if valor.starts_with("es") {
-        Idioma::Espanol
+        Some(Idioma::Espanol)
     } else if valor.starts_with("fr") {
-        Idioma::Frances
+        Some(Idioma::Frances)
     } else if valor.starts_with("gl") {
-        Idioma::Gallego
+        Some(Idioma::Gallego)
     } else if valor.starts_with("hu") {
-        Idioma::Hungaro
+        Some(Idioma::Hungaro)
     } else if valor.starts_with("it") {
-        Idioma::Italiano
+        Some(Idioma::Italiano)
     } else if valor.starts_with("ko") {
-        Idioma::Coreano
+        Some(Idioma::Coreano)
     } else if valor.starts_with("ku") {
-        Idioma::Kurdo
+        Some(Idioma::Kurdo)
     } else if valor.starts_with("nl") {
-        Idioma::Neerlandes
+        Some(Idioma::Neerlandes)
     } else if valor.starts_with("nn") {
-        Idioma::NoruegoNynorsk
+        Some(Idioma::NoruegoNynorsk)
     } else if valor.starts_with("pl") {
-        Idioma::Polaco
+        Some(Idioma::Polaco)
     } else if valor.starts_with("pt_br") {
-        Idioma::PortuguesBrasil
+        Some(Idioma::PortuguesBrasil)
     } else if valor.starts_with("ru") {
-        Idioma::Ruso
+        Some(Idioma::Ruso)
     } else if valor.starts_with("sv") {
-        Idioma::Sueco
+        Some(Idioma::Sueco)
     } else if valor.starts_with("tr") {
-        Idioma::Turco
+        Some(Idioma::Turco)
     } else if valor.starts_with("uk") {
-        Idioma::Ucraniano
+        Some(Idioma::Ucraniano)
     } else if valor.starts_with("vi") {
-        Idioma::Vietnamita
+        Some(Idioma::Vietnamita)
     } else if valor.starts_with("zh") {
-        Idioma::ChinoSimplificado
+        Some(Idioma::ChinoSimplificado)
     } else {
-        Idioma::Espanol
+        None
     }
+}
+
+fn fijar_idioma_interfaz(idioma: Idioma) {
+    let state = IDIOMA_INTERFAZ_VIVO.get_or_init(|| Mutex::new(None));
+
+    if let Ok(mut current) = state.lock() {
+        *current = Some(idioma);
+    }
+}
+
+fn idioma_actual() -> Idioma {
+    if let Some(state) = IDIOMA_INTERFAZ_VIVO.get() {
+        if let Ok(current) = state.lock() {
+            if let Some(idioma) = *current {
+                return idioma;
+            }
+        }
+    }
+
+    for variable in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+        if let Ok(value) = env::var(variable) {
+            if let Some(idioma) = idioma_desde_tag(&value) {
+                return idioma;
+            }
+        }
+    }
+
+    Idioma::Espanol
+}
+
+fn idioma_preferido_interfaz(raiz: &Path, motor: &Path) -> Idioma {
+    let output = Command::new(motor)
+        .args(["interface-language", "--json"])
+        .env("KORUNIX_ROOT", raiz)
+        .current_dir(raiz)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output();
+
+    let Ok(output) = output else {
+        return idioma_actual();
+    };
+
+    if !output.status.success() {
+        return idioma_actual();
+    }
+
+    serde_json::from_slice::<Value>(&output.stdout)
+        .ok()
+        .as_ref()
+        .and_then(|value| value.get("language"))
+        .and_then(Value::as_str)
+        .and_then(idioma_desde_tag)
+        .unwrap_or_else(idioma_actual)
 }
 
 fn idioma_tag(idioma: Idioma) -> &'static str {
@@ -134,6 +188,34 @@ fn idioma_tag(idioma: Idioma) -> &'static str {
         Idioma::Vietnamita => "vi",
         Idioma::ChinoSimplificado => "zh-Hans",
     }
+}
+
+fn idiomas_interfaz() -> [Idioma; 23] {
+    [
+        Idioma::BelarusLatino,
+        Idioma::Belarus,
+        Idioma::Catalan,
+        Idioma::Checo,
+        Idioma::Aleman,
+        Idioma::Ingles,
+        Idioma::Espanol,
+        Idioma::Frances,
+        Idioma::Gallego,
+        Idioma::Hungaro,
+        Idioma::Italiano,
+        Idioma::Coreano,
+        Idioma::Kurdo,
+        Idioma::Neerlandes,
+        Idioma::NoruegoNynorsk,
+        Idioma::Polaco,
+        Idioma::PortuguesBrasil,
+        Idioma::Ruso,
+        Idioma::Sueco,
+        Idioma::Turco,
+        Idioma::Ucraniano,
+        Idioma::Vietnamita,
+        Idioma::ChinoSimplificado,
+    ]
 }
 
 fn catalogo_visible_raw(idioma: Idioma) -> &'static str {
@@ -2378,6 +2460,8 @@ fn motor(raiz: &Path) -> Result<PathBuf, String> {
 struct Estado {
     raiz: PathBuf,
     motor: PathBuf,
+    aplicacion: adw::Application,
+    ventana: adw::ApplicationWindow,
     idioma: Idioma,
     stack: gtk::Stack,
     navegacion: gtk::ListBox,
@@ -5552,11 +5636,78 @@ fn pagina_localizacion(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPag
         "El idioma de Korunix, los idiomas del sistema, la región, los formatos y los teclados son decisiones separadas.",
     )));
 
-    grupo_actual.add(&fila(
-        "Idioma de Korunix",
-        idioma_humano(estado.idioma, idioma_tag(estado.idioma)),
-    ));
+    let idiomas_interfaz_valores = idiomas_interfaz()
+        .into_iter()
+        .map(|idioma| OpcionLocalizacion {
+            id: idioma_tag(idioma).to_string(),
+            label: idioma_humano(estado.idioma, idioma_tag(idioma)),
+        })
+        .collect::<Vec<_>>();
 
+    let fila_idioma_interfaz = adw::ComboRow::new();
+    fila_idioma_interfaz.set_title(&localizar_visible(estado.idioma, "Idioma de Korunix"));
+    fila_idioma_interfaz.set_model(Some(&modelo_opciones(&idiomas_interfaz_valores)));
+    fila_idioma_interfaz.set_enable_search(true);
+
+    let indice_interfaz_actual =
+        indice_opcion(&idiomas_interfaz_valores, idioma_tag(estado.idioma));
+    fila_idioma_interfaz.set_selected(indice_interfaz_actual);
+    grupo_actual.add(&fila_idioma_interfaz);
+
+    {
+        let estado_interfaz = Rc::clone(&estado);
+        let opciones = idiomas_interfaz_valores.clone();
+        let revirtiendo = Rc::new(Cell::new(false));
+        let revirtiendo_cambio = Rc::clone(&revirtiendo);
+
+        fila_idioma_interfaz.connect_selected_notify(move |selector| {
+            if revirtiendo_cambio.replace(false) {
+                return;
+            }
+
+            let Some(opcion) = opciones.get(selector.selected() as usize) else {
+                return;
+            };
+
+            if opcion.id == idioma_tag(estado_interfaz.idioma) {
+                return;
+            }
+
+            let Some(nuevo_idioma) = idioma_desde_tag(&opcion.id) else {
+                return;
+            };
+
+            selector.set_sensitive(false);
+
+            let argumentos = vec![
+                "interface-language".to_string(),
+                "set".to_string(),
+                opcion.id.clone(),
+                "--yes".to_string(),
+                "--json".to_string(),
+            ];
+
+            if let Err(error) = ejecutar_json_owned(&estado_interfaz, &argumentos) {
+                revirtiendo_cambio.set(true);
+                selector.set_selected(indice_interfaz_actual);
+                selector.set_sensitive(true);
+                mostrar_error(&estado_interfaz, error);
+                return;
+            }
+
+            let aplicacion = estado_interfaz.aplicacion.clone();
+            let ventana_anterior = estado_interfaz.ventana.clone();
+
+            construir_ventana_con_idioma(
+                &aplicacion,
+                estado_interfaz.raiz.clone(),
+                estado_interfaz.motor.clone(),
+                nuevo_idioma,
+            );
+
+            ventana_anterior.close();
+        });
+    }
     let idiomas_visibles = preferred_actuales
         .iter()
         .map(|value| idioma_humano(estado.idioma, value))
@@ -12883,7 +13034,17 @@ fn observar_apariencia_viva() -> AparienciaViva {
 }
 
 fn construir_ventana(app: &adw::Application, raiz: PathBuf, motor: PathBuf) {
-    let idioma = idioma_actual();
+    let idioma = idioma_preferido_interfaz(&raiz, &motor);
+    construir_ventana_con_idioma(app, raiz, motor, idioma);
+}
+
+fn construir_ventana_con_idioma(
+    app: &adw::Application,
+    raiz: PathBuf,
+    motor: PathBuf,
+    idioma: Idioma,
+) {
+    fijar_idioma_interfaz(idioma);
 
     let ventana = adw::ApplicationWindow::builder()
         .application(app)
@@ -13169,6 +13330,8 @@ fn construir_ventana(app: &adw::Application, raiz: PathBuf, motor: PathBuf) {
     let estado = Rc::new(Estado {
         raiz,
         motor,
+        aplicacion: app.clone(),
+        ventana: ventana.clone(),
         idioma,
         stack,
         navegacion: lista.clone(),

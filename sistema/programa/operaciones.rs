@@ -4916,6 +4916,7 @@ fn profile_text(account: &str, name: &str) -> String {
          \x20 accountName = {};\n\
          \x20 fullName = {};\n\
          \x20 language = null;\n\
+         \x20 interfaceLanguage = null;\n\
          \x20 inputMethods = [];\n\
          \x20 capabilities = [];\n\
          \x20 avatar = null;\n\
@@ -4923,6 +4924,101 @@ fn profile_text(account: &str, name: &str) -> String {
         json_texto(account),
         json_texto(name)
     )
+}
+
+fn portable_optional_string(
+    profile: &serde_json::Value,
+    key: &str,
+) -> Result<Option<String>, String> {
+    match profile.get(key) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(serde_json::Value::String(value)) => Ok(Some(value.clone())),
+        _ => Err(format!("El campo portable {key} debe ser texto o null.")),
+    }
+}
+
+fn portable_string_list(profile: &serde_json::Value, key: &str) -> Result<Vec<String>, String> {
+    let Some(value) = profile.get(key) else {
+        return Ok(Vec::new());
+    };
+
+    let items = value
+        .as_array()
+        .ok_or_else(|| format!("El campo portable {key} debe ser una lista."))?;
+
+    items
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .map(ToString::to_string)
+                .ok_or_else(|| format!("El campo portable {key} solo admite textos."))
+        })
+        .collect()
+}
+
+fn nix_optional_string(value: Option<&str>) -> String {
+    value.map(json_texto).unwrap_or_else(|| "null".to_string())
+}
+
+fn nix_string_list(values: &[String]) -> String {
+    format!(
+        "[{}]",
+        values
+            .iter()
+            .map(|value| json_texto(value))
+            .collect::<Vec<_>>()
+            .join(" ")
+    )
+}
+
+fn profile_text_from_manifest(profile: &serde_json::Value) -> Result<String, String> {
+    let account = profile
+        .get("accountName")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "El perfil importado no contiene accountName.".to_string())?;
+
+    if !account_valid(account) {
+        return Err("El perfil importado contiene un nombre de cuenta inválido.".to_string());
+    }
+
+    let name = profile
+        .get("fullName")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "El perfil importado no contiene fullName.".to_string())?;
+
+    let language = portable_optional_string(profile, "language")?;
+    let interface_language = portable_optional_string(profile, "interfaceLanguage")?;
+
+    if let Some(value) = interface_language.as_deref() {
+        if !interface_language_supported(value) {
+            return Err(format!(
+                "El perfil importado pide un idioma de Korunix no soportado: {value}."
+            ));
+        }
+    }
+
+    let input_methods = portable_string_list(profile, "inputMethods")?;
+    let capabilities = portable_string_list(profile, "capabilities")?;
+
+    Ok(format!(
+        "# ESTE ARCHIVO SE PUEDE CAMBIAR.\n\
+         # Perfil portable. No contiene contraseñas ni hashes.\n\
+         {{\n\
+         \x20 accountName = {};\n\
+         \x20 fullName = {};\n\
+         \x20 language = {};\n\
+         \x20 interfaceLanguage = {};\n\
+         \x20 inputMethods = {};\n\
+         \x20 capabilities = {};\n\
+         \x20 avatar = null;\n\
+         }}\n",
+        json_texto(account),
+        json_texto(name),
+        nix_optional_string(language.as_deref()),
+        nix_optional_string(interface_language.as_deref()),
+        nix_string_list(&input_methods),
+        nix_string_list(&capabilities),
+    ))
 }
 
 fn host_config_path(raiz: &Path) -> Result<PathBuf, String> {
@@ -6678,6 +6774,499 @@ fn desktop_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
         );
     } else {
         println!("✓ cambio de escritorio preparado; falta aplicar la configuración");
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
+const KORUNIX_INTERFACE_LANGUAGES: &[&str] = &[
+    "be-Latn", "be", "ca", "cs", "de", "en", "es", "fr", "gl-ES", "hu", "it", "ko", "ku", "nl",
+    "nn", "pl", "pt-BR", "ru", "sv", "tr", "uk-UA", "vi", "zh-Hans",
+];
+
+#[derive(Clone, Debug)]
+struct InterfaceLanguageProfile {
+    id: String,
+    account_name: String,
+    interface_language: Option<String>,
+}
+
+fn interface_language_supported(language: &str) -> bool {
+    KORUNIX_INTERFACE_LANGUAGES.contains(&language)
+}
+
+fn interface_language_from_locale(locale: &str) -> Option<&'static str> {
+    let normalized = locale.trim().to_ascii_lowercase().replace('-', "_");
+
+    if normalized.starts_with("be_latn")
+        || (normalized.starts_with("be_") && normalized.contains("@latin"))
+    {
+        Some("be-Latn")
+    } else if normalized.starts_with("be") {
+        Some("be")
+    } else if normalized.starts_with("ca") {
+        Some("ca")
+    } else if normalized.starts_with("cs") {
+        Some("cs")
+    } else if normalized.starts_with("de") {
+        Some("de")
+    } else if normalized.starts_with("en") {
+        Some("en")
+    } else if normalized.starts_with("es") {
+        Some("es")
+    } else if normalized.starts_with("fr") {
+        Some("fr")
+    } else if normalized.starts_with("gl") {
+        Some("gl-ES")
+    } else if normalized.starts_with("hu") {
+        Some("hu")
+    } else if normalized.starts_with("it") {
+        Some("it")
+    } else if normalized.starts_with("ko") {
+        Some("ko")
+    } else if normalized.starts_with("ku") {
+        Some("ku")
+    } else if normalized.starts_with("nl") {
+        Some("nl")
+    } else if normalized.starts_with("nn") {
+        Some("nn")
+    } else if normalized.starts_with("pl") {
+        Some("pl")
+    } else if normalized.starts_with("pt_br") {
+        Some("pt-BR")
+    } else if normalized.starts_with("ru") {
+        Some("ru")
+    } else if normalized.starts_with("sv") {
+        Some("sv")
+    } else if normalized.starts_with("tr") {
+        Some("tr")
+    } else if normalized.starts_with("uk") {
+        Some("uk-UA")
+    } else if normalized.starts_with("vi") {
+        Some("vi")
+    } else if normalized.starts_with("zh") {
+        Some("zh-Hans")
+    } else {
+        None
+    }
+}
+
+fn interface_language_detected() -> (&'static str, &'static str) {
+    for variable in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+        if let Ok(value) = env::var(variable) {
+            if let Some(language) = interface_language_from_locale(&value) {
+                return (language, "system-locale");
+            }
+        }
+    }
+
+    ("es", "spanish-fallback")
+}
+
+fn profile_simple_string_value(text: &str, key: &str) -> Option<String> {
+    let prefix = format!("{key} = ");
+    let mut found = None::<String>;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+
+        if !trimmed.starts_with(&prefix) {
+            continue;
+        }
+
+        if found.is_some() {
+            return None;
+        }
+
+        let value = trimmed[prefix.len()..].trim();
+        let value = value.strip_suffix(';')?.trim();
+        let parsed = serde_json::from_str::<String>(value).ok()?;
+        found = Some(parsed);
+    }
+
+    found
+}
+
+fn interface_language_profile_fast(
+    raiz: &Path,
+) -> Result<Option<InterfaceLanguageProfile>, String> {
+    let account = match env::var("USER") {
+        Ok(value) if !value.trim().is_empty() => value,
+        _ => return Ok(None),
+    };
+
+    let directory = raiz.join("configuracion/personas");
+    let mut matches = Vec::<(String, PathBuf)>::new();
+
+    for entry in fs::read_dir(&directory)
+        .map_err(|error| format!("No pude leer {}: {error}", directory.display()))?
+    {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+
+        if !path.is_file() || path.extension().and_then(|value| value.to_str()) != Some("nix") {
+            continue;
+        }
+
+        let text = fs::read_to_string(&path)
+            .map_err(|error| format!("No pude leer {}: {error}", path.display()))?;
+
+        if profile_simple_string_value(&text, "accountName").as_deref() != Some(account.as_str()) {
+            continue;
+        }
+
+        let Some(id) = path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .map(ToString::to_string)
+        else {
+            continue;
+        };
+
+        matches.push((id, path));
+    }
+
+    let [(id, path)] = matches.as_slice() else {
+        return Ok(None);
+    };
+
+    let value_text = nix_archivo_json(raiz, path)?;
+    let value: serde_json::Value =
+        serde_json::from_str(&value_text).map_err(|error| error.to_string())?;
+
+    Ok(Some(InterfaceLanguageProfile {
+        id: id.clone(),
+        account_name: account,
+        interface_language: value
+            .get("interfaceLanguage")
+            .and_then(serde_json::Value::as_str)
+            .map(ToString::to_string),
+    }))
+}
+
+fn interface_language_profile_from_users(raiz: &Path) -> Result<InterfaceLanguageProfile, String> {
+    let account = env::var("USER")
+        .map_err(|_| "No pude conocer la cuenta que está usando Korunix.".to_string())?;
+
+    let users_text = usuarios_json(raiz)?;
+    let users: serde_json::Value =
+        serde_json::from_str(&users_text).map_err(|error| error.to_string())?;
+
+    let current = users
+        .get("accounts")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|accounts| {
+            accounts.iter().find(|entry| {
+                entry.get("accountName").and_then(serde_json::Value::as_str)
+                    == Some(account.as_str())
+            })
+        })
+        .ok_or_else(|| {
+            format!("La cuenta {account} todavía no está asociada a un perfil de Korunix.")
+        })?;
+
+    let profile_id = current
+        .get("profileId")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| {
+            format!("La cuenta {account} todavía no tiene un perfil portable asociado.")
+        })?
+        .to_string();
+
+    let profile = users
+        .get("profiles")
+        .and_then(serde_json::Value::as_array)
+        .and_then(|profiles| {
+            profiles.iter().find(|profile| {
+                profile.get("id").and_then(serde_json::Value::as_str) == Some(profile_id.as_str())
+            })
+        })
+        .ok_or_else(|| {
+            format!("Korunix no encontró el perfil portable {profile_id} de la cuenta actual.")
+        })?;
+
+    Ok(InterfaceLanguageProfile {
+        id: profile_id,
+        account_name: account,
+        interface_language: profile
+            .get("interfaceLanguage")
+            .and_then(serde_json::Value::as_str)
+            .map(ToString::to_string),
+    })
+}
+
+fn interface_language_profile(raiz: &Path) -> Result<InterfaceLanguageProfile, String> {
+    if let Some(profile) = interface_language_profile_fast(raiz)? {
+        return Ok(profile);
+    }
+
+    interface_language_profile_from_users(raiz)
+}
+
+fn profile_interface_language_text(text: &str, language: Option<&str>) -> Result<String, String> {
+    if let Some(value) = language {
+        if !interface_language_supported(value) {
+            return Err(format!("Idioma de interfaz no soportado: {value}."));
+        }
+    }
+
+    let mut lines = text.lines().map(ToString::to_string).collect::<Vec<_>>();
+    let prefix = "  interfaceLanguage = ";
+
+    let positions = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| line.starts_with(prefix).then_some(index))
+        .collect::<Vec<_>>();
+
+    if positions.len() > 1 {
+        return Err("El perfil contiene más de una preferencia interfaceLanguage.".to_string());
+    }
+
+    let declaration = format!(
+        "{prefix}{};",
+        language
+            .map(json_texto)
+            .unwrap_or_else(|| "null".to_string())
+    );
+
+    if let Some(&index) = positions.first() {
+        let line = &lines[index];
+        let semicolon = line
+            .find(';')
+            .ok_or_else(|| "interfaceLanguage no tiene una declaración editable.".to_string())?;
+
+        let suffix = &line[semicolon + 1..];
+        lines[index] = format!("{declaration}{suffix}");
+    } else {
+        let language_positions = lines
+            .iter()
+            .enumerate()
+            .filter_map(|(index, line)| line.starts_with("  language = ").then_some(index))
+            .collect::<Vec<_>>();
+
+        if language_positions.len() != 1 {
+            return Err("No encontré un punto seguro para guardar interfaceLanguage.".to_string());
+        }
+
+        lines.insert(language_positions[0] + 1, declaration);
+    }
+
+    let mut result = lines.join("\n");
+    if text.ends_with('\n') {
+        result.push('\n');
+    }
+    Ok(result)
+}
+
+fn interface_language_state_json(raiz: &Path) -> Result<String, String> {
+    let profile = interface_language_profile(raiz)?;
+    let detected = interface_language_detected();
+
+    let explicit = profile
+        .interface_language
+        .as_deref()
+        .filter(|language| interface_language_supported(language));
+
+    let (effective, source) = match explicit {
+        Some(language) => (language, "portable-profile"),
+        None => detected,
+    };
+
+    Ok(serde_json::json!({
+        "schemaVersion": 1,
+        "kind": "korunix-interface-language",
+        "profileId": profile.id,
+        "accountName": profile.account_name,
+        "declaredLanguage": profile.interface_language,
+        "language": effective,
+        "automatic": explicit.is_none(),
+        "source": source,
+        "supportedLanguages": KORUNIX_INTERFACE_LANGUAGES,
+        "changesSystemLanguage": false,
+        "requiresSystemApply": false,
+        "requiresRestart": false,
+        "liveReloadSupported": true
+    })
+    .to_string())
+}
+
+fn interface_language_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
+    if args.is_empty() || args == ["--json"] {
+        let state = interface_language_state_json(raiz)?;
+
+        if args == ["--json"] {
+            println!("{state}");
+        } else {
+            pretty(raiz, &state)?;
+        }
+
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    if args.first().map(String::as_str) != Some("set") {
+        return Err(
+            "Uso: korunix interface-language [--json] | set <idioma|auto> [--plan] [--yes] [--json]."
+                .to_string(),
+        );
+    }
+
+    let requested = args
+        .get(1)
+        .ok_or_else(|| "Falta el idioma de Korunix.".to_string())?
+        .to_string();
+
+    let requested_value = if requested == "auto" {
+        None
+    } else {
+        if !interface_language_supported(&requested) {
+            return Err(format!(
+                "Korunix no tiene una localización de interfaz publicada para {requested}."
+            ));
+        }
+        Some(requested.clone())
+    };
+
+    let mut plan_only = false;
+    let mut yes = false;
+    let mut json = false;
+
+    for argument in &args[2..] {
+        match argument.as_str() {
+            "--plan" if !plan_only => plan_only = true,
+            "--yes" if !yes => yes = true,
+            "--json" if !json => json = true,
+            other => return Err(format!("Opción de idioma de interfaz desconocida: {other}")),
+        }
+    }
+
+    if plan_only && yes {
+        return Err("--yes no se utiliza junto con --plan.".to_string());
+    }
+
+    if json && !plan_only && !yes {
+        return Err("interface-language set --json necesita --yes o --plan.".to_string());
+    }
+
+    let profile = interface_language_profile(raiz)?;
+    let before = profile.interface_language.clone();
+    let changed = before != requested_value;
+
+    let plan = serde_json::json!({
+        "schemaVersion": 1,
+        "kind": "korunix-interface-language-change-plan",
+        "profileId": profile.id,
+        "accountName": profile.account_name,
+        "before": before,
+        "after": requested_value,
+        "changed": changed,
+        "writesPortableProfile": changed,
+        "changesSystemLanguage": false,
+        "changesSessionLanguage": false,
+        "requiresSystemApply": false,
+        "requiresRestart": false,
+        "liveReloadSupported": true
+    });
+
+    if plan_only {
+        if json {
+            println!("{plan}");
+        } else {
+            pretty(raiz, &plan.to_string())?;
+        }
+
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    if !yes && !confirm("¿Usar este idioma solamente en Korunix?")? {
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    if !changed {
+        if json {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "schemaVersion": 1,
+                    "kind": "korunix-interface-language-change-result",
+                    "profileId": profile.id,
+                    "language": requested_value,
+                    "changed": false,
+                    "requiresSystemApply": false,
+                    "requiresRestart": false,
+                    "liveReloadSupported": true
+                })
+            );
+        } else {
+            println!("✓ Korunix ya tiene esa preferencia de idioma");
+        }
+
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    let path = raiz
+        .join("configuracion/personas")
+        .join(format!("{}.nix", profile.id));
+
+    let original = fs::read_to_string(&path)
+        .map_err(|error| format!("No pude leer {}: {error}", path.display()))?;
+    let updated = profile_interface_language_text(&original, requested_value.as_deref())?;
+
+    let transaction = files_transaction_begin(raiz, std::slice::from_ref(&path))?;
+
+    let result = (|| -> Result<(), String> {
+        atomic_write(&path, updated.as_bytes())?;
+
+        let evaluated_text = nix_archivo_json(raiz, &path)?;
+        let evaluated: serde_json::Value =
+            serde_json::from_str(&evaluated_text).map_err(|error| error.to_string())?;
+
+        let persisted = evaluated
+            .get("interfaceLanguage")
+            .and_then(serde_json::Value::as_str);
+
+        if persisted != requested_value.as_deref() {
+            return Err("El perfil guardado no conserva la preferencia solicitada.".to_string());
+        }
+
+        Ok(())
+    })();
+
+    if let Err(error) = result {
+        let recovery = rollback_pending_transaction(raiz);
+
+        return match recovery {
+            Ok(_) => Err(format!(
+                "El cambio de idioma de Korunix fue revertido: {error}"
+            )),
+            Err(recovery_error) => Err(format!(
+                "El cambio de idioma falló ({error}) y la recuperación automática también falló: {recovery_error}"
+            )),
+        };
+    }
+
+    transaction_commit(Some(&transaction))?;
+    history_record(
+        "interface-language-changed",
+        "Cambiaste el idioma de la interfaz de Korunix",
+    )?;
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "schemaVersion": 1,
+                "kind": "korunix-interface-language-change-result",
+                "profileId": profile.id,
+                "language": requested_value,
+                "changed": true,
+                "requiresSystemApply": false,
+                "requiresRestart": false,
+                "liveReloadSupported": true
+            })
+        );
+    } else {
+        println!("✓ idioma de Korunix actualizado");
     }
 
     Ok(ExitCode::SUCCESS)
@@ -8612,7 +9201,7 @@ fn users_mutation(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
                     "p".into(),
                     data,
                     r#"{
-                      schemaVersion:2,
+                      schemaVersion:3,
                       kind:"korunix-user-profile",
                       exportedAt:(now|todate),
                       profile:{
@@ -8620,6 +9209,7 @@ fn users_mutation(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
                         accountName:$p.accountName,
                         fullName:$p.fullName,
                         language:($p.language // null),
+                        interfaceLanguage:($p.interfaceLanguage // null),
                         inputMethods:($p.inputMethods // []),
                         capabilities:($p.capabilities // []),
                         avatar:null
@@ -8709,7 +9299,7 @@ fn users_mutation(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
                     "exists".into(),
                     exists.to_string(),
                     r#"{
-                      schemaVersion:2,
+                      schemaVersion:3,
                       kind:"korunix-user-import-plan",
                       profile:$manifest.profile,
                       action:(if $exists then "review-existing" else "create-profile" end),
@@ -8735,7 +9325,14 @@ fn users_mutation(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
                 return Ok(ExitCode::SUCCESS);
             }
 
-            let name = jq_texto(raiz, &manifest, ".profile.fullName")?;
+            let manifest_value: serde_json::Value =
+                serde_json::from_str(&manifest).map_err(|error| error.to_string())?;
+            let imported_profile = profile_text_from_manifest(
+                manifest_value
+                    .get("profile")
+                    .ok_or_else(|| "El bundle no contiene profile.".to_string())?,
+            )?;
+
             let profile = raiz
                 .join("configuracion/personas")
                 .join(format!("{id}.nix"));
@@ -8768,7 +9365,7 @@ fn users_mutation(raiz: &Path, args: &[String]) -> Result<ExitCode, String> {
                 };
 
             let result = (|| -> Result<(), String> {
-                atomic_write(&profile, profile_text(&account, &name).as_bytes())?;
+                atomic_write(&profile, imported_profile.as_bytes())?;
                 add_host_user(raiz, &host, &id, &account, &home, admin, &preserved)?;
                 validate(raiz)
             })();
@@ -9031,7 +9628,7 @@ fn bootstrap_plan_json(raiz: &Path) -> Result<String, String> {
             admin
         ));
         profiles.push(format!(
-            "{{\"id\":{},\"target\":{{\"profilePath\":{},\"profileExists\":{},\"overwriteAllowed\":false}},\"portable\":{{\"accountName\":{},\"fullName\":{},\"language\":null,\"inputMethods\":[],\"capabilities\":[],\"avatar\":null}},\"local\":{{\"homeDirectory\":{},\"administrator\":{},\"deferredCapabilities\":[],\"deferredInputMethods\":[],\"preservedGroups\":[],\"githubSshIdentityFile\":null}},\"credentials\":{{\"action\":\"preserve-existing\",\"importedSecret\":false}}}}",
+            "{{\"id\":{},\"target\":{{\"profilePath\":{},\"profileExists\":{},\"overwriteAllowed\":false}},\"portable\":{{\"accountName\":{},\"fullName\":{},\"language\":null,\"interfaceLanguage\":null,\"inputMethods\":[],\"capabilities\":[],\"avatar\":null}},\"local\":{{\"homeDirectory\":{},\"administrator\":{},\"deferredCapabilities\":[],\"deferredInputMethods\":[],\"preservedGroups\":[],\"githubSshIdentityFile\":null}},\"credentials\":{{\"action\":\"preserve-existing\",\"importedSecret\":false}}}}",
             json_texto(f[0]),
             json_texto(&format!("configuracion/personas/{}.nix", f[0])),
             raiz.join("configuracion/personas").join(format!("{}.nix", f[0])).exists(),
@@ -10370,6 +10967,7 @@ pub(super) fn ejecutar_operacion(
             Ok(ExitCode::SUCCESS)
         }
         "localization" => localization_operation(raiz, &args),
+        "interface-language" => interface_language_operation(raiz, &args),
         "users" => users_mutation(raiz, &args),
         "applications" => applications_operation(raiz, &args),
         "desktop" => desktop_operation(raiz, &args),
@@ -10601,6 +11199,54 @@ mod tests {
         assert!(catalog
             .iter()
             .any(|item| { item.layout == "latam" && item.variant.is_empty() }));
+    }
+
+    #[test]
+    fn idioma_interfaz_normaliza_locales_soportados() {
+        assert_eq!(interface_language_from_locale("es_PE.UTF-8"), Some("es"));
+        assert_eq!(interface_language_from_locale("pt_BR.UTF-8"), Some("pt-BR"));
+        assert_eq!(
+            interface_language_from_locale("zh_CN.UTF-8"),
+            Some("zh-Hans")
+        );
+        assert_eq!(interface_language_from_locale("xx_YY"), None);
+        assert_eq!(KORUNIX_INTERFACE_LANGUAGES.len(), 23);
+    }
+
+    #[test]
+    fn idioma_interfaz_no_reutiliza_language_del_perfil() {
+        let original = r#"{
+  accountName = "ana";
+  fullName = "Ana";
+  language = "es";
+  interfaceLanguage = null;
+}
+"#;
+
+        let updated =
+            profile_interface_language_text(original, Some("en")).expect("perfil editable");
+
+        assert!(updated.contains(r#"language = "es";"#));
+        assert!(updated.contains(r#"interfaceLanguage = "en";"#));
+    }
+
+    #[test]
+    fn importacion_portable_conserva_preferencias_de_idioma() {
+        let value = serde_json::json!({
+            "accountName": "ana",
+            "fullName": "Ana",
+            "language": "es",
+            "interfaceLanguage": "en",
+            "inputMethods": ["japanese-mozc"],
+            "capabilities": ["printing"]
+        });
+
+        let profile = profile_text_from_manifest(&value).expect("manifest portable");
+
+        assert!(profile.contains(r#"language = "es";"#));
+        assert!(profile.contains(r#"interfaceLanguage = "en";"#));
+        assert!(profile.contains(r#""japanese-mozc""#));
+        assert!(profile.contains(r#""printing""#));
     }
 
     #[test]

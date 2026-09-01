@@ -427,6 +427,76 @@ else
   fallo 'spec perdió el contrato de localización humana'
 fi
 
+if grep -Fq 'const KORUNIX_INTERFACE_LANGUAGES' sistema/programa/operaciones.rs \
+   && grep -Fq 'fn interface_language_operation' sistema/programa/operaciones.rs \
+   && grep -Fq '"changesSystemLanguage": false' sistema/programa/operaciones.rs \
+   && grep -Fq '"changesSessionLanguage": false' sistema/programa/operaciones.rs \
+   && grep -Fq '"requiresSystemApply": false' sistema/programa/operaciones.rs \
+   && grep -Fq '"interface-language" => interface_language_operation' sistema/programa/operaciones.rs
+then
+  ok 'motor separa el idioma de Korunix de localización del sistema'
+else
+  fallo 'motor perdió la separación del idioma propio de Korunix'
+fi
+
+if grep -Fq "interfaceLanguage: (\$u.interfaceLanguage // null)" sistema/programa/principal.rs \
+   && grep -Fq 'portableProfileSchemaVersion\":3' sistema/programa/principal.rs \
+   && grep -Fq 'compatiblePortableProfileSchemaVersions\":[1,2,3]' sistema/programa/principal.rs \
+   && grep -Fq "interfaceLanguage:(\$p.interfaceLanguage // null)" sistema/programa/operaciones.rs \
+   && grep -Fq 'fn profile_text_from_manifest' sistema/programa/operaciones.rs
+then
+  ok 'interfaceLanguage viaja en el perfil portable versión 3'
+else
+  fallo 'interfaceLanguage puede perderse al exportar o importar perfiles'
+fi
+
+if grep -Fq 'language = profile.language or config.korunix.localization.systemLanguage;' sistema/personas.nix \
+   && ! grep -Fq 'profile.interfaceLanguage' sistema/personas.nix \
+   && grep -Fq 'interfaceLanguage = null;' configuracion/personas/koru.nix
+then
+  ok 'language de sesión permanece independiente de interfaceLanguage'
+else
+  fallo 'la preferencia visual volvió a mezclarse con la preparación de sesión'
+fi
+
+if grep -Fq 'fn idioma_preferido_interfaz' sistema/interfaz/principal.rs \
+   && grep -Fq 'fn fijar_idioma_interfaz' sistema/interfaz/principal.rs \
+   && grep -Fq 'fn construir_ventana_con_idioma' sistema/interfaz/principal.rs \
+   && grep -Fq '"interface-language".to_string()' sistema/interfaz/principal.rs \
+   && grep -Fq 'ventana_anterior.close();' sistema/interfaz/principal.rs
+then
+  ok 'GUI cambia el idioma dentro del mismo proceso'
+else
+  fallo 'GUI perdió la recarga viva del idioma'
+fi
+
+catalogos_interfaz=0
+catalogos_interfaz_ok=1
+while IFS= read -r catalogo; do
+  catalogos_interfaz=$((catalogos_interfaz + 1))
+  if ! jq -e 'has("Idioma de Korunix")' "$catalogo" >/dev/null; then
+    catalogos_interfaz_ok=0
+  fi
+done < <(find sistema/interfaz/i18n -maxdepth 1 -type f -name '*.json' -print | sort)
+
+if [[ "$catalogos_interfaz" -eq 23 ]] \
+   && [[ "$catalogos_interfaz_ok" -eq 1 ]]
+then
+  ok 'los 23 catálogos traducen el selector del idioma de Korunix'
+else
+  fallo 'algún catálogo perdió el rótulo del idioma de Korunix'
+fi
+
+if grep -Fq "se guarda en el perfil portable como \`interfaceLanguage\`" spec.md \
+   && grep -Fq "\`interfaceLanguage = null\` o un campo ausente significa modo automático" spec.md \
+   && grep -Fq "no modifica \`systemLanguage\`" spec.md \
+   && grep -Fq 'dentro del mismo proceso con el catálogo elegido' spec.md
+then
+  ok 'spec protege idioma visual, modo automático y cambio vivo'
+else
+  fallo 'spec perdió el contrato independiente del idioma de interfaz'
+fi
+
 ssh_activo="$(
   nix eval \
     --json \
