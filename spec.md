@@ -1550,6 +1550,12 @@ Debe permitir:
 - buscar aplicaciones de Nixpkgs cuando no estén en el catálogo;
 - utilizar Flatpak cuando sea la fuente apropiada.
 
+Al ampliar una búsqueda fuera del catálogo curado, Korunix consulta **Nixpkgs
+primero**. Flatpak actúa como segunda fuente únicamente cuando Nixpkgs no
+devuelve resultados utilizables o no está disponible. Una aplicación no debe
+aparecer duplicada en la vista normal solo porque exista a la vez en Nixpkgs y
+Flatpak.
+
 La fuente concreta es una decisión de implementación de Korunix salvo que exista una razón real para que la persona elija entre variantes con consecuencias distintas. La vista normal no debe exigir escoger “Nixpkgs” o “Flatpak” ni mostrar un selector de origen por rutina. Korunix puede conservar la fuente en su modelo interno y mostrarla en detalles avanzados.
 
 Las dependencias técnicas no se presentan como elecciones separadas si el usuario no necesita decidir sobre ellas. Lo mismo se aplica a aplicaciones que Korunix instala únicamente para satisfacer un rol ya elegido para el escritorio: no deben duplicarse como otra decisión normal del catálogo.
@@ -2338,6 +2344,12 @@ Flujo humano:
 7. declarar la operación finalizada únicamente cuando el sistema confirme que el contenido fue persistido de forma segura;
 8. ofrecer expulsar el dispositivo cuando proceda.
 
+Una vez que la transferencia ya fue persistida y verificada, rechazar esa
+expulsión **no cancela ni revierte la transferencia**: únicamente deja la unidad
+disponible hasta que la persona decida expulsarla más tarde. Por eso la acción
+secundaria de ese diálogo debe expresarse como **Ahora no** o un equivalente
+localizado, no como **Cancelar**.
+
 La interfaz puede usar estados como:
 
 ```text
@@ -2479,6 +2491,13 @@ no implica copiar visualmente macOS.
 Cuando un modelo permita identificar de forma inequívoca un fabricante conocido,
 Korunix debe preferir una etiqueta humana de **marca + modelo**. Si la asociación
 no es fiable, debe conservar una descripción neutral y no adivinar la marca.
+
+Cuando una entrada y una salida pertenecen al mismo dispositivo físico y esa
+relación puede demostrarse con los metadatos del sistema, ambas deben compartir
+la misma identidad base de marca/modelo y añadir después el puerto o función
+cuando aporte claridad. Por ejemplo: **Realtek ALC897 · Salida de línea** y
+**Realtek ALC897 · Micrófono trasero**. Korunix no debe inventar esa relación si
+los metadatos no permiten establecerla con fiabilidad.
 
 ### Salidas de sonido
 

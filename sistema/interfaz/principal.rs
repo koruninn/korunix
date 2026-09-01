@@ -3238,11 +3238,40 @@ fn modelo_cadenas(valores: &[String]) -> gtk::StringList {
     gtk::StringList::new(&referencias)
 }
 
-fn dialogo_confirmacion(
+fn texto_ahora_no(idioma: Idioma) -> &'static str {
+    match idioma {
+        Idioma::BelarusLatino => "Ciaper nie",
+        Idioma::Belarus => "Не цяпер",
+        Idioma::Catalan => "Ara no",
+        Idioma::Checo => "Teď ne",
+        Idioma::Aleman => "Nicht jetzt",
+        Idioma::Ingles => "Not now",
+        Idioma::Espanol => "Ahora no",
+        Idioma::Frances => "Pas maintenant",
+        Idioma::Gallego => "Agora non",
+        Idioma::Hungaro => "Most nem",
+        Idioma::Italiano => "Non ora",
+        Idioma::Coreano => "지금은 안 함",
+        Idioma::Kurdo => "Niha na",
+        Idioma::Neerlandes => "Niet nu",
+        Idioma::NoruegoNynorsk => "Ikkje no",
+        Idioma::Polaco => "Nie teraz",
+        Idioma::PortuguesBrasil => "Agora não",
+        Idioma::Ruso => "Не сейчас",
+        Idioma::Sueco => "Inte nu",
+        Idioma::Turco => "Şimdi değil",
+        Idioma::Ucraniano => "Не зараз",
+        Idioma::Vietnamita => "Không phải bây giờ",
+        Idioma::ChinoSimplificado => "暂不",
+    }
+}
+
+fn dialogo_confirmacion_con_secundaria(
     boton: &gtk::Button,
     idioma: Idioma,
     cuerpo: &str,
     accion: &str,
+    secundaria: &str,
     destructiva: bool,
 ) -> adw::MessageDialog {
     let ventana = boton
@@ -3258,10 +3287,7 @@ fn dialogo_confirmacion(
 
     dialogo.set_close_response("cancel");
     dialogo.set_default_response(Some("apply"));
-    dialogo.add_responses(&[
-        ("cancel", texto(idioma, "cancel")),
-        ("apply", accion.as_str()),
-    ]);
+    dialogo.add_responses(&[("cancel", secundaria), ("apply", accion.as_str())]);
     dialogo.set_response_appearance(
         "apply",
         if destructiva {
@@ -3271,6 +3297,23 @@ fn dialogo_confirmacion(
         },
     );
     dialogo
+}
+
+fn dialogo_confirmacion(
+    boton: &gtk::Button,
+    idioma: Idioma,
+    cuerpo: &str,
+    accion: &str,
+    destructiva: bool,
+) -> adw::MessageDialog {
+    dialogo_confirmacion_con_secundaria(
+        boton,
+        idioma,
+        cuerpo,
+        accion,
+        texto(idioma, "cancel"),
+        destructiva,
+    )
 }
 
 fn mostrar_error(estado: &Estado, error: impl AsRef<str>) {
@@ -4264,13 +4307,16 @@ fn descripcion_nodo_audio(
     .join(" ");
 
     let huella = format!("{respaldo} {descripcion} {propiedades_huella}").to_ascii_lowercase();
+    let modelo_fisico = modelo_audio_conocido(&huella);
 
     if clase == "source" {
-        if let Some(modelo) = modelo_audio_conocido(&huella) {
-            return modelo.to_string();
+        if let Some(modelo) = modelo_fisico {
+            if modelo != "Realtek ALC897" {
+                return modelo.to_string();
+            }
         }
 
-        return match puerto {
+        let entrada = match puerto {
             "analog-input-front-mic" => match idioma {
                 Idioma::Ingles => "Front microphone".to_string(),
                 Idioma::BelarusLatino => "Pjaredni mikrafon".to_string(),
@@ -4400,9 +4446,15 @@ fn descripcion_nodo_audio(
                 Idioma::Espanol => "Micrófono".to_string(),
             },
         };
+
+        return if let Some(modelo) = modelo_fisico {
+            format!("{modelo} · {entrada}")
+        } else {
+            entrada
+        };
     }
 
-    match puerto {
+    let salida = match puerto {
         "analog-output-headphones" => match idioma {
             Idioma::Ingles => "Headphones".to_string(),
             Idioma::BelarusLatino => "Navušniki".to_string(),
@@ -4506,6 +4558,12 @@ fn descripcion_nodo_audio(
             Idioma::Hungaro => "Hangkimenet".to_string(),
             Idioma::Espanol => "Salida de sonido".to_string(),
         },
+    };
+
+    if modelo_fisico == Some("Realtek ALC897") {
+        format!("Realtek ALC897 · {salida}")
+    } else {
+        salida
     }
 }
 
@@ -6120,16 +6178,12 @@ fn pagina_almacenamiento(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesP
                                     .unwrap_or(&ruta_transferir)
                                     .to_string();
 
-                                mostrar_exito(
-                                    &estado_transferir,
-                                    texto_transferencia(estado_transferir.idioma, "done"),
-                                );
-
-                                let offer = dialogo_confirmacion(
+                                let offer = dialogo_confirmacion_con_secundaria(
                                     &boton_final,
                                     estado_transferir.idioma,
                                     texto_transferencia(estado_transferir.idioma, "done"),
                                     texto(estado_transferir.idioma, "eject"),
+                                    texto_ahora_no(estado_transferir.idioma),
                                     false,
                                 );
 
@@ -10148,8 +10202,13 @@ fn pagina_aplicaciones(
                 }
             };
 
-            for resultado in resultados_aplicaciones_externas(&datos, fuente) {
-                let clave = format!("{}:{}", resultado.fuente, resultado.nombre.to_lowercase());
+            let resultados = resultados_aplicaciones_externas(&datos, fuente);
+            if resultados.is_empty() {
+                continue;
+            }
+
+            for resultado in resultados {
+                let clave = resultado.nombre.trim().to_lowercase();
                 if !vistos.insert(clave) {
                     continue;
                 }
@@ -10166,6 +10225,12 @@ fn pagina_aplicaciones(
                     activa,
                 ));
                 encontrados += 1;
+            }
+
+            // Nixpkgs es la primera fuente externa. Flatpak solo se consulta
+            // cuando Nixpkgs no devolvió ninguna opción utilizable.
+            if fuente == "nixpkgs" && encontrados > 0 {
+                break;
             }
         }
 

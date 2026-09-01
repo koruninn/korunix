@@ -335,6 +335,36 @@ else
   fallo 'la GUI puede volver a bloquearse, contaminar JSON o solapar pruebas de sonido'
 fi
 
+if grep -Fq 'texto_ahora_no(estado_transferir.idioma)' sistema/interfaz/principal.rs \
+   && grep -Fq 'dialogo_confirmacion_con_secundaria' sistema/interfaz/principal.rs \
+   && grep -Fq 'no cancela ni revierte la transferencia' spec.md \
+   && grep -Fq 'Ahora no' spec.md
+then
+  ok 'posponer la expulsión no se presenta como cancelar la transferencia'
+else
+  fallo 'la oferta posterior a transferir volvió a confundir expulsión con cancelación'
+fi
+
+if grep -Fq 'let modelo_fisico = modelo_audio_conocido(&huella);' sistema/interfaz/principal.rs \
+   && grep -Fq 'format!("{modelo} · {entrada}")' sistema/interfaz/principal.rs \
+   && grep -Fq 'format!("Realtek ALC897 · {salida}")' sistema/interfaz/principal.rs \
+   && grep -Fq 'misma identidad base de marca/modelo' spec.md
+then
+  ok 'entrada y salida comparten identidad física cuando puede demostrarse'
+else
+  fallo 'audio perdió la identidad común del dispositivo físico'
+fi
+
+if grep -Fq 'for fuente in ["nixpkgs", "flatpak"]' sistema/interfaz/principal.rs \
+   && grep -Fq 'if fuente == "nixpkgs" && encontrados > 0' sistema/interfaz/principal.rs \
+   && grep -Fq 'let clave = resultado.nombre.trim().to_lowercase();' sistema/interfaz/principal.rs \
+   && grep -Fq 'Flatpak actúa como segunda fuente únicamente' spec.md
+then
+  ok 'búsqueda externa prioriza Nixpkgs y usa Flatpak como fallback'
+else
+  fallo 'la búsqueda de aplicaciones perdió su prioridad de fuentes'
+fi
+
 ssh_activo="$(
   nix eval \
     --json \
