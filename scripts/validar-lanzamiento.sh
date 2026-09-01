@@ -319,6 +319,56 @@ else
   fallo 'SSH dejó de ser permanente o la especificación volvió a hacerlo desactivable'
 fi
 
+storage_model="$(
+  nix eval \
+    --json \
+    '.#nixosConfigurations.korunix.config.korunix.storage.dataVolumes' \
+    2>/dev/null \
+    || true
+)"
+
+storage_mount="$(
+  nix eval \
+    --json \
+    '.#nixosConfigurations.korunix.config.fileSystems."/mnt/datos"' \
+    2>/dev/null \
+    || true
+)"
+
+if jq -e '
+     length == 1
+     and .[0].uuid == "036F8E656FF00FB2"
+     and .[0].fileSystem == "ntfs"
+     and .[0].path == "/mnt/datos"
+     and .[0].availableAtLogin == true
+   ' <<<"$storage_model" >/dev/null 2>&1 \
+   && jq -e '
+     .device == "/dev/disk/by-uuid/036F8E656FF00FB2"
+     and .fsType == "ntfs3"
+     and (.options | index("x-systemd.automount") != null)
+     and (.options | index("nofail") != null)
+     and (.options | index("umask=0077") != null)
+   ' <<<"$storage_mount" >/dev/null 2>&1
+then
+  ok 'unidad de datos usa UUID estable y disponibilidad automática'
+else
+  fallo 'la unidad de datos perdió su contrato declarativo'
+fi
+
+if rg -q 'c922 pro stream webcam' sistema/interfaz/principal.rs \
+   && rg -q 'Realtek ALC897' sistema/interfaz/principal.rs \
+   && rg -q 'device\.product\.name' sistema/interfaz/principal.rs \
+   && rg -q 'alsa_card_name' sistema/interfaz/principal.rs \
+   && rg -q 'fn consultar_disponibilidad_camara' sistema/interfaz/principal.rs \
+   && rg -q 'glib::timeout_add_local' sistema/interfaz/principal.rs \
+   && rg -q '"--tree"\.into\(\)' sistema/programa/operaciones.rs \
+   && rg -q 'dataVolumes' sistema/programa/operaciones.rs
+then
+  ok 'multimedia identifica el audio y refresca cámaras virtuales'
+else
+  fallo 'multimedia perdió identidad o refresco dinámico'
+fi
+
 personas='sistema/personas.nix'
 escritorio='sistema/escritorio.nix'
 

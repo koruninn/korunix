@@ -82,6 +82,23 @@
       };
     };
 
+    # Esta unidad interna se identificó por UUID para que el nombre /dev/sdX
+    # pueda cambiar sin romper el acceso. Korunix detectó también los IDs locales
+    # de la cuenta que debe poder escribir; no son datos que la interfaz pregunte.
+    storage = {
+      dataVolumes = [
+        {
+          id = "datos";
+          uuid = "036F8E656FF00FB2";
+          fileSystem = "ntfs";
+          path = "/mnt/datos";
+          ownerUid = 1000;
+          ownerGid = 100;
+          availableAtLogin = true;
+        }
+      ];
+    };
+
     desktop = {
       primary = "niri";
 

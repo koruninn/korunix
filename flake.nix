@@ -333,6 +333,7 @@
 
           ./sistema/base.nix
           ./sistema/equipo.nix
+          ./sistema/almacenamiento.nix
           ./sistema/arranque.nix
           ./sistema/idioma.nix
           ./sistema/escritorio.nix

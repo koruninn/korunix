@@ -1696,29 +1696,87 @@ fn storage_list_json(raiz: &Path) -> Result<String, String> {
         &[
             "-J".into(),
             "-p".into(),
+            "--tree".into(),
             "-o".into(),
-            "PATH,TYPE,RM,HOTPLUG,TRAN,SIZE,MODEL,MOUNTPOINTS".into(),
+            "PATH,TYPE,RM,HOTPLUG,TRAN,SIZE,MODEL,MOUNTPOINTS,UUID,FSTYPE".into(),
         ],
     )?;
+
+    let declaradas = nix_config_json(raiz, "storage.dataVolumes")?;
+
     jq_con_entrada(
         raiz,
         &[
             "-c".into(),
+            "--argjson".into(),
+            "declared".into(),
+            declaradas,
             r#"
               def truthy: .==true or .==1 or .=="1";
               def nodes: ., (.children[]? | nodes);
+              def mounts:
+                [(.mountpoints // [])[]?
+                 | select(type=="string" and length>0)]
+                | unique;
+              def declared_for($uuid):
+                if $uuid == null then null
+                else
+                  ($declared
+                   | map(select(
+                       (.uuid | ascii_downcase)
+                       == ($uuid | ascii_downcase)
+                     ))
+                   | .[0] // null)
+                end;
+
               [.blockdevices[]?
                | select(.type=="disk")
                | . as $disk
                | {
                    device:.path,
                    size:.size,
-                   model:(.model|if .==null then null else gsub("[[:space:]]+$";"") end),
+                   model:(.model
+                     | if .==null
+                       then null
+                       else gsub("[[:space:]]+$";"")
+                       end),
                    transport:.tran,
-                   removable:((.rm|truthy) or (.hotplug|truthy) or .tran=="usb" or .tran=="mmc"),
-                   mountPoints:([$disk|nodes|.mountpoints[]?|select(type=="string" and length>0)]|unique)
+                   removable:(
+                     (.rm|truthy)
+                     or (.hotplug|truthy)
+                     or .tran=="usb"
+                     or .tran=="mmc"
+                   ),
+                   mountPoints:(
+                     [$disk
+                      | nodes
+                      | (.mountpoints // [])[]?
+                      | select(type=="string" and length>0)]
+                     | unique
+                   ),
+                   dataVolumes:(
+                     [$disk
+                      | nodes
+                      | select(.uuid != null and .fstype != null)
+                      | . as $node
+                      | (declared_for($node.uuid)) as $managed
+                      | {
+                          device:$node.path,
+                          uuid:$node.uuid,
+                          fileSystem:$node.fstype,
+                          mountPoints:($node|mounts),
+                          managed:($managed != null),
+                          availableAtLogin:($managed.availableAtLogin // false),
+                          configuredPath:($managed.path // null),
+                          id:($managed.id // null)
+                        }]
+                   )
                  }]
-              | {schemaVersion:1,kind:"korunix-storage-list",devices:.}
+              | {
+                  schemaVersion:2,
+                  kind:"korunix-storage-list",
+                  devices:.
+                }
             "#
             .into(),
         ],

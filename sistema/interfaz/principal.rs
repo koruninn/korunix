@@ -3985,8 +3985,16 @@ fn modelo_audio_conocido(huella: &str) -> Option<&'static str> {
         return Some("Logitech C920");
     }
 
-    if huella.contains("webcam c922") || huella.contains("logitech c922") {
+    if huella.contains("c922_pro_stream_webcam")
+        || huella.contains("c922 pro stream webcam")
+        || huella.contains("webcam c922")
+        || huella.contains("logitech c922")
+    {
         return Some("Logitech C922");
+    }
+
+    if huella.contains("realtek alc897") || huella.contains("alc897") {
+        return Some("Realtek ALC897");
     }
 
     if huella.contains("logitech brio") || huella.contains("brio webcam") {
@@ -4060,7 +4068,33 @@ fn descripcion_nodo_audio(
         .and_then(Value::as_str)
         .unwrap_or("");
 
-    let huella = format!("{respaldo} {descripcion}").to_ascii_lowercase();
+    let propiedades = item
+        .and_then(|item| item.get("properties"))
+        .and_then(Value::as_object);
+
+    let propiedades_huella = [
+        "device.description",
+        "device.nick",
+        "device.product.name",
+        "node.description",
+        "node.nick",
+        "node.name",
+        "alsa_card_name",
+        "alsa.card_name",
+        "alsa_mixer_name",
+    ]
+    .iter()
+    .filter_map(|clave| {
+        propiedades
+            .and_then(|propiedades| propiedades.get(*clave))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|valor| !valor.is_empty())
+    })
+    .collect::<Vec<_>>()
+    .join(" ");
+
+    let huella = format!("{respaldo} {descripcion} {propiedades_huella}").to_ascii_lowercase();
 
     if clase == "source" {
         if let Some(modelo) = modelo_audio_conocido(&huella) {
@@ -7275,6 +7309,46 @@ fn texto_prueba_camara(idioma: Idioma, clave: &str) -> &'static str {
     }
 }
 
+fn consultar_disponibilidad_camara(
+    motor: &Path,
+    raiz: &Path,
+    dispositivo: &str,
+) -> Result<bool, String> {
+    let salida = Command::new(motor)
+        .args(["media", "camera", "list", "--json"])
+        .current_dir(raiz)
+        .env("KORUNIX_ROOT", raiz)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| format!("No pude consultar las cámaras: {error}"))?;
+
+    if !salida.status.success() {
+        let detalle = String::from_utf8_lossy(&salida.stderr).trim().to_string();
+        return Err(if detalle.is_empty() {
+            "No pude actualizar el estado de la cámara.".to_string()
+        } else {
+            detalle
+        });
+    }
+
+    let datos: Value = serde_json::from_slice(&salida.stdout)
+        .map_err(|error| format!("El motor devolvió cámaras inválidas: {error}"))?;
+
+    Ok(datos
+        .get("devices")
+        .and_then(Value::as_array)
+        .and_then(|camaras| {
+            camaras
+                .iter()
+                .find(|camara| camara.get("device").and_then(Value::as_str) == Some(dispositivo))
+        })
+        .and_then(|camara| camara.get("available"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false))
+}
+
 fn pagina_multimedia(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
     let audio = datos.get("audio").cloned().unwrap_or(Value::Null);
@@ -8198,6 +8272,11 @@ fn pagina_multimedia(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage 
             .and_then(Value::as_bool)
             .unwrap_or(false);
 
+        let es_virtual = camara
+            .get("virtual")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+
         let subtitulo = if disponible {
             localizar_visible(
                 idioma_actual(),
@@ -8218,6 +8297,65 @@ fn pagina_multimedia(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage 
         boton.set_valign(gtk::Align::Center);
         row.add_suffix(&boton);
         grupo_prueba_camara.add(&row);
+
+        if es_virtual {
+            let motor_refresco = estado.motor.clone();
+            let raiz_refresco = estado.raiz.clone();
+            let dispositivo_refresco = device.clone();
+            let fila_refresco = row.clone();
+            let boton_refresco = boton.clone();
+            let consulta_activa = Rc::new(Cell::new(false));
+            let (emisor, receptor) = mpsc::channel::<Result<bool, String>>();
+
+            glib::timeout_add_local(Duration::from_millis(900), move || {
+                if boton_refresco.root().is_none() {
+                    return glib::ControlFlow::Break;
+                }
+
+                loop {
+                    match receptor.try_recv() {
+                        Ok(Ok(disponible)) => {
+                            consulta_activa.set(false);
+                            boton_refresco.set_sensitive(disponible);
+
+                            let subtitulo = if disponible {
+                                "Lista para abrir una previsualización temporal."
+                            } else {
+                                "Esperando una fuente de vídeo. La prueba se habilitará automáticamente."
+                            };
+
+                            fila_refresco
+                                .set_subtitle(&localizar_visible(idioma_actual(), subtitulo));
+                        }
+                        Ok(Err(_)) => {
+                            // Un fallo transitorio de V4L2 no convierte toda la página
+                            // en error. Se conserva el último estado válido y se reintenta.
+                            consulta_activa.set(false);
+                        }
+                        Err(TryRecvError::Empty) => break,
+                        Err(TryRecvError::Disconnected) => {
+                            consulta_activa.set(false);
+                            break;
+                        }
+                    }
+                }
+
+                if !consulta_activa.replace(true) {
+                    let motor = motor_refresco.clone();
+                    let raiz = raiz_refresco.clone();
+                    let dispositivo = dispositivo_refresco.clone();
+                    let emisor = emisor.clone();
+
+                    thread::spawn(move || {
+                        let resultado =
+                            consultar_disponibilidad_camara(&motor, &raiz, &dispositivo);
+                        let _ = emisor.send(resultado);
+                    });
+                }
+
+                glib::ControlFlow::Continue
+            });
+        }
 
         let estado_camara = Rc::clone(&estado);
         let titulo_camara = titulo.clone();
