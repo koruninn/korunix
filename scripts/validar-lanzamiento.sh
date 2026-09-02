@@ -606,11 +606,14 @@ if jq -e '
      and (.options | index("x-systemd.automount") != null)
      and (.options | index("nofail") != null)
      and (.options | index("umask=0077") != null)
-   ' <<<"$storage_mount" >/dev/null 2>&1
+     and (.options | index("x-gvfs-show") != null)
+   ' <<<"$storage_mount" >/dev/null 2>&1 \
+   && grep -Fq 'una unidad de datos que Korunix deja lista para uso cotidiano debe aparecer allí' spec.md \
+   && grep -Fq 'x-gvfs-show' spec.md
 then
-  ok 'unidad de datos usa UUID estable y disponibilidad automática'
+  ok 'unidad de datos usa UUID estable, disponibilidad automática y visibilidad en archivos'
 else
-  fallo 'la unidad de datos perdió su contrato declarativo'
+  fallo 'la unidad de datos perdió disponibilidad o visibilidad en el gestor de archivos'
 fi
 
 if rg -q 'c922 pro stream webcam' sistema/interfaz/principal.rs \

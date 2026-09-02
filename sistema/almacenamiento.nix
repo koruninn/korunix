@@ -28,6 +28,11 @@
       "nofail"
       "x-systemd.automount"
       "x-systemd.device-timeout=5s"
+
+      # Una unidad de datos cotidiana no solo debe existir bajo /mnt: los
+      # gestores de archivos basados en GVfs, como Nautilus, deben poder
+      # descubrirla y mostrarla como unidad disponible.
+      "x-gvfs-show"
     ]
     ++ lib.optionals (necesitaPropietarioSintetico volumen) [
       "uid=${toString volumen.ownerUid}"

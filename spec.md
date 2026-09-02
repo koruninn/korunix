@@ -2532,6 +2532,14 @@ La opción debe poder activarse, modificarse o retirarse más tarde desde el pan
 
 Por cada unidad de datos adicional adecuada, Almacenamiento debe indicar de forma comprensible si está disponible al iniciar sesión y permitir cambiar esa decisión sin hablar de “montaje” como acción primaria.
 
+Estar disponible no significa únicamente que una ruta técnica como `/mnt/...`
+responda. Si el escritorio dispone de un gestor de archivos que presenta unidades,
+una unidad de datos que Korunix deja lista para uso cotidiano debe aparecer allí
+como unidad accesible sin obligar a abrir otro gestor. Los montajes declarativos
+deben anunciarse al mecanismo de volúmenes del escritorio; en la integración
+GNOME/GVfs esto requiere `x-gvfs-show` o un mecanismo equivalente que conserve
+el montaje por UUID y el acceso automático ya declarados.
+
 Korunix nunca debe almacenar una clave de cifrado en el repositorio o en un perfil portable.
 
 ## 59. Experiencia offline y actualización local
