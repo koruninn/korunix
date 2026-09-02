@@ -70,6 +70,13 @@ else
 fi
 rm -f "$gui_rust_log"
 
+ejecutar \
+  'pruebas estructurales de la GUI' \
+  cargo test \
+  --locked \
+  --features interfaz \
+  --bin korunix-interfaz
+
 if rg -n 'stdenv\.(isLinux|isDarwin)' \
     --glob '*.nix' \
     --glob '!result/**' \
@@ -890,6 +897,20 @@ then
 else
   fallo 'Fetch puede volver a mostrar la salida extensa o ignorar su configuración'
 fi
+
+if grep -Fq 'enum ArquetipoVisualSeccion' sistema/interfaz/principal.rs \
+   && grep -Fq 'fn agregar_identidad_visual(' sistema/interfaz/principal.rs \
+   && grep -Fq 'identidades_visuales_cubren_las_doce_paginas_y_varian_composicion' sistema/interfaz/principal.rs \
+   && grep -Fq 'no deben diferenciarse únicamente por el título' spec.md \
+   && grep -Fq '**panel** para Resumen' spec.md \
+   && grep -Fq '**catálogo** para Aplicaciones' spec.md \
+   && grep -Fq '**operaciones** para Mantenimiento' spec.md
+then
+  ok 'las secciones conservan identidad visual por tipo de tarea'
+else
+  fallo 'las secciones volvieron a una plantilla visual plana'
+fi
+
 
 printf '\n%s\n' '→ Privacidad del producto'
 

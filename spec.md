@@ -430,6 +430,40 @@ El design system debe definir como mínimo componentes equivalentes a:
 - LoadingState;
 - UpdateRow.
 
+#### 7.4.1. Identidad visual de cada sección
+
+Compartir un design system no significa clonar la misma página doce veces.
+Las áreas del panel cotidiano **no deben diferenciarse únicamente por el título,
+el icono o el texto de sus filas**. La composición inicial debe expresar qué tipo
+de trabajo se realiza en esa sección.
+
+Korunix puede compartir familias de composición cuando tengan sentido, por
+ejemplo:
+
+- **panel** para Resumen, con estado y hechos principales visibles de un vistazo;
+- **dispositivos** para Hardware, Multimedia y Almacenamiento, destacando primero
+  el equipo o los dispositivos detectados;
+- **estado** para Actualizaciones, Firmware y Copias, donde importa primero saber
+  si hay algo pendiente y qué efecto tendrá;
+- **catálogo** para Aplicaciones, donde buscar y descubrir domina el primer
+  bloque;
+- **previsualización** para Apariencia y escritorios, donde el resultado visual
+  tiene prioridad sobre la lista de controles;
+- **perfil** para Idioma y región y Personas, agrupando la identidad o selección
+  actual antes de editarla;
+- **operaciones** para Mantenimiento, separando con claridad recuperación,
+  limpieza y acciones de mayor impacto.
+
+Dos áreas de una misma familia pueden reutilizar componentes, pero sus datos y
+acciones principales deben seguir comunicando su dominio. Cambiar únicamente el
+título o el icono de una plantilla idéntica no satisface este contrato.
+
+La identidad visual no autoriza colores arbitrarios ni rompe la coherencia:
+todas las familias siguen la misma tipografía, espaciado, accesibilidad,
+apariencia claro/oscuro, Everforest cuando corresponda y reglas de adaptación.
+Las composiciones deben reordenarse antes que recortarse en 1366×768 y en el
+modo compacto cercano a 360×520.
+
 En el arranque cotidiano, el cascarón de la ventana y sus `LoadingState` deben
 presentarse de inmediato. Korunix no inicia una recarga global de todas las áreas:
 precarga únicamente `Resumen` y cada sección obtiene y construye sus propios datos

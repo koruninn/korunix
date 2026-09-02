@@ -5086,6 +5086,300 @@ fn navegar_a(estado: &Estado, nombre: &'static str) {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum ArquetipoVisualSeccion {
+    Panel,
+    Estado,
+    Dispositivos,
+    Catalogo,
+    Previsualizacion,
+    Perfil,
+    Operaciones,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct IdentidadVisualSeccion {
+    arquetipo: ArquetipoVisualSeccion,
+    icono: &'static str,
+    clase: &'static str,
+}
+
+fn identidad_visual_seccion(nombre: &str) -> Option<IdentidadVisualSeccion> {
+    let identidad = match nombre {
+        "summary" => IdentidadVisualSeccion {
+            arquetipo: ArquetipoVisualSeccion::Panel,
+            icono: "view-grid-symbolic",
+            clase: "korunix-seccion-panel",
+        },
+        "updates" => IdentidadVisualSeccion {
+            arquetipo: ArquetipoVisualSeccion::Estado,
+            icono: "software-update-available-symbolic",
+            clase: "korunix-seccion-estado",
+        },
+        "hardware" => IdentidadVisualSeccion {
+            arquetipo: ArquetipoVisualSeccion::Dispositivos,
+            icono: "computer-symbolic",
+            clase: "korunix-seccion-dispositivos",
+        },
+        "media" => IdentidadVisualSeccion {
+            arquetipo: ArquetipoVisualSeccion::Dispositivos,
+            icono: "audio-card-symbolic",
+            clase: "korunix-seccion-dispositivos",
+        },
+        "storage" => IdentidadVisualSeccion {
+            arquetipo: ArquetipoVisualSeccion::Dispositivos,
+            icono: "drive-harddisk-symbolic",
+            clase: "korunix-seccion-dispositivos",
+        },
+        "firmware" => IdentidadVisualSeccion {
+            arquetipo: ArquetipoVisualSeccion::Estado,
+            icono: "software-update-available-symbolic",
+            clase: "korunix-seccion-estado",
+        },
+        "applications" => IdentidadVisualSeccion {
+            arquetipo: ArquetipoVisualSeccion::Catalogo,
+            icono: "system-software-install-symbolic",
+            clase: "korunix-seccion-catalogo",
+        },
+        "appearance" => IdentidadVisualSeccion {
+            arquetipo: ArquetipoVisualSeccion::Previsualizacion,
+            icono: "preferences-desktop-theme-symbolic",
+            clase: "korunix-seccion-previsualizacion",
+        },
+        "localization" => IdentidadVisualSeccion {
+            arquetipo: ArquetipoVisualSeccion::Perfil,
+            icono: "preferences-desktop-locale-symbolic",
+            clase: "korunix-seccion-perfil",
+        },
+        "people" => IdentidadVisualSeccion {
+            arquetipo: ArquetipoVisualSeccion::Perfil,
+            icono: "system-users-symbolic",
+            clase: "korunix-seccion-perfil",
+        },
+        "backups" => IdentidadVisualSeccion {
+            arquetipo: ArquetipoVisualSeccion::Estado,
+            icono: "document-save-symbolic",
+            clase: "korunix-seccion-estado",
+        },
+        "maintenance" => IdentidadVisualSeccion {
+            arquetipo: ArquetipoVisualSeccion::Operaciones,
+            icono: "applications-system-symbolic",
+            clase: "korunix-seccion-operaciones",
+        },
+        _ => return None,
+    };
+
+    Some(identidad)
+}
+
+fn etiqueta_identidad_visual(texto: &str, clase: &str) -> gtk::Label {
+    let etiqueta = gtk::Label::new(Some(texto));
+    etiqueta.set_wrap(true);
+    etiqueta.set_xalign(0.0);
+    etiqueta.add_css_class(clase);
+    etiqueta
+}
+
+fn tarjeta_hecho_visual(titulo: &str, valor: &str) -> gtk::Box {
+    let tarjeta = gtk::Box::new(gtk::Orientation::Vertical, 3);
+    tarjeta.add_css_class("card");
+    tarjeta.set_hexpand(true);
+    tarjeta.set_size_request(140, -1);
+
+    let titulo = etiqueta_identidad_visual(titulo, "caption");
+    titulo.add_css_class("dim-label");
+    titulo.set_margin_top(10);
+    titulo.set_margin_start(12);
+    titulo.set_margin_end(12);
+
+    let valor = etiqueta_identidad_visual(valor, "heading");
+    valor.set_margin_bottom(10);
+    valor.set_margin_start(12);
+    valor.set_margin_end(12);
+
+    tarjeta.append(&titulo);
+    tarjeta.append(&valor);
+    tarjeta
+}
+
+fn mosaico_hechos_visual(hechos: &[(String, String)]) -> gtk::FlowBox {
+    let mosaico = gtk::FlowBox::new();
+    mosaico.set_selection_mode(gtk::SelectionMode::None);
+    mosaico.set_homogeneous(true);
+    mosaico.set_min_children_per_line(1);
+    mosaico.set_max_children_per_line(3);
+    mosaico.set_column_spacing(8);
+    mosaico.set_row_spacing(8);
+
+    for (titulo, valor) in hechos {
+        let tarjeta = tarjeta_hecho_visual(titulo, valor);
+        mosaico.insert(&tarjeta, -1);
+    }
+
+    mosaico
+}
+
+fn agregar_identidad_visual(
+    pagina: &adw::PreferencesPage,
+    nombre: &str,
+    encabezado: &str,
+    detalle: Option<&str>,
+    hechos: &[(String, String)],
+) {
+    let Some(identidad) = identidad_visual_seccion(nombre) else {
+        return;
+    };
+
+    pagina.add_css_class(identidad.clase);
+
+    let grupo = adw::PreferencesGroup::new();
+    let superficie = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    superficie.add_css_class("card");
+    superficie.set_hexpand(true);
+
+    let icono = gtk::Image::from_icon_name(identidad.icono);
+    let cabecera_vertical = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    let cabecera_horizontal = gtk::Box::new(gtk::Orientation::Horizontal, 14);
+
+    match identidad.arquetipo {
+        ArquetipoVisualSeccion::Panel => {
+            icono.set_pixel_size(40);
+            let titulo = etiqueta_identidad_visual(encabezado, "title-2");
+
+            cabecera_horizontal.set_margin_top(16);
+            cabecera_horizontal.set_margin_start(16);
+            cabecera_horizontal.set_margin_end(16);
+            icono.set_valign(gtk::Align::Center);
+            cabecera_horizontal.append(&icono);
+            cabecera_horizontal.append(&titulo);
+            superficie.append(&cabecera_horizontal);
+        }
+        ArquetipoVisualSeccion::Estado => {
+            icono.set_pixel_size(52);
+            let titulo = etiqueta_identidad_visual(encabezado, "title-2");
+
+            cabecera_horizontal.set_margin_top(18);
+            cabecera_horizontal.set_margin_start(18);
+            cabecera_horizontal.set_margin_end(18);
+            icono.set_valign(gtk::Align::Start);
+            cabecera_horizontal.append(&icono);
+
+            let textos = gtk::Box::new(gtk::Orientation::Vertical, 5);
+            textos.set_hexpand(true);
+            textos.append(&titulo);
+            if let Some(detalle) = detalle.filter(|valor| !valor.trim().is_empty()) {
+                let detalle = etiqueta_identidad_visual(detalle, "body");
+                detalle.add_css_class("dim-label");
+                textos.append(&detalle);
+            }
+            cabecera_horizontal.append(&textos);
+            superficie.append(&cabecera_horizontal);
+        }
+        ArquetipoVisualSeccion::Dispositivos => {
+            icono.set_pixel_size(64);
+            let titulo = etiqueta_identidad_visual(encabezado, "title-1");
+
+            cabecera_horizontal.set_margin_top(18);
+            cabecera_horizontal.set_margin_start(18);
+            cabecera_horizontal.set_margin_end(18);
+            icono.set_valign(gtk::Align::Center);
+            cabecera_horizontal.append(&icono);
+
+            let textos = gtk::Box::new(gtk::Orientation::Vertical, 5);
+            textos.set_hexpand(true);
+            textos.append(&titulo);
+            if let Some(detalle) = detalle.filter(|valor| !valor.trim().is_empty()) {
+                let detalle = etiqueta_identidad_visual(detalle, "body");
+                detalle.add_css_class("dim-label");
+                textos.append(&detalle);
+            }
+            cabecera_horizontal.append(&textos);
+            superficie.append(&cabecera_horizontal);
+        }
+        ArquetipoVisualSeccion::Catalogo => {
+            icono.set_pixel_size(58);
+            icono.set_halign(gtk::Align::Center);
+            let titulo = etiqueta_identidad_visual(encabezado, "title-2");
+            titulo.set_xalign(0.5);
+            titulo.set_justify(gtk::Justification::Center);
+
+            cabecera_vertical.set_margin_top(18);
+            cabecera_vertical.set_margin_start(18);
+            cabecera_vertical.set_margin_end(18);
+            cabecera_vertical.append(&icono);
+            cabecera_vertical.append(&titulo);
+
+            if let Some(detalle) = detalle.filter(|valor| !valor.trim().is_empty()) {
+                let detalle = etiqueta_identidad_visual(detalle, "body");
+                detalle.set_xalign(0.5);
+                detalle.set_justify(gtk::Justification::Center);
+                detalle.add_css_class("dim-label");
+                cabecera_vertical.append(&detalle);
+            }
+            superficie.append(&cabecera_vertical);
+        }
+        ArquetipoVisualSeccion::Previsualizacion => {
+            icono.set_pixel_size(44);
+            let titulo = etiqueta_identidad_visual(encabezado, "heading");
+
+            cabecera_horizontal.set_margin_top(14);
+            cabecera_horizontal.set_margin_start(16);
+            cabecera_horizontal.set_margin_end(16);
+            icono.set_valign(gtk::Align::Center);
+            cabecera_horizontal.append(&icono);
+            cabecera_horizontal.append(&titulo);
+            superficie.append(&cabecera_horizontal);
+        }
+        ArquetipoVisualSeccion::Perfil => {
+            icono.set_pixel_size(44);
+            icono.set_halign(gtk::Align::Start);
+            let titulo = etiqueta_identidad_visual(encabezado, "title-2");
+
+            cabecera_vertical.set_margin_top(16);
+            cabecera_vertical.set_margin_start(16);
+            cabecera_vertical.set_margin_end(16);
+            cabecera_vertical.append(&icono);
+            cabecera_vertical.append(&titulo);
+            superficie.append(&cabecera_vertical);
+        }
+        ArquetipoVisualSeccion::Operaciones => {
+            icono.set_pixel_size(50);
+            let titulo = etiqueta_identidad_visual(encabezado, "title-2");
+
+            cabecera_horizontal.set_margin_top(18);
+            cabecera_horizontal.set_margin_start(18);
+            cabecera_horizontal.set_margin_end(18);
+            icono.set_valign(gtk::Align::Start);
+            cabecera_horizontal.append(&icono);
+
+            let textos = gtk::Box::new(gtk::Orientation::Vertical, 5);
+            textos.set_hexpand(true);
+            textos.append(&titulo);
+            if let Some(detalle) = detalle.filter(|valor| !valor.trim().is_empty()) {
+                let detalle = etiqueta_identidad_visual(detalle, "body");
+                detalle.add_css_class("dim-label");
+                textos.append(&detalle);
+            }
+            cabecera_horizontal.append(&textos);
+            superficie.append(&cabecera_horizontal);
+        }
+    }
+
+    if !hechos.is_empty() {
+        let mosaico = mosaico_hechos_visual(hechos);
+        mosaico.set_margin_start(12);
+        mosaico.set_margin_end(12);
+        mosaico.set_margin_bottom(12);
+        superficie.append(&mosaico);
+    } else {
+        cabecera_vertical.set_margin_bottom(18);
+        cabecera_horizontal.set_margin_bottom(18);
+    }
+
+    grupo.add(&superficie);
+    pagina.add(&grupo);
+}
+
 fn pagina_resumen(
     estado: Rc<Estado>,
     hardware: &Value,
@@ -5098,26 +5392,34 @@ fn pagina_resumen(
     let pagina = adw::PreferencesPage::new();
     let asuntos = asuntos_resumen(historial, firmware, privilegios, ahora_epoch());
 
-    let grupo_estado = adw::PreferencesGroup::new();
-    grupo_estado.set_title(&localizar_visible(idioma_actual(), "Estado del equipo"));
+    let vendor = valor(hardware, "/machine/vendor");
+    let model = valor(hardware, "/machine/model");
+    let personas = people
+        .pointer("/accounts")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
 
-    let estado_general = adw::ActionRow::new();
-    if asuntos.is_empty() {
-        estado_general.set_title(&localizar_visible(idioma_actual(), "Todo está bien"));
-        estado_general.set_subtitle(&localizar_visible(
-            idioma_actual(),
-            "Korunix no detectó asuntos que requieran atención en las comprobaciones disponibles.",
-        ));
+    let titulo_estado = if asuntos.is_empty() {
+        localizar_visible(idioma_actual(), "Todo está bien")
     } else {
-        estado_general.set_title(&localizar_visible(
+        localizar_visible(
             idioma_actual(),
             if asuntos.len() == 1 {
                 "Hay un asunto que revisar"
             } else {
                 "Hay asuntos que revisar"
             },
-        ));
-        estado_general.set_subtitle(&localizar_visible(
+        )
+    };
+
+    let detalle_estado = if asuntos.is_empty() {
+        localizar_visible(
+            idioma_actual(),
+            "Korunix no detectó asuntos que requieran atención en las comprobaciones disponibles.",
+        )
+    } else {
+        localizar_visible(
             idioma_actual(),
             &format!(
                 "{} {} requieren tu atención.",
@@ -5128,10 +5430,29 @@ fn pagina_resumen(
                     "áreas"
                 }
             ),
-        ));
-    }
-    grupo_estado.add(&estado_general);
-    pagina.add(&grupo_estado);
+        )
+    };
+
+    agregar_identidad_visual(
+        &pagina,
+        "summary",
+        &titulo_estado,
+        Some(&detalle_estado),
+        &[
+            (
+                texto(estado.idioma, "model").to_string(),
+                modelo_humano(&vendor, &model),
+            ),
+            (
+                localizar_visible(idioma_actual(), "Canal del sistema"),
+                valor(channel, "/label"),
+            ),
+            (
+                texto(estado.idioma, "people").to_string(),
+                personas.to_string(),
+            ),
+        ],
+    );
 
     if !asuntos.is_empty() {
         let grupo_asuntos = adw::PreferencesGroup::new();
@@ -5156,55 +5477,36 @@ fn pagina_resumen(
         pagina.add(&grupo_asuntos);
     }
 
-    let grupo_contexto = adw::PreferencesGroup::new();
-    grupo_contexto.set_title(&localizar_visible(idioma_actual(), "Este equipo"));
-
-    let vendor = valor(hardware, "/machine/vendor");
-    let model = valor(hardware, "/machine/model");
-    grupo_contexto.add(&fila(
-        texto(estado.idioma, "model"),
-        modelo_humano(&vendor, &model),
-    ));
-
-    grupo_contexto.add(&fila(
-        &localizar_visible(idioma_actual(), "Canal del sistema"),
-        valor(channel, "/label"),
-    ));
-
-    let personas = people
-        .pointer("/accounts")
-        .and_then(Value::as_array)
-        .map(Vec::len)
-        .unwrap_or(0);
-
-    grupo_contexto.add(&fila(texto(estado.idioma, "people"), personas.to_string()));
-
-    pagina.add(&grupo_contexto);
     pagina
 }
 
 fn pagina_hardware(estado: &Estado, hardware: &Value) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
-    let grupo = adw::PreferencesGroup::new();
     let vendor = valor(hardware, "/machine/vendor");
     let model = valor(hardware, "/machine/model");
     let modelo = modelo_humano(&vendor, &model);
 
-    grupo.add(&fila(texto(estado.idioma, "model"), modelo));
-    grupo.add(&fila(
-        texto(estado.idioma, "cpu"),
-        valor(hardware, "/cpu/model"),
-    ));
-    grupo.add(&fila(
-        texto(estado.idioma, "memory"),
-        memoria_humana(hardware),
-    ));
-    grupo.add(&fila(
-        texto(estado.idioma, "boot"),
-        firmware_humano(&valor(hardware, "/firmware/detected")),
-    ));
+    agregar_identidad_visual(
+        &pagina,
+        "hardware",
+        &modelo,
+        None,
+        &[
+            (
+                texto(estado.idioma, "cpu").to_string(),
+                valor(hardware, "/cpu/model"),
+            ),
+            (
+                texto(estado.idioma, "memory").to_string(),
+                memoria_humana(hardware),
+            ),
+            (
+                texto(estado.idioma, "boot").to_string(),
+                firmware_humano(&valor(hardware, "/firmware/detected")),
+            ),
+        ],
+    );
 
-    pagina.add(&grupo);
     pagina
 }
 
@@ -5436,6 +5738,23 @@ fn pagina_localizacion(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPag
     let actual_idioma = valor(datos, "/declared/systemLanguage");
     let actual_region = valor(datos, "/declared/region");
     let actual_zona = valor(datos, "/declared/timeZone");
+
+    agregar_identidad_visual(
+        &pagina,
+        "localization",
+        &idioma_humano(estado.idioma, &actual_idioma),
+        None,
+        &[
+            (
+                localizar_visible(idioma_actual(), "País o región"),
+                region_humana(estado.idioma, &actual_region),
+            ),
+            (
+                localizar_visible(idioma_actual(), "Zona horaria"),
+                zona_horaria_humana(estado.idioma, &actual_zona),
+            ),
+        ],
+    );
 
     let formato_idioma_actual = datos
         .pointer("/declared/formats/language")
@@ -6165,6 +6484,17 @@ fn pagina_personas(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage {
         .cloned()
         .unwrap_or_default();
 
+    agregar_identidad_visual(
+        &pagina,
+        "people",
+        &localizar_visible(idioma_actual(), "Personas de este equipo"),
+        None,
+        &[(
+            texto(estado.idioma, "people").to_string(),
+            cuentas.len().to_string(),
+        )],
+    );
+
     if cuentas.is_empty() {
         grupo_actual.add(&fila("Estado", texto(estado.idioma, "empty")));
     } else {
@@ -6608,6 +6938,20 @@ fn pagina_mantenimiento(
         .cloned()
         .unwrap_or_default();
 
+    agregar_identidad_visual(
+        &pagina,
+        "maintenance",
+        texto(estado.idioma, "maintenance"),
+        Some(&localizar_visible(
+            idioma_actual(),
+            "Versiones para recuperación",
+        )),
+        &[(
+            localizar_visible(idioma_actual(), "Versiones para recuperación"),
+            generaciones.len().to_string(),
+        )],
+    );
+
     let mut mostradas = 0usize;
     let mut anteriores = 0usize;
 
@@ -6881,6 +7225,17 @@ fn pagina_almacenamiento(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesP
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
+
+    agregar_identidad_visual(
+        &pagina,
+        "storage",
+        &localizar_visible(idioma_actual(), "Unidades"),
+        None,
+        &[(
+            localizar_visible(idioma_actual(), "Unidades"),
+            dispositivos.len().to_string(),
+        )],
+    );
 
     let hay_extraibles = dispositivos.iter().any(|dispositivo| {
         dispositivo
@@ -7423,6 +7778,35 @@ fn pagina_firmware(
         })
         .cloned()
         .collect::<Vec<_>>();
+
+    let titulo_firmware = if updates.is_empty() && problemas.is_empty() {
+        localizar_visible(idioma_actual(), "El firmware está al día")
+    } else if !updates.is_empty() {
+        localizar_visible(
+            idioma_actual(),
+            if updates.len() == 1 {
+                "Hay una actualización de firmware"
+            } else {
+                "Hay actualizaciones de firmware"
+            },
+        )
+    } else {
+        localizar_visible(
+            idioma_actual(),
+            "Hay dispositivos de firmware que requieren atención",
+        )
+    };
+
+    agregar_identidad_visual(
+        &pagina,
+        "firmware",
+        &titulo_firmware,
+        None,
+        &[(
+            localizar_visible(idioma_actual(), "Actualizaciones disponibles"),
+            updates.len().to_string(),
+        )],
+    );
 
     let grupo_estado = adw::PreferencesGroup::new();
     grupo_estado.set_title(&localizar_visible(idioma_actual(), "Estado del firmware"));
@@ -8947,6 +9331,33 @@ fn pagina_multimedia(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage 
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
+
+    let camaras = datos
+        .pointer("/cameras/devices")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+
+    agregar_identidad_visual(
+        &pagina,
+        "media",
+        texto(estado.idioma, "media"),
+        None,
+        &[
+            (
+                texto(estado.idioma, "output").to_string(),
+                sinks.len().to_string(),
+            ),
+            (
+                texto(estado.idioma, "input").to_string(),
+                sources.len().to_string(),
+            ),
+            (
+                localizar_visible(idioma_actual(), "Cámara"),
+                camaras.to_string(),
+            ),
+        ],
+    );
 
     let grupo_salida = adw::PreferencesGroup::new();
     grupo_salida.set_title(texto(estado.idioma, "output"));
@@ -10943,6 +11354,17 @@ fn pagina_aplicaciones(
         .filter_map(|valor| valor.as_str().map(str::to_string))
         .collect::<Vec<_>>();
 
+    agregar_identidad_visual(
+        &pagina,
+        "applications",
+        &localizar_visible(idioma_actual(), "Buscar aplicaciones"),
+        Some(&localizar_visible(
+            idioma_actual(),
+            "Escribe un nombre o una función. Korunix filtra primero sus aplicaciones recomendadas.",
+        )),
+        &[],
+    );
+
     // El buscador pertenece al inicio de Aplicaciones. Filtra el catálogo
     // curado al escribir y solo consulta catálogos externos cuando la persona
     // lo pide; la fuente concreta nunca se convierte en una pregunta.
@@ -11469,6 +11891,29 @@ fn pagina_escritorio_apariencia(
 
     let soporte = Rc::new(apariencia.clone());
 
+    let modo_humano_actual = match modo_actual.as_str() {
+        "light" => localizar_visible(idioma_actual(), "Claro"),
+        "dark" => localizar_visible(idioma_actual(), "Oscuro"),
+        _ => localizar_visible(idioma_actual(), "Automático"),
+    };
+
+    agregar_identidad_visual(
+        &pagina,
+        "appearance",
+        &nombre_escritorio_humano(&escritorio_actual),
+        None,
+        &[
+            (
+                localizar_visible(idioma_actual(), "Apariencia"),
+                localizar_visible(idioma_actual(), nombre_estilo_humano(&estilo_actual)),
+            ),
+            (
+                localizar_visible(idioma_actual(), "Modo"),
+                modo_humano_actual,
+            ),
+        ],
+    );
+
     let catalogo_humano = catalogo
         .iter()
         .map(|id| nombre_escritorio_humano(id))
@@ -11994,6 +12439,21 @@ fn resumen_historial_humano(resumen: &str) -> String {
 fn pagina_copias_historial(estado: Rc<Estado>, historial: &Value) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
 
+    let ultima_copia = ultima_copia_portable(historial)
+        .map(tiempo_relativo)
+        .unwrap_or_else(|| texto(estado.idioma, "empty").to_string());
+
+    agregar_identidad_visual(
+        &pagina,
+        "backups",
+        &localizar_visible(idioma_actual(), "Copia portable"),
+        None,
+        &[(
+            localizar_visible(idioma_actual(), "Última copia portable"),
+            ultima_copia,
+        )],
+    );
+
     let grupo_estado = adw::PreferencesGroup::new();
     grupo_estado.set_title(&localizar_visible(idioma_actual(), "Copia portable"));
 
@@ -12277,6 +12737,29 @@ fn pagina_actualizaciones(
     noctalia_relevante: bool,
 ) -> adw::PreferencesPage {
     let pagina = adw::PreferencesPage::new();
+
+    let objetivos_disponibles = plan_actualizacion
+        .get("targets")
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0);
+
+    agregar_identidad_visual(
+        &pagina,
+        "updates",
+        texto(estado.idioma, "update_all"),
+        None,
+        &[
+            (
+                localizar_visible(idioma_actual(), "Canal del sistema"),
+                valor(channel, "/label"),
+            ),
+            (
+                texto(estado.idioma, "updates").to_string(),
+                objetivos_disponibles.to_string(),
+            ),
+        ],
+    );
 
     let grupo_todo = adw::PreferencesGroup::new();
     grupo_todo.set_title(texto(estado.idioma, "update_all"));
@@ -13557,6 +14040,66 @@ mod pruebas_roles_predeterminados_gui {
     #[test]
     fn arranque_precarga_solo_resumen() {
         assert_eq!(pagina_precarga_inicial(), "summary");
+    }
+
+    #[test]
+    fn identidades_visuales_cubren_las_doce_paginas_y_varian_composicion() {
+        let paginas = [
+            "summary",
+            "updates",
+            "hardware",
+            "media",
+            "storage",
+            "firmware",
+            "applications",
+            "appearance",
+            "localization",
+            "people",
+            "backups",
+            "maintenance",
+        ];
+
+        let identidades = paginas
+            .iter()
+            .map(|pagina| identidad_visual_seccion(pagina).expect("cada página tiene identidad"))
+            .collect::<Vec<_>>();
+
+        let arquetipos = identidades
+            .iter()
+            .map(|identidad| identidad.arquetipo)
+            .collect::<HashSet<_>>();
+
+        let iconos = identidades
+            .iter()
+            .map(|identidad| identidad.icono)
+            .collect::<HashSet<_>>();
+
+        assert_eq!(identidades.len(), 12);
+        assert!(
+            arquetipos.len() >= 6,
+            "las secciones no deben reducirse a una sola plantilla visual"
+        );
+        assert!(
+            iconos.len() >= 9,
+            "la señalética debe ayudar a reconocer dominios distintos"
+        );
+
+        assert_eq!(
+            identidad_visual_seccion("summary").unwrap().arquetipo,
+            ArquetipoVisualSeccion::Panel
+        );
+        assert_eq!(
+            identidad_visual_seccion("applications").unwrap().arquetipo,
+            ArquetipoVisualSeccion::Catalogo
+        );
+        assert_eq!(
+            identidad_visual_seccion("appearance").unwrap().arquetipo,
+            ArquetipoVisualSeccion::Previsualizacion
+        );
+        assert_eq!(
+            identidad_visual_seccion("maintenance").unwrap().arquetipo,
+            ArquetipoVisualSeccion::Operaciones
+        );
     }
 
     #[test]
