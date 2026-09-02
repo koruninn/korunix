@@ -6016,6 +6016,20 @@ fn defaults_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, String> 
     Ok(ExitCode::SUCCESS)
 }
 
+fn nixpkgs_human_selection_id(id: &str) -> &str {
+    for prefix in ["legacyPackages.", "packages."] {
+        if let Some(rest) = id.strip_prefix(prefix) {
+            if let Some((_system, human_id)) = rest.split_once('.') {
+                if !human_id.is_empty() {
+                    return human_id;
+                }
+            }
+        }
+    }
+
+    id
+}
+
 fn application_selection_token(source: &str, id: &str) -> Result<String, String> {
     if id.trim().is_empty() || id.chars().any(char::is_whitespace) {
         return Err("Identificador de aplicación inválido.".to_string());
@@ -6032,13 +6046,14 @@ fn application_selection_token(source: &str, id: &str) -> Result<String, String>
             Ok(id.to_string())
         }
         "nixpkgs" => {
+            let id = nixpkgs_human_selection_id(id);
             if !id
                 .bytes()
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.' | b'+'))
             {
-                return Err("Atributo de Nixpkgs inválido.".to_string());
+                return Err("Identificador de Nixpkgs inválido.".to_string());
             }
-            Ok(format!("nixpkgs:{id}"))
+            Ok(id.to_string())
         }
         "flatpak" => {
             if !id.contains('.')
@@ -6445,15 +6460,45 @@ fn applications_search(raiz: &Path, consulta: &str, fuente: &str) -> Result<Stri
                     "--json".into(),
                 ],
             )?;
-            Ok(format!(
-                "{{\"schemaVersion\":1,\"kind\":\"korunix-applications-search\",\"query\":{},\"source\":\"nixpkgs\",\"results\":{}}}",
-                json_texto(consulta),
-                if resultado.trim().is_empty() {
-                    "{}"
-                } else {
-                    resultado.trim()
+
+            let raw = if resultado.trim().is_empty() {
+                serde_json::json!({})
+            } else {
+                serde_json::from_str::<serde_json::Value>(resultado.trim())
+                    .map_err(|e| format!("Nixpkgs devolvió una búsqueda no válida: {e}"))?
+            };
+
+            let mut resultados = Vec::<serde_json::Value>::new();
+            if let Some(items) = raw.as_object() {
+                for (technical_id, item) in items {
+                    let human_id = nixpkgs_human_selection_id(technical_id);
+                    let pname = item
+                        .get("pname")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or(human_id);
+                    let description = item
+                        .get("description")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("");
+
+                    resultados.push(serde_json::json!({
+                        "id": human_id,
+                        "technicalId": technical_id,
+                        "pname": pname,
+                        "name": pname,
+                        "description": description
+                    }));
                 }
-            ))
+            }
+
+            Ok(serde_json::json!({
+                "schemaVersion": 2,
+                "kind": "korunix-applications-search",
+                "query": consulta,
+                "source": "nixpkgs",
+                "results": resultados
+            })
+            .to_string())
         }
         "flatpak" => {
             let salida = capture(
@@ -6542,7 +6587,7 @@ fn applications_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, Stri
 
     if args.first().map(String::as_str) != Some("set") {
         return Err(
-            "Uso: korunix applications [--json] | search <texto> [--source curated|nixpkgs|flatpak] [--json] | set <id> <on|off> [--source curated|nixpkgs|flatpak] [--plan] [--yes] [--json]."
+            "Uso: korunix applications [--json] | search <texto> [--source curated|nixpkgs|flatpak] [--json] | set <id> <on|off> [--source auto|curated|nixpkgs|flatpak] [--plan] [--yes] [--json]."
                 .to_string(),
         );
     }
@@ -6557,7 +6602,7 @@ fn applications_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, Stri
         _ => return Err("El estado debe ser on u off.".to_string()),
     };
 
-    let mut source = "curated".to_string();
+    let mut source = "auto".to_string();
     let mut plan_only = false;
     let mut yes = false;
     let mut json = false;
@@ -6580,15 +6625,22 @@ fn applications_operation(raiz: &Path, args: &[String]) -> Result<ExitCode, Stri
         i += 1;
     }
 
+    let catalogo = lista_json_strings(&nix_config_json(raiz, "internal.applicationCatalog")?)?;
+
+    if source == "auto" {
+        source = if catalogo.iter().any(|actual| actual == &raw_id) {
+            "curated".to_string()
+        } else {
+            "nixpkgs".to_string()
+        };
+    }
+
     let id = application_selection_token(&source, &raw_id)?;
 
-    if source == "curated" {
-        let catalogo = lista_json_strings(&nix_config_json(raiz, "internal.applicationCatalog")?)?;
-        if !catalogo.iter().any(|actual| actual == &raw_id) {
-            return Err(format!(
-                "{raw_id} no pertenece al catálogo curado. Búscalo en Nixpkgs o Flatpak y conserva su fuente."
-            ));
-        }
+    if source == "curated" && !catalogo.iter().any(|actual| actual == &raw_id) {
+        return Err(format!(
+            "{raw_id} no pertenece al catálogo curado. Usa su nombre normal y deja que Korunix lo resuelva, o elige una fuente explícita solo si hace falta."
+        ));
     }
 
     let antes = lista_json_strings(&nix_config_json(raiz, "applications")?)?;
@@ -11527,10 +11579,14 @@ mod tests {
     }
 
     #[test]
-    fn aplicacion_externa_conserva_su_fuente() {
+    fn aplicacion_nixpkgs_guarda_id_humano_y_flatpak_conserva_fuente() {
         assert_eq!(
             application_selection_token("nixpkgs", "hello").unwrap(),
-            "nixpkgs:hello"
+            "hello"
+        );
+        assert_eq!(
+            application_selection_token("nixpkgs", "legacyPackages.x86_64-linux.blender").unwrap(),
+            "blender"
         );
         assert_eq!(
             application_selection_token("flatpak", "org.mozilla.firefox").unwrap(),

@@ -136,6 +136,7 @@
       "inkscape"
       "just"
       "kate"
+      "karere"
       "kdenlive"
       "krita"
       "localsend"
@@ -161,7 +162,7 @@
       "vlc"
       "vscode"
       "wget"
-      "nixpkgs:legacyPackages.x86_64-linux.blender"
+      "blender"
     ];
 
     services = {

@@ -295,7 +295,9 @@
   isNixpkgsSelection = name: lib.hasPrefix "nixpkgs:" name;
   isFlatpakSelection = name: lib.hasPrefix "flatpak:" name;
 
-  nixpkgsSelections =
+  # Las formas con prefijo siguen leyéndose para configuraciones antiguas y
+  # elecciones avanzadas. El flujo normal no necesita escribirlas.
+  explicitNixpkgsSelections =
     map (name: lib.removePrefix "nixpkgs:" name)
     (lib.filter isNixpkgsSelection cfg);
 
@@ -318,7 +320,10 @@
   nixpkgsPackageFor = raw:
     lib.attrByPath (nixpkgsAttrPath raw) null pkgs;
 
-  unknownApplications =
+  # Todo nombre humano que no pertenezca al catálogo curado intenta resolverse
+  # directamente en el Nixpkgs efectivo del host. Así "karere" o "blender" son
+  # decisiones suficientes; la persona no mantiene una tabla interna paralela.
+  plainApplications =
     lib.filter (
       name:
         !(lib.elem name knownApplications)
@@ -327,11 +332,23 @@
     )
     cfg;
 
+  resolvedPlainNixpkgsApplications =
+    lib.filter (
+      name: nixpkgsPackageFor name != null
+    )
+    plainApplications;
+
+  unknownApplications =
+    lib.filter (
+      name: nixpkgsPackageFor name == null
+    )
+    plainApplications;
+
   unknownNixpkgsApplications =
     lib.filter (
       name: nixpkgsPackageFor name == null
     )
-    nixpkgsSelections;
+    explicitNixpkgsSelections;
 
   ordinaryApplications =
     lib.filter (
@@ -345,11 +362,16 @@
     )
     ordinaryApplications;
 
+  selectedNixpkgsApplications = lib.unique (
+    resolvedPlainNixpkgsApplications
+    ++ explicitNixpkgsSelections
+  );
+
   selectedNixpkgsPackages = map nixpkgsPackageFor (
     lib.filter (
       name: nixpkgsPackageFor name != null
     )
-    nixpkgsSelections
+    selectedNixpkgsApplications
   );
 
   flatpakPackages =
@@ -735,7 +757,7 @@ in {
       {
         assertion = unknownApplications == [];
         message =
-          "Korunix todavía no conoce estas aplicaciones: "
+          "Korunix no pudo resolver por nombre estas aplicaciones en Nixpkgs: "
           + lib.concatStringsSep ", " unknownApplications;
       }
       {

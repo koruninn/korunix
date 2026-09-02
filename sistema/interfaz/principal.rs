@@ -10306,6 +10306,21 @@ fn targets_unidades_seleccionadas(unidades: &[(Vec<String>, gtk::CheckButton)]) 
     resultado
 }
 
+fn aplicacion_externa_activa(seleccionados: &[String], fuente: &str, id: &str) -> bool {
+    match fuente {
+        "nixpkgs" => seleccionados.iter().any(|actual| {
+            actual == id
+                || actual == &format!("nixpkgs:{id}")
+                || (actual.starts_with("nixpkgs:") && actual.rsplit('.').next() == Some(id))
+        }),
+        "flatpak" => {
+            let token = format!("flatpak:{id}");
+            seleccionados.iter().any(|actual| actual == &token)
+        }
+        _ => seleccionados.iter().any(|actual| actual == id),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ResultadoAplicacionExterna {
     id: String,
@@ -11131,8 +11146,11 @@ fn pagina_aplicaciones(
                     continue;
                 }
 
-                let token = format!("{}:{}", resultado.fuente, resultado.id);
-                let activa = seleccionados_buscar.iter().any(|actual| actual == &token);
+                let activa = aplicacion_externa_activa(
+                    &seleccionados_buscar,
+                    &resultado.fuente,
+                    &resultado.id,
+                );
 
                 resultados_externos.append(&fila_aplicacion(
                     Rc::clone(&estado_buscar),
@@ -13733,6 +13751,17 @@ mod pruebas_roles_predeterminados_gui {
                 .collect::<Vec<_>>(),
             ["Sistema y aplicaciones", "Noctalia"]
         );
+    }
+
+    #[test]
+    fn seleccion_nixpkgs_humana_reconoce_formato_nuevo_y_heredado() {
+        let nuevo = vec!["karere".to_string()];
+        assert!(aplicacion_externa_activa(&nuevo, "nixpkgs", "karere"));
+
+        let heredado = vec!["nixpkgs:legacyPackages.x86_64-linux.blender".to_string()];
+        assert!(aplicacion_externa_activa(&heredado, "nixpkgs", "blender"));
+
+        assert!(!aplicacion_externa_activa(&nuevo, "nixpkgs", "blender"));
     }
 
     #[test]
