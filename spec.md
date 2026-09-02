@@ -202,6 +202,49 @@ Si falta red, una dependencia opcional, una integración del escritorio o cualqu
 
 Un fallo parcial no debe convertir toda la aplicación en una pantalla de error.
 
+### 2.11. Una decisión humana debe seguir siendo sencilla en GUI, CLI y edición manual
+
+Korunix tiene tres puertas de entrada al mismo modelo: la interfaz gráfica, la
+CLI y la edición manual de `configuracion/`. Ninguna constituye una arquitectura
+paralela y ninguna debe obligar a aprender la implementación interna para
+realizar una tarea cotidiana.
+
+La regla permanente es:
+
+> Una decisión humana se expresa una sola vez, con una representación humana
+> corta y previsible. Korunix deriva de ella los paquetes, servicios, permisos,
+> grupos, puertos, asociaciones, archivos y demás detalles técnicos necesarios.
+
+Por tanto:
+
+- `configuracion/` es la interfaz manual normal de Korunix;
+- `sistema/` contiene implementación interna y no debe ser necesario editarlo
+  para instalar una aplicación normal, cambiar una preferencia cotidiana,
+  activar una capacidad soportada o realizar otra operación ordinaria;
+- `generado/` nunca es una interfaz de configuración manual;
+- GUI, CLI y edición manual deben leer y modificar la misma decisión y reflejar
+  mutuamente sus cambios;
+- una persona no debe sincronizar a mano dos o más archivos para expresar una
+  sola intención;
+- prefijos de fuente, rutas de atributos de Nixpkgs, nombres de módulos,
+  servicios, grupos, puertos y otros identificadores técnicos quedan como
+  detalle interno o escape avanzado cuando exista una ambigüedad real;
+- si Korunix puede resolver de forma fiable una elección por nombre humano, debe
+  hacerlo antes de exigir una forma técnica explícita.
+
+Este contrato se aplica de forma transversal a aplicaciones, escritorios,
+apariencia, servicios, localización, métodos de entrada, usuarios,
+almacenamiento, copias, actualizaciones, recuperación y futuras áreas del
+producto.
+
+Añadir soporte interno para una nueva capacidad puede requerir modificar
+`sistema/`; **utilizar** una capacidad ya soportada no debe requerirlo.
+
+Si una operación cotidiana solo puede documentarse mediante varios cambios
+internos, ese procedimiento no se considera una solución de producto: la
+arquitectura debe simplificarse hasta que la intención tenga una entrada humana
+única.
+
 ## 3. Regla para todos los archivos de texto
 
 Todos los archivos de texto mantenidos por el proyecto deben ser comprensibles por una persona.
@@ -1715,6 +1758,29 @@ Flatpak.
 
 La fuente concreta es una decisión de implementación de Korunix salvo que exista una razón real para que la persona elija entre variantes con consecuencias distintas. La vista normal no debe exigir escoger “Nixpkgs” o “Flatpak” ni mostrar un selector de origen por rutina. Korunix puede conservar la fuente en su modelo interno y mostrarla en detalles avanzados.
 
+La misma simplicidad se aplica a la edición manual. Cuando una persona añade a
+`configuracion/` una aplicación ordinaria mediante un identificador humano y no
+ambiguo, por ejemplo `"karere"`, Korunix debe intentar resolver esa intención con
+la misma política de búsqueda del producto: primero Nixpkgs y después Flatpak
+cuando corresponda. Instalar una aplicación normal de Nixpkgs no debe exigir
+añadir manualmente una entrada a una tabla interna de paquetes ni escribir rutas
+como `legacyPackages.<arquitectura>.<paquete>`.
+
+Una forma explícita que fije fuente o ruta técnica puede existir como escape
+avanzado para resolver ambigüedades, conservar compatibilidad o seleccionar una
+variante concreta, pero no es el flujo manual normal.
+
+El catálogo curado y la capacidad de instalar una aplicación no son la misma
+cosa. Incorporar una aplicación al catálogo curado puede requerir metadatos
+humanos, integración especial o reglas adicionales; simplemente instalar una
+aplicación ordinaria en un equipo no debe exigir convertirla primero en una
+entrada curada de Korunix.
+
+La GUI y la CLI deben utilizar el mismo resolvedor y guardar el mismo tipo de
+decisión que puede escribir una persona manualmente. Una aplicación agregada
+manualmente debe aparecer seleccionada en la GUI, y una elección realizada en la
+GUI debe quedar representada de forma humana en `configuracion/`.
+
 Las dependencias técnicas no se presentan como elecciones separadas si el usuario no necesita decidir sobre ellas. Lo mismo se aplica a aplicaciones que Korunix instala únicamente para satisfacer un rol ya elegido para el escritorio: no deben duplicarse como otra decisión normal del catálogo.
 
 AAGL se trata como infraestructura coordinada. La interfaz presenta los launchers o juegos que la persona puede decidir instalar, no `aagl`, `aaglStable` u otras piezas internas como aplicaciones normales. Los launchers de AAGL permanecen desactivados por defecto y una opción incompatible con la arquitectura actual no debe presentarse como instalable.
@@ -1769,16 +1835,31 @@ Si Korunix necesita modificar algo que ya está administrado externamente, debe 
 
 La configuración humana de Korunix debe seguir siendo legible y editable manualmente.
 
+`configuracion/` es la interfaz manual del producto. Una persona que prefiera
+editar archivos debe poder expresar allí las mismas decisiones cotidianas que
+ofrecen la GUI y la CLI, sin entrar en `sistema/` ni modificar archivos
+`generado/`.
+
 Requisitos:
 
 - nombres previsibles;
 - ubicaciones previsibles;
 - comentarios humanos;
+- una decisión cotidiana expresada en un único lugar;
+- valores humanos antes que identificadores de implementación cuando Korunix
+  pueda resolverlos de forma fiable;
 - cambios manuales respetados;
 - ninguna reescritura silenciosa que borre una edición válida;
 - migraciones explícitas cuando cambie el esquema.
 
-La GUI y la edición manual son dos entradas al mismo modelo, no dos configuraciones distintas.
+La GUI, la CLI y la edición manual son tres entradas al mismo modelo, no
+configuraciones distintas. Una modificación válida realizada por cualquiera de
+las tres debe ser comprensible desde las otras dos.
+
+Si para una tarea ordinaria una persona necesita editar `sistema/`, conocer una
+ruta de atributo de Nixpkgs, un grupo UNIX, una unidad systemd, un puerto o
+sincronizar varios archivos internos, el flujo manual todavía no cumple este
+contrato aunque la configuración resultante sea técnicamente válida.
 
 Korunix debe leer el estado real del equipo antes de aplicar y reconciliarlo con la configuración declarada.
 
@@ -2278,7 +2359,11 @@ Los nombres definitivos deben favorecer compatibilidad con la memoria muscular e
 
 `just update` no debe ser simplemente un `nix flake update` ciego si existen dependencias coordinadas que Korunix deba validar.
 
-La CLI y la GUI son dos interfaces sobre el mismo motor y las mismas reglas, no dos implementaciones divergentes.
+La CLI, la GUI y la edición manual son interfaces sobre el mismo modelo y las
+mismas reglas, no implementaciones divergentes. Los comandos orientados a
+personas deben aceptar las mismas decisiones humanas que puede guardar
+`configuracion/` y no obligar a conocer la representación interna salvo en
+opciones avanzadas explícitas.
 
 ## 46. Actualización del propio Korunix
 
@@ -2941,6 +3026,13 @@ un final reconocible.
   - El cierre definitivo exige además contrastar distribución, bootstrap,
     onboarding, localización y demás contratos de producto contra la
     especificación completa, sin interpretar ausencia de prueba como éxito.
+
+**Frente inmediato transversal:** simplificar las decisiones cotidianas para que
+GUI, CLI y edición manual utilicen la misma representación humana y una única
+fuente de verdad. Aplicaciones es el primer caso de aceptación: una aplicación
+ordinaria debe poder seleccionarse por un identificador humano simple sin tocar
+`sistema/`; el mismo criterio se aplicará después a las demás áreas que todavía
+filtren detalles internos.
 
 <!-- KORUNIX-ROADMAP-C:BEGIN -->
 ### Desglose de la fase C
