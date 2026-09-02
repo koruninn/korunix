@@ -20,12 +20,49 @@
   # Algunas aplicaciones pueden llegar a una rama de nixpkgs antes que a la
   # estable. Solo usamos el conjunto inestable como excepción puntual cuando
   # el paquete no existe en la base elegida para el sistema.
-  fetchPackage =
+  fetchUpstream =
     if pkgs ? fetch
     then pkgs.fetch
     else if pkgsUnstable != null && pkgsUnstable ? fetch
     then pkgsUnstable.fetch
     else throw "Korunix necesita Fetch, pero ninguna fuente disponible lo contiene.";
+
+  # La versión actualmente fijada de Fetch no permite formatear por separado los
+  # valores de CPU, memoria y disco desde su archivo de configuración. Korunix
+  # conserva el renderizador upstream y adapta solo esos textos para mantener la
+  # intención visual compacta del Fastfetch histórico.
+  fetchPackage = fetchUpstream.overrideAttrs (anterior: {
+    postPatch =
+      (anterior.postPatch or "")
+      + ''
+        ${pkgs.python3}/bin/python3 - <<'PY'
+        from pathlib import Path
+        import base64
+
+        ruta = Path("fetch.c")
+        fuente = ruta.read_text(encoding="utf-8")
+
+        cambios = [
+            ("CPU", "ICBpZiAobmFtZVswXSkgewogICAgaWYgKGNvcmVzID4gMCAmJiBtYXhfZ2h6ID4gMCkKICAgICAgYWRkX2luZm8oIkNQVSIsICIlcyAoJWQpIEAgJS4yZiBHSHoiLCBuYW1lLCBjb3JlcywgbWF4X2doeik7CiAgICBlbHNlIGlmIChjb3JlcyA+IDApCiAgICAgIGFkZF9pbmZvKCJDUFUiLCAiJXMgKCVkKSIsIG5hbWUsIGNvcmVzKTsKICAgIGVsc2UKICAgICAgYWRkX2luZm8oIkNQVSIsICIlcyIsIG5hbWUpOwogIH0K", "ICBpZiAobmFtZVswXSkgewogICAgY2hhciAqZ3JhcGhpY3MgPSBzdHJzdHIobmFtZSwgIiB3aXRoIFJhZGVvbiBHcmFwaGljcyIpOwogICAgaWYgKGdyYXBoaWNzKQogICAgICAqZ3JhcGhpY3MgPSAnXDAnOwogICAgYWRkX2luZm8oIkNQVSIsICIlcyIsIG5hbWUpOwogIH0K"),
+            ("memoria", "ICBhZGRfaW5mbygiTWVtb3J5IiwgIiUuMmYgR2lCIC8gJS4yZiBHaUIgKFwwMzNbJXNtJWQlJVwwMzNbMG0pIiwgdXNlZF9naWIsCiAgICAgICAgICAgdG90YWxfZ2liLCBjb2xvciwgcGN0KTsK", "ICBhZGRfaW5mbygiTWVtb3J5IiwgIiUuMWYgLyAlLjFmIEdpQiIsIHVzZWRfZ2liLCB0b3RhbF9naWIpOwo="),
+            ("disco", "ICBpZiAoZnN0eXBlWzBdKQogICAgYWRkX2luZm8oIkRpc2sgKC8pIiwgIiUuMmYgR2lCIC8gJS4yZiBHaUIgKFwwMzNbJXNtJWQlJVwwMzNbMG0pIC0gJXMiLAogICAgICAgICAgICAgdXNlZF9naWIsIHRvdGFsX2dpYiwgY29sb3IsIHBjdCwgZnN0eXBlKTsKICBlbHNlCiAgICBhZGRfaW5mbygiRGlzayAoLykiLCAiJS4yZiBHaUIgLyAlLjJmIEdpQiAoXDAzM1slc20lZCUlXDAzM1swbSkiLCB1c2VkX2dpYiwKICAgICAgICAgICAgIHRvdGFsX2dpYiwgY29sb3IsIHBjdCk7Cg==", "ICBhZGRfaW5mbygiRGlzayAoLykiLCAiJS4wZiAvICUuMGYgR2lCIiwgdXNlZF9naWIsIHRvdGFsX2dpYik7Cg=="),
+        ]
+
+        for nombre, anterior_b64, nuevo_b64 in cambios:
+            anterior = base64.b64decode(anterior_b64).decode("utf-8")
+            nuevo = base64.b64decode(nuevo_b64).decode("utf-8")
+            encontrados = fuente.count(anterior)
+            if encontrados != 1:
+                raise SystemExit(
+                    f"Korunix: Fetch cambió el bloque de {nombre} que se compactaba; "
+                    f"esperaba 1 coincidencia y encontré {encontrados}."
+                )
+            fuente = fuente.replace(anterior, nuevo, 1)
+
+        ruta.write_text(fuente, encoding="utf-8")
+        PY
+      '';
+  });
 
   # Fetch upstream busca su configuración directamente bajo $HOME/.config/fetch
   # y no consulta XDG_CONFIG_HOME. El wrapper cambia HOME únicamente dentro del

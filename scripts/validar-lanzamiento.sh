@@ -774,7 +774,15 @@ if [[ "$fetch_campos" == 'os kernel shell wm cpu memory disk colors' ]] \
    && grep -Fq 'Host, tiempo encendido, pantalla, iconos, fuente, terminal, GPU, swap, IP local y' spec.md \
    && grep -Fq 'La versión actual de Fetch busca su archivo directamente bajo' spec.md \
    && grep -Fq 'no utiliza' spec.md \
-   && grep -Fq 'XDG_CONFIG_HOME' spec.md
+   && grep -Fq 'XDG_CONFIG_HOME' spec.md \
+   && grep -Fq 'fetchPackage = fetchUpstream.overrideAttrs' sistema/base.nix \
+   && grep -Fq '("CPU",' sistema/base.nix \
+   && grep -Fq '("memoria",' sistema/base.nix \
+   && grep -Fq '("disco",' sistema/base.nix \
+   && grep -Fq 'CPU muestra el nombre humano del modelo' spec.md \
+   && grep -Fq 'Memoria muestra usado / total con una sola cifra decimal' spec.md \
+   && grep -Fq 'Disco muestra usado / total redondeado y una sola unidad' spec.md \
+   && grep -Fq 'debe fallar durante la construcción si el código upstream' spec.md
 then
   ok 'Fetch conserva la salida compacta y usa su configuración de producto'
 else

@@ -1167,6 +1167,26 @@ Host, tiempo encendido, pantalla, iconos, fuente, terminal, GPU, swap, IP local 
 locale no forman parte del saludo normal. Pueden existir en diagnósticos o en una
 vista avanzada, pero no deben ensanchar ni alargar la terminal cotidiana.
 
+Los valores que permanecen visibles también priorizan legibilidad compacta:
+
+- CPU muestra el nombre humano del modelo, sin número de hilos, frecuencia ni
+  sufijos redundantes como `with Radeon Graphics` cuando el modelo ya identifica
+  suficientemente el procesador;
+- Memoria muestra usado / total con una sola cifra decimal y una sola unidad,
+  sin porcentaje;
+- Disco muestra usado / total redondeado y una sola unidad, sin porcentaje ni
+  sistema de archivos.
+
+La versión actualmente fijada de Fetch no expone formato individual de esos
+valores mediante su configuración, así que Korunix puede mantener una adaptación
+pequeña y verificable sobre el paquete mientras preserve el resto del renderizador
+upstream. La adaptación debe fallar durante la construcción si el código upstream
+cambia y ya no coincide con los bloques esperados.
+
+Memoria y Disco permanecen porque resumen dos recursos cotidianos útiles. Si el
+formato corto deja de aportar información suficiente, la decisión debe revisarse
+como modelo de producto en vez de volver a llenar la línea con metadatos.
+
 El logo 3D de Fetch se conserva, pero debe utilizar una escala razonable para que
 la presentación completa quepa cómodamente en una terminal normal. La animación
 no justifica desplazar el logo fuera de la ventana ni obligar a usar un ancho
