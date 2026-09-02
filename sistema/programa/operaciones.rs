@@ -7937,10 +7937,20 @@ fn localization_timezone_label(value: &str) -> String {
 fn localization_catalog_json(raiz: &Path) -> Result<String, String> {
     let host = resolver_equipo(raiz)?;
 
-    let xkb_root = flake_raw(
-        raiz,
-        &format!("nixosConfigurations.{host}.pkgs.xkeyboard_config.outPath"),
-    )?;
+    let runtime = runtime_state_current(raiz)?;
+
+    let xkb_root = if let Some(value) = runtime
+        .as_ref()
+        .and_then(|state| state.pointer("/localization/catalog/xkbRoot"))
+        .and_then(serde_json::Value::as_str)
+    {
+        value.to_string()
+    } else {
+        flake_raw(
+            raiz,
+            &format!("nixosConfigurations.{host}.pkgs.xkeyboard_config.outPath"),
+        )?
+    };
 
     let xkb_candidates = [
         PathBuf::from(&xkb_root).join("share/X11/xkb/rules/evdev.lst"),
@@ -7962,10 +7972,18 @@ fn localization_catalog_json(raiz: &Path) -> Result<String, String> {
         return Err("El catálogo XKB actual no contiene teclados utilizables.".to_string());
     }
 
-    let tz_root = flake_raw(
-        raiz,
-        &format!("nixosConfigurations.{host}.pkgs.tzdata.outPath"),
-    )?;
+    let tz_root = if let Some(value) = runtime
+        .as_ref()
+        .and_then(|state| state.pointer("/localization/catalog/tzdataRoot"))
+        .and_then(serde_json::Value::as_str)
+    {
+        value.to_string()
+    } else {
+        flake_raw(
+            raiz,
+            &format!("nixosConfigurations.{host}.pkgs.tzdata.outPath"),
+        )?
+    };
 
     let timezone_candidates = [
         PathBuf::from(&tz_root).join("share/zoneinfo/zone1970.tab"),

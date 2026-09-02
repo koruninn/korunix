@@ -364,7 +364,193 @@ fn flake_raw(raiz: &Path, atributo: &str) -> Result<String, String> {
     )
 }
 
+fn runtime_state_path() -> PathBuf {
+    env::var_os("KORUNIX_RUNTIME_STATE_FILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/etc/korunix/runtime-state.json"))
+}
+
+fn sha256_archivo(raiz: &Path, ruta: &Path) -> Option<String> {
+    let salida = ejecutar_capturando("sha256sum", &[ruta.display().to_string()], raiz).ok()?;
+
+    salida.split_whitespace().next().map(ToString::to_string)
+}
+
+fn runtime_hash_entry_matches(raiz: &Path, entry: &serde_json::Value) -> bool {
+    let Some(relative) = entry.get("path").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+    let Some(expected) = entry.get("sha256").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+
+    let path = raiz.join(relative);
+    path.is_file()
+        && sha256_archivo(raiz, &path)
+            .map(|actual| actual == expected)
+            .unwrap_or(false)
+}
+
+fn runtime_state_source_matches(raiz: &Path, state: &serde_json::Value) -> bool {
+    let Some(source) = state.get("sourceHashes") else {
+        return false;
+    };
+
+    for key in ["host", "hardware", "channels"] {
+        let Some(entry) = source.get(key) else {
+            return false;
+        };
+        if !runtime_hash_entry_matches(raiz, entry) {
+            return false;
+        }
+    }
+
+    let Some(expected_personas) = source.get("personas").and_then(serde_json::Value::as_array)
+    else {
+        return false;
+    };
+
+    let mut expected_paths = expected_personas
+        .iter()
+        .filter_map(|entry| entry.get("path"))
+        .filter_map(serde_json::Value::as_str)
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    expected_paths.sort();
+
+    let personas_dir = raiz.join("configuracion/personas");
+    let Ok(entries) = fs::read_dir(&personas_dir) else {
+        return false;
+    };
+
+    let mut current_paths = entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            if !path.is_file() || path.extension().and_then(|value| value.to_str()) != Some("nix") {
+                return None;
+            }
+
+            path.strip_prefix(raiz)
+                .ok()
+                .and_then(|relative| relative.to_str())
+                .map(ToString::to_string)
+        })
+        .collect::<Vec<_>>();
+    current_paths.sort();
+
+    if current_paths != expected_paths {
+        return false;
+    }
+
+    expected_personas
+        .iter()
+        .all(|entry| runtime_hash_entry_matches(raiz, entry))
+}
+
+fn runtime_state_current(raiz: &Path) -> Result<Option<serde_json::Value>, String> {
+    let path = runtime_state_path();
+    if !path.is_file() {
+        return Ok(None);
+    }
+
+    let raw = match fs::read_to_string(&path) {
+        Ok(value) => value,
+        Err(_) => return Ok(None),
+    };
+
+    let state = match serde_json::from_str::<serde_json::Value>(&raw) {
+        Ok(value) => value,
+        Err(_) => return Ok(None),
+    };
+
+    if state
+        .get("schemaVersion")
+        .and_then(serde_json::Value::as_u64)
+        != Some(1)
+    {
+        return Ok(None);
+    }
+
+    let host = resolver_equipo(raiz)?;
+    if state.get("hostId").and_then(serde_json::Value::as_str) != Some(host.as_str()) {
+        return Ok(None);
+    }
+
+    if !runtime_state_source_matches(raiz, &state) {
+        return Ok(None);
+    }
+
+    Ok(Some(state))
+}
+
+fn canal_json_runtime(raiz: &Path, state: &serde_json::Value) -> Result<Option<String>, String> {
+    let declarado = canal_declarado(raiz, &resolver_equipo(raiz)?)?;
+    let Some(channel) = state.get("channel") else {
+        return Ok(None);
+    };
+    let Some(model) = channel.get("model") else {
+        return Ok(None);
+    };
+    let Some(selected) = model.get(&declarado) else {
+        return Ok(None);
+    };
+
+    let option = |id: &str| -> Option<serde_json::Value> {
+        let value = model.get(id)?;
+        Some(serde_json::json!({
+            "id": id,
+            "labels": {
+                "es": value.get("label")?,
+                "en": value.get("label_en")?,
+                "hu": value.get("label_hu")?
+            },
+            "descriptions": {
+                "es": value.get("description")?,
+                "en": value.get("description_en")?,
+                "hu": value.get("description_hu")?
+            },
+            "sources": {
+                "nixpkgs": value.get("nixpkgs_ref")?,
+                "aagl": value.get("aagl_ref")?
+            }
+        }))
+    };
+
+    let Some(stable) = option("stable") else {
+        return Ok(None);
+    };
+    let Some(unstable) = option("unstable") else {
+        return Ok(None);
+    };
+
+    let output = serde_json::json!({
+        "schemaVersion": 1,
+        "hostId": state.get("hostId").cloned().unwrap_or(serde_json::Value::Null),
+        "declared": declarado,
+        "effective": channel.get("effective").cloned().unwrap_or(serde_json::Value::Null),
+        "label": selected.get("label").cloned().unwrap_or(serde_json::Value::Null),
+        "description": selected.get("description").cloned().unwrap_or(serde_json::Value::Null),
+        "nixosVersion": channel.get("nixosVersion").cloned().unwrap_or(serde_json::Value::Null),
+        "stateVersion": channel.get("stateVersion").cloned().unwrap_or(serde_json::Value::Null),
+        "stateVersionIndependent": true,
+        "sources": {
+            "nixpkgs": selected.get("nixpkgs_ref").cloned().unwrap_or(serde_json::Value::Null),
+            "aagl": selected.get("aagl_ref").cloned().unwrap_or(serde_json::Value::Null)
+        },
+        "options": [stable, unstable]
+    });
+
+    Ok(Some(output.to_string()))
+}
+
 fn canal_json(raiz: &Path) -> Result<String, String> {
+    if let Some(runtime) = runtime_state_current(raiz)? {
+        if let Some(output) = canal_json_runtime(raiz, &runtime)? {
+            return Ok(output);
+        }
+    }
+
     let equipo = resolver_equipo(raiz)?;
     let declarado = canal_declarado(raiz, &equipo)?;
 
@@ -1538,17 +1724,35 @@ fn hardware_json(raiz: &Path) -> Result<String, String> {
         "bios"
     };
 
-    let arch_declarada = flake_raw(
-        raiz,
-        &format!("nixosConfigurations.{equipo}.config.nixpkgs.hostPlatform.system"),
-    )
-    .unwrap_or_default();
+    let runtime = runtime_state_current(raiz)?;
 
-    let firmware_declarado = flake_raw(
-        raiz,
-        &format!("nixosConfigurations.{equipo}.config.korunix.hardware.firmware"),
-    )
-    .unwrap_or_default();
+    let arch_declarada = if let Some(value) = runtime
+        .as_ref()
+        .and_then(|state| state.pointer("/hardware/platform"))
+        .and_then(serde_json::Value::as_str)
+    {
+        value.to_string()
+    } else {
+        flake_raw(
+            raiz,
+            &format!("nixosConfigurations.{equipo}.config.nixpkgs.hostPlatform.system"),
+        )
+        .unwrap_or_default()
+    };
+
+    let firmware_declarado = if let Some(value) = runtime
+        .as_ref()
+        .and_then(|state| state.pointer("/hardware/firmware"))
+        .and_then(serde_json::Value::as_str)
+    {
+        value.to_string()
+    } else {
+        flake_raw(
+            raiz,
+            &format!("nixosConfigurations.{equipo}.config.korunix.hardware.firmware"),
+        )
+        .unwrap_or_default()
+    };
 
     let virtualizacion_raw = capturar_opcional("systemd-detect-virt", &[], raiz);
     let (virtualizacion, virtualizado) =
@@ -1758,8 +1962,205 @@ fn perfil_base_json(raiz: &Path, ruta: &Path, id: &str) -> Result<String, String
     )
 }
 
+fn usuarios_json_runtime(
+    raiz: &Path,
+    equipo: &str,
+    state: &serde_json::Value,
+) -> Result<Option<String>, String> {
+    let Some(people) = state.get("people") else {
+        return Ok(None);
+    };
+    let Some(raw_profiles) = people.get("profiles").and_then(serde_json::Value::as_array) else {
+        return Ok(None);
+    };
+
+    let passwd = capturar_opcional("getent", &["passwd"], raiz);
+    let minimo = uid_minimo();
+
+    let mut profiles = raw_profiles.clone();
+    for profile in &mut profiles {
+        let Some(object) = profile.as_object_mut() else {
+            return Ok(None);
+        };
+        let account = object
+            .get("effectiveAccountName")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        let exists = passwd
+            .lines()
+            .any(|line| line.split(':').next() == Some(account));
+        object.insert("accountExists".to_string(), serde_json::json!(exists));
+    }
+
+    let mut cuentas = Vec::<serde_json::Value>::new();
+    let mut detectados_admin = 0usize;
+    let mut adoptados = 0usize;
+    let mut adoptables = 0usize;
+
+    for linea in passwd.lines() {
+        let campos = linea.split(':').collect::<Vec<_>>();
+        if campos.len() < 7 {
+            continue;
+        }
+
+        let cuenta = campos[0];
+        let Ok(uid) = campos[2].parse::<u32>() else {
+            continue;
+        };
+
+        if uid < minimo || uid >= 65534 {
+            continue;
+        }
+
+        let home = campos[5];
+        let shell = campos[6];
+        if cuenta_tecnica(home, shell) {
+            continue;
+        }
+
+        let display_name = campos[4]
+            .split(',')
+            .next()
+            .filter(|value| !value.is_empty())
+            .unwrap_or(cuenta);
+
+        let grupos_texto = capturar_opcional("id", &["-nG", cuenta], raiz);
+        let mut grupos = grupos_texto
+            .split_whitespace()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+        grupos.sort();
+        grupos.dedup();
+
+        let administrador = grupos.iter().any(|group| group == "wheel");
+        if administrador {
+            detectados_admin += 1;
+        }
+
+        let profile = profiles.iter().find(|profile| {
+            profile
+                .get("effectiveAccountName")
+                .and_then(serde_json::Value::as_str)
+                == Some(cuenta)
+        });
+
+        let (profile_id, status) = match profile {
+            Some(profile)
+                if profile
+                    .get("assignedToHost")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false) =>
+            {
+                adoptados += 1;
+                (
+                    profile
+                        .get("id")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null),
+                    "adopted",
+                )
+            }
+            Some(profile) => (
+                profile
+                    .get("id")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null),
+                "profile-available",
+            ),
+            None => {
+                adoptables += 1;
+                (serde_json::Value::Null, "adoptable")
+            }
+        };
+
+        cuentas.push(serde_json::json!({
+            "accountName": cuenta,
+            "displayName": display_name,
+            "uid": uid,
+            "home": home,
+            "shell": shell,
+            "administrator": administrador,
+            "groups": grupos,
+            "profileId": profile_id,
+            "status": status
+        }));
+    }
+
+    let declarados_admin = profiles
+        .iter()
+        .filter(|profile| {
+            profile
+                .get("assignedToHost")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false)
+                && profile
+                    .get("administrator")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false)
+        })
+        .count();
+
+    let output = serde_json::json!({
+        "schemaVersion": 2,
+        "hostId": equipo,
+        "detectedAt": fecha_iso(raiz)?,
+        "accounts": cuentas,
+        "profiles": profiles,
+        "summary": {
+            "humanAccounts": cuentas.len(),
+            "adoptedAccounts": adoptados,
+            "adoptableAccounts": adoptables,
+            "detectedAdministrators": detectados_admin,
+            "declaredAdministrators": declarados_admin
+        },
+        "hostUserIds": people
+            .get("hostUserIds")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!([])),
+        "policy": {
+            "mutableUsers": people
+                .get("mutableUsers")
+                .cloned()
+                .unwrap_or(serde_json::Value::Bool(true)),
+            "preserveExistingPasswords": true,
+            "repositoryStoresPasswords": false,
+            "newPasswordMethod": "system-passwd",
+            "androidAccessModel": "systemd-uaccess",
+            "portableProfileSchemaVersion": 3,
+            "compatiblePortableProfileSchemaVersions": [1, 2, 3],
+            "portableFields": [
+                "id",
+                "accountName",
+                "fullName",
+                "language",
+                "interfaceLanguage",
+                "inputMethods",
+                "capabilities",
+                "avatar"
+            ],
+            "hostLocalFields": [
+                "homeDirectory",
+                "administrator",
+                "deferredCapabilities",
+                "deferredInputMethods",
+                "preservedGroups",
+                "password"
+            ]
+        }
+    });
+
+    Ok(Some(output.to_string()))
+}
+
 fn usuarios_json(raiz: &Path) -> Result<String, String> {
     let equipo = resolver_equipo(raiz)?;
+
+    if let Some(runtime) = runtime_state_current(raiz)? {
+        if let Some(output) = usuarios_json_runtime(raiz, &equipo, &runtime)? {
+            return Ok(output);
+        }
+    }
+
     let host_users = flake_json(
         raiz,
         &format!("nixosConfigurations.{equipo}.config.korunix.users"),
@@ -2123,8 +2524,272 @@ fn proceso_usuario_activo(raiz: &Path, nombre: &str) -> bool {
     comando_exitoso("pgrep", &["-u", &uid, "-x", nombre], raiz)
 }
 
+fn locale_normalizado_runtime(value: &str) -> String {
+    value.to_ascii_lowercase().replace('-', "").replace('.', "")
+}
+
+fn localizacion_json_runtime(
+    raiz: &Path,
+    equipo: &str,
+    state: &serde_json::Value,
+) -> Result<Option<String>, String> {
+    let Some(localization) = state.get("localization") else {
+        return Ok(None);
+    };
+    let Some(declared) = localization.get("declared") else {
+        return Ok(None);
+    };
+    let Some(derived) = localization.get("derived") else {
+        return Ok(None);
+    };
+    let Some(input_method) = localization.get("inputMethod") else {
+        return Ok(None);
+    };
+
+    let actual_lang = runtime_lang(raiz);
+    let actual_timezone = capturar_opcional(
+        "timedatectl",
+        &["show", "--property=Timezone", "--value"],
+        raiz,
+    );
+    let actual_layout = localectl_campo(raiz, "X11 Layout");
+    let actual_variant = localectl_campo(raiz, "X11 Variant");
+    let actual_options = localectl_campo(raiz, "X11 Options");
+    let actual_console = runtime_console();
+
+    let noctalia = localization
+        .get("noctaliaLanguages")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let profiles = state
+        .pointer("/people/profiles")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    let mut people = Vec::<serde_json::Value>::new();
+    let mut any_enabled_input = false;
+
+    for profile in profiles {
+        let enabled = profile
+            .get("enabledInputMethods")
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+
+        if !enabled.is_empty() {
+            any_enabled_input = true;
+        }
+
+        let language = profile.get("language").and_then(serde_json::Value::as_str);
+
+        let noctalia_available = match language {
+            Some(language) => serde_json::Value::Bool(
+                noctalia
+                    .iter()
+                    .any(|value| value.as_str() == Some(language)),
+            ),
+            None => serde_json::Value::Null,
+        };
+
+        people.push(serde_json::json!({
+            "id": profile.get("id").cloned().unwrap_or(serde_json::Value::Null),
+            "fullName": profile.get("fullName").cloned().unwrap_or(serde_json::Value::Null),
+            "language": profile.get("language").cloned().unwrap_or(serde_json::Value::Null),
+            "inputMethods": profile.get("inputMethods").cloned().unwrap_or_else(|| serde_json::json!([])),
+            "enabledInputMethods": enabled,
+            "deferredInputMethods": profile.get("deferredInputMethods").cloned().unwrap_or_else(|| serde_json::json!([])),
+            "effectiveAccountName": profile.get("effectiveAccountName").cloned().unwrap_or(serde_json::Value::Null),
+            "noctaliaTranslationAvailable": noctalia_available
+        }));
+    }
+
+    let system_locale = derived
+        .get("systemLocale")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let keyboard = derived
+        .get("keyboard")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({}));
+    let declared_timezone = declared
+        .get("timeZone")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+
+    let xkb_layout = keyboard
+        .get("layout")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let xkb_variant = keyboard
+        .get("variant")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let xkb_options = keyboard
+        .get("options")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let console_map = keyboard
+        .get("console")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+
+    let input_type = input_method
+        .pointer("/nixos/type")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("none");
+
+    let mut contradictions = Vec::<serde_json::Value>::new();
+
+    if any_enabled_input && input_type != "fcitx5" {
+        contradictions.push(serde_json::json!({
+            "field": "inputMethod.backend",
+            "declared": "fcitx5",
+            "actual": input_type,
+            "message": "Hay métodos de entrada avanzados efectivos pero el backend candidato no es Fcitx5."
+        }));
+    }
+
+    if !actual_lang.is_empty()
+        && locale_normalizado_runtime(&actual_lang) != locale_normalizado_runtime(system_locale)
+    {
+        contradictions.push(serde_json::json!({
+            "field": "systemLocale",
+            "declared": system_locale,
+            "actual": actual_lang,
+            "message": "LANG activo no coincide con el locale declarado."
+        }));
+    }
+
+    if !actual_timezone.is_empty() && actual_timezone != declared_timezone {
+        contradictions.push(serde_json::json!({
+            "field": "timeZone",
+            "declared": declared_timezone,
+            "actual": actual_timezone,
+            "message": "La zona horaria activa no coincide con la declarada."
+        }));
+    }
+
+    for (field, declared_value, actual_value, message) in [
+        (
+            "keyboard.layout",
+            xkb_layout,
+            actual_layout.as_str(),
+            "Los layouts XKB activos no coinciden con Korunix.",
+        ),
+        (
+            "keyboard.variant",
+            xkb_variant,
+            actual_variant.as_str(),
+            "Las variantes XKB activas no coinciden con Korunix.",
+        ),
+        (
+            "keyboard.options",
+            xkb_options,
+            actual_options.as_str(),
+            "Las opciones XKB activas no coinciden con Korunix.",
+        ),
+        (
+            "keyboard.console",
+            console_map,
+            actual_console.as_str(),
+            "El mapa de consola activo no coincide con Korunix.",
+        ),
+    ] {
+        if !actual_value.is_empty() && actual_value != declared_value {
+            contradictions.push(serde_json::json!({
+                "field": field,
+                "declared": declared_value,
+                "actual": actual_value,
+                "message": message
+            }));
+        }
+    }
+
+    let runtime_gtk_im = env::var("GTK_IM_MODULE").unwrap_or_default();
+    let runtime_qt_im = env::var("QT_IM_MODULE").unwrap_or_default();
+    let runtime_xmodifiers = env::var("XMODIFIERS").unwrap_or_default();
+    let runtime_desktop = env::var("XDG_CURRENT_DESKTOP").ok();
+
+    let optional_runtime = |value: String| {
+        if value.is_empty() {
+            serde_json::Value::Null
+        } else {
+            serde_json::Value::String(value)
+        }
+    };
+
+    let output = serde_json::json!({
+        "schemaVersion": 2,
+        "host": equipo,
+        "ownership": {
+            "portableUserFields": ["language", "inputMethods"],
+            "hostLocalFields": [
+                "systemLanguage",
+                "region",
+                "formats",
+                "timeZone",
+                "keyboard",
+                "deferredInputMethods"
+            ]
+        },
+        "declared": declared,
+        "derived": derived,
+        "runtime": {
+            "lang": actual_lang,
+            "timeZone": actual_timezone,
+            "keyboard": {
+                "layout": actual_layout,
+                "variant": actual_variant,
+                "options": actual_options,
+                "console": actual_console
+            },
+            "desktop": runtime_desktop
+        },
+        "people": people,
+        "noctalia": {
+            "supportedLanguages": noctalia
+        },
+        "inputMethod": {
+            "candidate": input_method
+                .get("candidate")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({})),
+            "nixos": {
+                "enabled": input_method
+                    .pointer("/nixos/enabled")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Bool(false)),
+                "type": input_type,
+                "package": input_method
+                    .pointer("/nixos/package")
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::Value::String(String::new()))
+            },
+            "runtime": {
+                "gtkImModule": optional_runtime(runtime_gtk_im),
+                "qtImModule": optional_runtime(runtime_qt_im),
+                "xmodifiers": optional_runtime(runtime_xmodifiers),
+                "fcitx5Running": proceso_usuario_activo(raiz, "fcitx5"),
+                "ibusRunning": proceso_usuario_activo(raiz, "ibus-daemon")
+            }
+        },
+        "contradictions": contradictions
+    });
+
+    Ok(Some(output.to_string()))
+}
+
 fn localizacion_json(raiz: &Path) -> Result<String, String> {
     let equipo = resolver_equipo(raiz)?;
+
+    if let Some(runtime) = runtime_state_current(raiz)? {
+        if let Some(output) = localizacion_json_runtime(raiz, &equipo, &runtime)? {
+            return Ok(output);
+        }
+    }
 
     let declared = flake_json(
         raiz,

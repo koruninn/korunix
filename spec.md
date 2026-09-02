@@ -400,6 +400,24 @@ como aplicar, actualizar o transferir. Navegar a Hardware no debe esperar a que
 Aplicaciones, Firmware, Mantenimiento u otra sección no visitada terminen de
 consultarse.
 
+Las lecturas cotidianas de **Resumen**, **Hardware**, **Idioma y región**,
+**Personas** y **Canal de actualizaciones** no deben reevaluar repetidamente el
+flake para reconstruir información que ya pertenece a la generación activa.
+Cada generación publica un contrato local generado por Nix con ese estado
+efectivo y con las rutas de catálogos que necesita el motor. Mientras los hashes
+de las fuentes humanas y generadas coincidan con los registrados en ese
+contrato, Rust lo lee directamente y combina únicamente los hechos vivos que
+correspondan.
+
+Ese contrato local no sustituye a Nix como fuente de verdad y tampoco puede
+convertirse en una caché silenciosamente obsoleta. Si el archivo del equipo, el
+hardware generado, la definición de canales o los perfiles de personas cambian
+desde la generación activa, Korunix invalida la ruta rápida y vuelve a la
+evaluación declarativa necesaria para reconciliar el estado. Después de aplicar
+la nueva generación, el contrato vuelve a quedar materializado de forma
+coherente. Abrir una página normal con fuentes sin cambios no debe lanzar
+`nix eval`.
+
 Una pantalla debe poder responder inmediatamente:
 
 1. ¿Dónde estoy?

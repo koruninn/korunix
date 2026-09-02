@@ -366,6 +366,19 @@ else
   fallo 'el medidor volvió a bloquear el nivel de entrada o perdió su etiqueta humana'
 fi
 
+if grep -Fq './sistema/estado.nix' flake.nix \
+   && grep -Fq 'environment.etc."korunix/runtime-state.json".text' sistema/estado.nix \
+   && grep -Fq 'fn runtime_state_current' sistema/programa/principal.rs \
+   && grep -Fq 'fn usuarios_json_runtime' sistema/programa/principal.rs \
+   && grep -Fq 'fn localizacion_json_runtime' sistema/programa/principal.rs \
+   && grep -Fq '/localization/catalog/xkbRoot' sistema/programa/operaciones.rs \
+   && grep -Fq 'Abrir una página normal con fuentes sin cambios no debe lanzar' spec.md
+then
+  ok 'lecturas normales usan el estado materializado de la generación'
+else
+  fallo 'Resumen, Personas o Localización pueden volver a reevaluar Nix sin necesidad'
+fi
+
 if grep -Fq 'let modelo_fisico = modelo_audio_conocido(&huella);' sistema/interfaz/principal.rs \
    && grep -Fq 'format!("{modelo} · {entrada}")' sistema/interfaz/principal.rs \
    && grep -Fq 'format!("Realtek ALC897 · {salida}")' sistema/interfaz/principal.rs \

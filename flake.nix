@@ -340,6 +340,7 @@
           ./sistema/aplicaciones.nix
           ./sistema/servicios.nix
           ./sistema/personas.nix
+          ./sistema/estado.nix
 
           selectedAagl.nixosModules.default
           inputs.figma-linux-next.nixosModules.default
