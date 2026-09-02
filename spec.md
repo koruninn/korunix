@@ -2540,6 +2540,15 @@ deben anunciarse al mecanismo de volúmenes del escritorio; en la integración
 GNOME/GVfs esto requiere `x-gvfs-show` o un mecanismo equivalente que conserve
 el montaje por UUID y el acceso automático ya declarados.
 
+Cuando una aplicación de Korunix cambia efectivamente `/etc/fstab`, la sesión ya
+abierta debe conocer la nueva lista de unidades sin exigir cerrar sesión ni
+reiniciar el gestor de archivos. En escritorios que usan GVfs, Korunix debe
+refrescar de forma dirigida `gvfs-udisks2-volume-monitor.service` después de
+verificar correctamente la activación. El refresco solo corresponde cuando el
+contenido efectivo de `fstab` cambió; debe usar `try-restart`, no iniciar GVfs en
+un escritorio que no lo utiliza, y un fallo de este refresco auxiliar no debe
+convertir una activación de NixOS ya verificada en una activación fallida.
+
 Korunix nunca debe almacenar una clave de cifrado en el repositorio o en un perfil portable.
 
 ## 59. Experiencia offline y actualización local

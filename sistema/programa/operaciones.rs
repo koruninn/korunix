@@ -93,6 +93,45 @@ fn visible(raiz: &Path, programa: &str, args: &[String]) -> Result<(), String> {
     }
 }
 
+fn fstab_cambio(antes: &Option<Vec<u8>>, despues: &Option<Vec<u8>>) -> bool {
+    antes != despues
+}
+
+fn refrescar_monitor_gvfs_si_cambio_fstab(fstab_antes: Option<Vec<u8>>) {
+    let fstab_despues = fs::read("/etc/fstab").ok();
+
+    if !fstab_cambio(&fstab_antes, &fstab_despues) {
+        return;
+    }
+
+    // GVfs no siempre vuelve a leer /etc/fstab cuando NixOS activa una nueva
+    // generación. Un reinicio dirigido de su monitor de UDisks actualiza la
+    // lista de unidades sin cerrar Nautilus ni reiniciar la sesión completa.
+    // `try-restart` no inicia el servicio en escritorios que no lo usan.
+    let _ = Command::new(tool("systemctl"))
+        .args([
+            "--user",
+            "try-restart",
+            "gvfs-udisks2-volume-monitor.service",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
+#[cfg(test)]
+#[test]
+fn cambio_de_fstab_activa_refresco_solo_si_cambia_el_contenido() {
+    let original = Some(b"unidad-a\n".to_vec());
+    let igual = Some(b"unidad-a\n".to_vec());
+    let diferente = Some(b"unidad-a\nunidad-b\n".to_vec());
+
+    assert!(!fstab_cambio(&original, &igual));
+    assert!(fstab_cambio(&original, &diferente));
+    assert!(fstab_cambio(&None, &original));
+}
+
 fn jq0(raiz: &Path, args: &[String]) -> Result<String, String> {
     jq_con_entrada(raiz, args, "")
 }
@@ -3607,6 +3646,10 @@ fn change_cycle(raiz: &Path, command: &str, args: &[String]) -> Result<ExitCode,
         return Ok(ExitCode::SUCCESS);
     }
 
+    // Guardamos el estado previo para refrescar únicamente los monitores de
+    // volúmenes cuando la activación cambie realmente la tabla declarada.
+    let fstab_antes = fs::read("/etc/fstab").ok();
+
     let host = resolver_equipo(raiz)?;
     let flake = flake_reference(raiz, &host);
 
@@ -3665,6 +3708,8 @@ fn change_cycle(raiz: &Path, command: &str, args: &[String]) -> Result<ExitCode,
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
+
+    refrescar_monitor_gvfs_si_cambio_fstab(fstab_antes);
 
     emitir_fase(json, 100, "done", "Configuración aplicada.");
 

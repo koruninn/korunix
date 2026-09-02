@@ -616,6 +616,20 @@ else
   fallo 'la unidad de datos perdió disponibilidad o visibilidad en el gestor de archivos'
 fi
 
+if rg -q 'fn refrescar_monitor_gvfs_si_cambio_fstab\(' "$operaciones" \
+   && grep -Fq 'let fstab_antes = fs::read("/etc/fstab").ok();' "$operaciones" \
+   && grep -Fq '"try-restart",' "$operaciones" \
+   && grep -Fq '"gvfs-udisks2-volume-monitor.service",' "$operaciones" \
+   && grep -Fq 'refrescar_monitor_gvfs_si_cambio_fstab(fstab_antes);' "$operaciones" \
+   && grep -Fq 'verificar correctamente la activación. El refresco solo corresponde cuando el' spec.md \
+   && grep -Fq 'contenido efectivo de' spec.md \
+   && grep -Fq 'cambió; debe usar' spec.md
+then
+  ok 'apply refresca GVfs únicamente cuando cambia fstab'
+else
+  fallo 'apply puede dejar GVfs con una lista de unidades obsoleta'
+fi
+
 if rg -q 'c922 pro stream webcam' sistema/interfaz/principal.rs \
    && rg -q 'Realtek ALC897' sistema/interfaz/principal.rs \
    && rg -q 'device\.product\.name' sistema/interfaz/principal.rs \
