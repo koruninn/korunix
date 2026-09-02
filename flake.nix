@@ -358,8 +358,13 @@
                 userSettings = hostUserSettings;
               };
 
+            # Korunix forma parte del propio sistema que administra. Instalar el
+            # paquete gráfico aquí publica tanto el ejecutable como su entrada
+            # .desktop, de modo que una persona pueda abrirlo desde el lanzador
+            # sin conocer `nix run`, `just` ni la ubicación del repositorio.
             environment.systemPackages = [
               alejandra.defaultPackage.${system}
+              (korunixGuiFor system)
             ];
           }
         ];

@@ -77,7 +77,11 @@ if grep -Fq 'fila.set_subtitle(match fuente.as_str()' "$interfaz"; then
   exit 1
 fi
 grep -Fq 'Configuración actual' "$interfaz"
-grep -Fq 'grupo.set_visible(false)' "$interfaz"
+
+# La búsqueda global final filtra la navegación lateral y abre el área elegida.
+# Ya no oculta grupos internos con `set_visible(false)`, por lo que exigir ese
+# detalle de una implementación anterior produciría un falso fallo.
+grep -Fq 'terminos_busqueda_pagina' "$interfaz"
 
 if [[ -d app ]]; then
   echo "ERROR: app/ debía desaparecer al retirar la GUI Python." >&2

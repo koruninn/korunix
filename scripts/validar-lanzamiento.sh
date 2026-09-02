@@ -146,6 +146,22 @@ ejecutar \
   --no-net \
   sistema/interfaz/io.github.koruninn.Korunix.metainfo.xml
 
+# Validar el paquete gráfico no basta: debe formar parte de cada sistema
+# declarado para que su ejecutable y su entrada .desktop lleguen realmente al
+# menú de aplicaciones después de aplicar la generación.
+launcher_hosts="$(
+  nix eval --json \
+    path:.#nixosConfigurations \
+    --apply 'cfgs: builtins.mapAttrs (_: cfg: builtins.any (pkg: (pkg.pname or "") == "korunix-interfaz") cfg.config.environment.systemPackages) cfgs'
+)"
+
+if jq -e 'length > 0 and all(.[]; . == true)' <<<"$launcher_hosts" >/dev/null
+then
+  ok 'Korunix instalado en todos los hosts declarados'
+else
+  fallo 'algún host no instala Korunix como aplicación del sistema'
+fi
+
 
 printf '\n%s\n' '→ Nix y arquitecturas'
 
