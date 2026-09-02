@@ -146,22 +146,33 @@ ejecutar \
   --no-net \
   sistema/interfaz/io.github.koruninn.Korunix.metainfo.xml
 
-# Validar el paquete gráfico no basta: debe formar parte de cada sistema
-# declarado para que su ejecutable y su entrada .desktop lleguen realmente al
-# menú de aplicaciones después de aplicar la generación.
+# La GUI y la CLI son superficies distintas del mismo producto. Todos los hosts
+# deben instalar ambas y el .desktop debe apuntar únicamente a la interfaz.
 launcher_hosts="$(
   nix eval --json \
     path:.#nixosConfigurations \
-    --apply 'cfgs: builtins.mapAttrs (_: cfg: builtins.any (pkg: (pkg.pname or "") == "korunix-interfaz") cfg.config.environment.systemPackages) cfgs'
+    --apply 'cfgs: builtins.mapAttrs (_: cfg: {
+      gui = builtins.any (pkg: (pkg.pname or "") == "korunix-interfaz") cfg.config.environment.systemPackages;
+      motor = builtins.any (pkg: (pkg.pname or "") == "korunix") cfg.config.environment.systemPackages;
+    }) cfgs'
 )"
 
-if jq -e 'length > 0 and all(.[]; . == true)' <<<"$launcher_hosts" >/dev/null
+if jq -e \
+  'length > 0 and all(.[]; .gui == true and .motor == true)' \
+  <<<"$launcher_hosts" >/dev/null
 then
-  ok 'Korunix instalado en todos los hosts declarados'
+  ok 'GUI y motor instalados en todos los hosts declarados'
 else
-  fallo 'algún host no instala Korunix como aplicación del sistema'
+  fallo 'algún host no instala conjuntamente la GUI y el motor'
 fi
 
+if grep -Fqx 'Exec=korunix-interfaz' \
+    sistema/interfaz/io.github.koruninn.Korunix.desktop
+then
+  ok 'el lanzador abre korunix-interfaz'
+else
+  fallo 'el lanzador gráfico vuelve a ocupar el comando korunix'
+fi
 
 printf '\n%s\n' '→ Nix y arquitecturas'
 
@@ -200,6 +211,30 @@ ejecutar \
   path:.#motor \
   path:.#korunix \
   path:.#bootstrap
+
+
+motor_out=''
+gui_out=''
+
+if motor_out="$(nix build --no-link --print-out-paths path:.#motor)" \
+   && gui_out="$(nix build --no-link --print-out-paths path:.#korunix)" \
+   && [[ -x "$motor_out/bin/korunix" ]] \
+   && [[ -x "$gui_out/bin/korunix-interfaz" ]] \
+   && [[ ! -e "$gui_out/bin/korunix" ]]
+then
+  ok 'motor y GUI publican ejecutables sin colisión'
+else
+  fallo 'motor y GUI vuelven a competir por /bin/korunix'
+fi
+
+if [[ -n "$motor_out" ]] \
+   && KORUNIX_ROOT="$PWD" "$motor_out/bin/korunix" applications --json \
+      | jq -e '.kind == "korunix-applications-state"' >/dev/null
+then
+  ok 'la CLI empaquetada responde por korunix'
+else
+  fallo 'la CLI empaquetada no responde por korunix'
+fi
 
 
 printf '\n%s\n' '→ Contratos de robustez'

@@ -223,12 +223,13 @@
           appstreamcli validate --no-net \
             "$out/share/metainfo/io.github.koruninn.Korunix.metainfo.xml"
 
-          makeWrapper             "$out/bin/korunix-interfaz"             "$out/bin/korunix"             --set KORUNIX_MOTOR_BIN ${korunixMotorFor system}/bin/korunix
+          wrapProgram "$out/bin/korunix-interfaz" \
+            --set KORUNIX_MOTOR_BIN ${korunixMotorFor system}/bin/korunix
         '';
 
         meta = {
           description = "Centro de control GTK/libadwaita de Korunix";
-          mainProgram = "korunix";
+          mainProgram = "korunix-interfaz";
           platforms = lib.platforms.linux;
         };
       };
@@ -358,12 +359,13 @@
                 userSettings = hostUserSettings;
               };
 
-            # Korunix forma parte del propio sistema que administra. Instalar el
-            # paquete gráfico aquí publica tanto el ejecutable como su entrada
-            # .desktop, de modo que una persona pueda abrirlo desde el lanzador
-            # sin conocer `nix run`, `just` ni la ubicación del repositorio.
+            # Korunix forma parte del propio sistema que administra. El motor
+            # conserva el comando público `korunix` y la interfaz gráfica usa
+            # `korunix-interfaz`; así la CLI y el lanzador no compiten por el
+            # mismo ejecutable.
             environment.systemPackages = [
               alejandra.defaultPackage.${system}
+              (korunixMotorFor system)
               (korunixGuiFor system)
             ];
           }
@@ -386,13 +388,13 @@
     apps = lib.genAttrs systems (system: {
       default = {
         type = "app";
-        program = "${korunixGuiFor system}/bin/korunix";
+        program = "${korunixGuiFor system}/bin/korunix-interfaz";
         meta.description = "Abrir el centro de control de Korunix";
       };
 
       korunix = {
         type = "app";
-        program = "${korunixGuiFor system}/bin/korunix";
+        program = "${korunixGuiFor system}/bin/korunix-interfaz";
         meta.description = "Abrir el centro de control de Korunix";
       };
 

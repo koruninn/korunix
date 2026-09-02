@@ -2,7 +2,7 @@
 Type=Application
 Name=Korunix
 Comment=Administra NixOS mediante decisiones humanas
-Exec=korunix
+Exec=korunix-interfaz
 Icon=preferences-system-symbolic
 Terminal=false
 Categories=Settings;
