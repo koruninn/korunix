@@ -345,6 +345,27 @@ else
   fallo 'la oferta posterior a transferir volvió a confundir expulsión con cancelación'
 fi
 
+medidor_microfono="$(
+  sed -n '/^fn medir_microfono_gui(/,/^fn ejecutar_prueba_salida_gui(/p' sistema/interfaz/principal.rs
+)"
+
+entrada_microfono="$(
+  sed -n '/^[[:space:]]*let grupo_entrada = adw::PreferencesGroup::new();/,/^[[:space:]]*pagina.add(&grupo_entrada);/p' sistema/interfaz/principal.rs
+)"
+
+if [[ -n "$medidor_microfono" ]] \
+   && ! grep -Fq 'estado.ocupado' <<<"$medidor_microfono" \
+   && grep -Fq '"input_level"' <<<"$entrada_microfono" \
+   && grep -Fq '"default_input_level"' <<<"$entrada_microfono" \
+   && grep -Fq '(Idioma::Espanol, "input_level") => "Nivel de entrada"' sistema/interfaz/principal.rs \
+   && grep -Fq 'Mientras ese medidor esté activo, ajustar' spec.md \
+   && grep -Fq 'cambiar el nivel son operaciones compatibles' spec.md
+then
+  ok 'medidor de micrófono permite ajustar el nivel de entrada en vivo'
+else
+  fallo 'el medidor volvió a bloquear el nivel de entrada o perdió su etiqueta humana'
+fi
+
 if grep -Fq 'let modelo_fisico = modelo_audio_conocido(&huella);' sistema/interfaz/principal.rs \
    && grep -Fq 'format!("{modelo} · {entrada}")' sistema/interfaz/principal.rs \
    && grep -Fq 'format!("Realtek ALC897 · {salida}")' sistema/interfaz/principal.rs \

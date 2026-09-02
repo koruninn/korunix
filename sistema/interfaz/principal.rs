@@ -7867,6 +7867,52 @@ fn texto_prueba_multimedia(idioma: Idioma, clave: &str) -> &'static str {
         (Idioma::Ucraniano, "mic_pick") => "Мікрофон для перевірки",
         (Idioma::Vietnamita, "mic_pick") => "Micrô để kiểm tra",
         (Idioma::ChinoSimplificado, "mic_pick") => "待测试麦克风",
+        (Idioma::Ingles, "input_level") => "Input level",
+        (Idioma::BelarusLatino, "input_level") => "Uzrovień uvachodu",
+        (Idioma::Belarus, "input_level") => "Узровень уваходу",
+        (Idioma::Catalan, "input_level") => "Nivell d'entrada",
+        (Idioma::Checo, "input_level") => "Vstupní úroveň",
+        (Idioma::Aleman, "input_level") => "Eingangspegel",
+        (Idioma::Frances, "input_level") => "Niveau d’entrée",
+        (Idioma::Gallego, "input_level") => "Nivel de entrada",
+        (Idioma::Hungaro, "input_level") => "Bemeneti szint",
+        (Idioma::Italiano, "input_level") => "Livello di ingresso",
+        (Idioma::Coreano, "input_level") => "입력 레벨",
+        (Idioma::Kurdo, "input_level") => "Asta têketinê",
+        (Idioma::Neerlandes, "input_level") => "Ingangsniveau",
+        (Idioma::NoruegoNynorsk, "input_level") => "Inngangsnivå",
+        (Idioma::Polaco, "input_level") => "Poziom wejścia",
+        (Idioma::PortuguesBrasil, "input_level") => "Nível de entrada",
+        (Idioma::Ruso, "input_level") => "Уровень входа",
+        (Idioma::Sueco, "input_level") => "Ingångsnivå",
+        (Idioma::Turco, "input_level") => "Giriş seviyesi",
+        (Idioma::Ucraniano, "input_level") => "Рівень входу",
+        (Idioma::Vietnamita, "input_level") => "Mức đầu vào",
+        (Idioma::ChinoSimplificado, "input_level") => "输入电平",
+        (Idioma::Espanol, "input_level") => "Nivel de entrada",
+        (Idioma::Ingles, "default_input_level") => "Default · Input level",
+        (Idioma::BelarusLatino, "default_input_level") => "Pradvyznačana · Uzrovień uvachodu",
+        (Idioma::Belarus, "default_input_level") => "Па змаўчанні · Узровень уваходу",
+        (Idioma::Catalan, "default_input_level") => "Per defecte · Nivell d'entrada",
+        (Idioma::Checo, "default_input_level") => "Výchozí · Vstupní úroveň",
+        (Idioma::Aleman, "default_input_level") => "Standard · Eingangspegel",
+        (Idioma::Frances, "default_input_level") => "Par défaut · Niveau d’entrée",
+        (Idioma::Gallego, "default_input_level") => "Predeterminado · Nivel de entrada",
+        (Idioma::Hungaro, "default_input_level") => "Alapértelmezett · Bemeneti szint",
+        (Idioma::Italiano, "default_input_level") => "Predefinito · Livello di ingresso",
+        (Idioma::Coreano, "default_input_level") => "기본값 · 입력 레벨",
+        (Idioma::Kurdo, "default_input_level") => "Bingehîn · Asta têketinê",
+        (Idioma::Neerlandes, "default_input_level") => "Standaard · Ingangsniveau",
+        (Idioma::NoruegoNynorsk, "default_input_level") => "Standard · Inngangsnivå",
+        (Idioma::Polaco, "default_input_level") => "Domyślne · Poziom wejścia",
+        (Idioma::PortuguesBrasil, "default_input_level") => "Padrão · Nível de entrada",
+        (Idioma::Ruso, "default_input_level") => "По умолчанию · Уровень входа",
+        (Idioma::Sueco, "default_input_level") => "Standard · Ingångsnivå",
+        (Idioma::Turco, "default_input_level") => "Varsayılan · Giriş seviyesi",
+        (Idioma::Ucraniano, "default_input_level") => "За замовчуванням · Рівень входу",
+        (Idioma::Vietnamita, "default_input_level") => "Mặc định · Mức đầu vào",
+        (Idioma::ChinoSimplificado, "default_input_level") => "默认 · 输入电平",
+        (Idioma::Espanol, "default_input_level") => "Predeterminado · Nivel de entrada",
         (Idioma::Ingles, "mic_level") => "Live microphone level",
         (Idioma::BelarusLatino, "mic_level") => "Žyvy ŭzrovjen mikrafona",
         (Idioma::Belarus, "mic_level") => "Жывы ўзровень мікрафона",
@@ -8275,10 +8321,6 @@ fn medir_microfono_gui(
     porcentaje: &gtk::Label,
     continuar: Rc<Cell<bool>>,
 ) -> Result<(), String> {
-    if estado.ocupado.replace(true) {
-        return Err("Korunix ya está realizando otra operación.".to_string());
-    }
-
     barra.set_value(0.0);
     porcentaje.set_text("Midiendo…");
 
@@ -8391,7 +8433,6 @@ fn medir_microfono_gui(
     }
 
     continuar.set(false);
-    estado.ocupado.set(false);
     resultado_final
 }
 
@@ -9275,35 +9316,14 @@ fn pagina_multimedia(estado: Rc<Estado>, datos: &Value) -> adw::PreferencesPage 
                 .map(|id| Some(id) == predeterminado)
                 .unwrap_or(false);
 
-            let subtitulo = if es_predeterminado {
-                match estado.idioma {
-                    Idioma::Ingles => "Default · Volume",
-                    Idioma::BelarusLatino => "Pa zmaŭčanni · Ab'jom",
-                    Idioma::Belarus => "Па змаўчанні · Аб'ём",
-                    Idioma::Catalan => "Per defecte · Volum",
-                    Idioma::Checo => "Výchozí · Hlasitost",
-                    Idioma::Aleman => "Standard · Lautstärke",
-                    Idioma::Frances => "Par défaut · Volume",
-                    Idioma::Gallego => "Predeterminado · Volume",
-                    Idioma::Italiano => "Predefinito · Volume",
-                    Idioma::Coreano => "기본값 · 볼륨",
-                    Idioma::Kurdo => "Bingehîn · Volume",
-                    Idioma::Neerlandes => "Standaard · Volume",
-                    Idioma::NoruegoNynorsk => "Standard · Volum",
-                    Idioma::Polaco => "Domyślne · Głośność",
-                    Idioma::PortuguesBrasil => "Padrão · Volume",
-                    Idioma::Ruso => "По умолчанию · Объем",
-                    Idioma::Sueco => "Standard · Volym",
-                    Idioma::Turco => "Varsayılan · Hacim",
-                    Idioma::Ucraniano => "За замовчуванням · Гучність",
-                    Idioma::Vietnamita => "Mặc định · Âm lượng",
-                    Idioma::ChinoSimplificado => "默认·音量",
-                    Idioma::Hungaro => "Alapértelmezett · Hangerő",
-                    Idioma::Espanol => "Predeterminado · Volumen",
-                }
-            } else {
-                texto(estado.idioma, "volume")
-            };
+            let subtitulo = texto_prueba_multimedia(
+                estado.idioma,
+                if es_predeterminado {
+                    "default_input_level"
+                } else {
+                    "input_level"
+                },
+            );
 
             row.set_subtitle(subtitulo);
 

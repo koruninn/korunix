@@ -3308,8 +3308,14 @@ cuando corresponda.
 
 Las acciones Izquierda, Derecha y Ambos lados pertenecen a una misma prueba de salida. Mientras una de ellas está en curso, las otras deben esperar o quedar temporalmente no disponibles; pulsarlas seguidamente no debe generar un error genérico de concurrencia. El micrófono seleccionado debe disponer de medidor de nivel
 en vivo que se inicia y se detiene manualmente mediante el mismo control, sin
-una duración fija impuesta por Korunix, y de un flujo explícito
-**Probar micrófono** con **Grabar prueba**,
+una duración fija impuesta por Korunix. Mientras ese medidor esté activo, ajustar
+el **Nivel de entrada** del mismo micrófono debe seguir disponible: medir señal y
+cambiar el nivel son operaciones compatibles y la medición no debe apropiarse del
+bloqueo global de operaciones. En la interfaz normal este control se presenta como
+**Nivel de entrada** o una traducción humana equivalente, no como un “Volumen”
+genérico.
+
+El micrófono conserva además un flujo explícito **Probar micrófono** con **Grabar prueba**,
 **Reproducir prueba** y **Grabar de nuevo**. La grabación es temporal, se elimina
 automáticamente al terminar salvo petición explícita y nunca se sustituye por
 monitorización directa del micrófono. La GUI no debe reimplementar estas
