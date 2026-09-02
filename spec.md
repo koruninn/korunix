@@ -1149,6 +1149,38 @@ Fetch    → fetch
 
 Durante la migración de la configuración personal actual, Korunix debe trasladar la intención visual y la información mostrada desde la configuración existente de Fastfetch al formato propio de `fetch`, conservando la presentación ordenada y aprovechando sus capacidades visuales, incluido su logo 3D animado cuando corresponda.
 
+La salida cotidiana de `fetch` conserva la intención compacta de la configuración
+histórica de Fastfetch de `main`. El conjunto normal es, en este orden conceptual:
+
+```text
+SO
+Núcleo
+Shell
+Escritorio
+Procesador
+Memoria RAM
+Disco (/)
+Colores
+```
+
+Host, tiempo encendido, pantalla, iconos, fuente, terminal, GPU, swap, IP local y
+locale no forman parte del saludo normal. Pueden existir en diagnósticos o en una
+vista avanzada, pero no deben ensanchar ni alargar la terminal cotidiana.
+
+El logo 3D de Fetch se conserva, pero debe utilizar una escala razonable para que
+la presentación completa quepa cómodamente en una terminal normal. La animación
+no justifica desplazar el logo fuera de la ventana ni obligar a usar un ancho
+excesivo.
+
+La configuración efectiva del comando `fetch` debe ser determinista. Un archivo
+heredado en `~/.config/fetch/config` no puede anular silenciosamente la presentación
+de Korunix. La versión actual de Fetch busca su archivo directamente bajo
+`$HOME/.config/fetch/config` y no utiliza `XDG_CONFIG_HOME`; por ello Korunix puede
+dar al proceso `fetch` un HOME privado que contenga únicamente su configuración.
+Ese HOME privado se limita al proceso Fetch: no cambia el HOME de la sesión ni el
+de otras aplicaciones. Cualquier archivo personal que no pueda demostrarse que
+pertenece a Korunix debe conservarse.
+
 La fuente de verdad debe ser un modelo humano de “información del sistema a mostrar”. Los adaptadores de `fetch` o Fastfetch generan el formato concreto que necesite cada herramienta, evitando mantener dos configuraciones conceptualmente duplicadas.
 
 ### 22.3. Kitty

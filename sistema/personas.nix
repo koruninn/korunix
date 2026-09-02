@@ -851,8 +851,15 @@
     # sobrescribir las preferencias personales guardadas por Noctalia.
     ensure_link       "$config_home/noctalia/30-korunix-gtk4-live.toml"       "/etc/korunix/noctalia/gtk4-live.toml"
 
-    # Fetch tiene una configuración común y legible dentro de .korunix.
-    ensure_link "$config_home/fetch/config" "/etc/korunix/fetch.conf"
+    # Fetch ya usa un XDG privado administrado por el wrapper del sistema. Se
+    # retira únicamente el enlace heredado exacto que creó Korunix; un archivo
+    # normal o un enlace hacia otro destino se conserva como dato de la persona.
+    fetch_legacy="$config_home/fetch/config"
+    if [ -L "$fetch_legacy" ] \
+        && [ "$(readlink "$fetch_legacy")" = "/etc/korunix/fetch.conf" ]
+    then
+      rm -f "$fetch_legacy"
+    fi
 
     # La configuración antigua de Fastfetch era de Home Manager. Solo retiramos
     # enlaces simbólicos que claramente pertenecían a ese mecanismo.

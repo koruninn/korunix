@@ -760,6 +760,27 @@ else
 fi
 
 
+fetch_campos="$(
+  sed -E '/^[[:space:]]*(#|$)/d; /=/d' config/fetch.conf \
+    | paste -sd ' ' -
+)"
+
+if [[ "$fetch_campos" == 'os kernel shell wm cpu memory disk colors' ]] \
+   && grep -Fq 'korunixFetch = pkgs.writeShellApplication' sistema/base.nix \
+   && grep -Fq 'export HOME=/etc/korunix/fetch-home' sistema/base.nix \
+   && grep -Fq 'environment.etc."korunix/fetch-home/.config/fetch/config".source = ../config/fetch.conf;' sistema/base.nix \
+   && grep -Fq '      korunixFetch' sistema/base.nix \
+   && ! grep -Fq "ensure_link \"\$config_home/fetch/config\"" sistema/personas.nix \
+   && grep -Fq 'Host, tiempo encendido, pantalla, iconos, fuente, terminal, GPU, swap, IP local y' spec.md \
+   && grep -Fq 'La versión actual de Fetch busca su archivo directamente bajo' spec.md \
+   && grep -Fq 'no utiliza' spec.md \
+   && grep -Fq 'XDG_CONFIG_HOME' spec.md
+then
+  ok 'Fetch conserva la salida compacta y usa su configuración de producto'
+else
+  fallo 'Fetch puede volver a mostrar la salida extensa o ignorar su configuración'
+fi
+
 printf '\n%s\n' '→ Privacidad del producto'
 
 if nix eval \

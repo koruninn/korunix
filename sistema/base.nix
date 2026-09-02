@@ -26,6 +26,18 @@
     else if pkgsUnstable != null && pkgsUnstable ? fetch
     then pkgsUnstable.fetch
     else throw "Korunix necesita Fetch, pero ninguna fuente disponible lo contiene.";
+
+  # Fetch upstream busca su configuración directamente bajo $HOME/.config/fetch
+  # y no consulta XDG_CONFIG_HOME. El wrapper cambia HOME únicamente dentro del
+  # proceso Fetch para darle una configuración de producto determinista; la sesión
+  # y todas las demás aplicaciones conservan el HOME real de la persona.
+  korunixFetch = pkgs.writeShellApplication {
+    name = "fetch";
+    text = ''
+      export HOME=/etc/korunix/fetch-home
+      exec ${lib.getExe fetchPackage} "$@"
+    '';
+  };
 in {
   options.korunix = {
     enable = lib.mkEnableOption "Korunix";
@@ -127,6 +139,10 @@ in {
     # coincide con configuracion/equipos/<hostId>.nix.
     environment.etc."korunix/host-id".text = "${cfg.hostId}\n";
 
+    # Fetch upstream fija su ruta en $HOME/.config/fetch/config; este HOME
+    # pertenece únicamente al wrapper del comando Fetch.
+    environment.etc."korunix/fetch-home/.config/fetch/config".source = ../config/fetch.conf;
+
     # stateVersion protege decisiones de compatibilidad histórica. Cambiar de
     # canal o actualizar paquetes no modifica este valor automáticamente.
     system.stateVersion = cfg.stateVersion;
@@ -167,7 +183,7 @@ in {
     # instala ni se muestra como elección duplicada.
     environment.systemPackages = [
       pkgs.alacritty
-      fetchPackage
+      korunixFetch
       pkgs.bibata-cursors
       hatterIcons
     ];
