@@ -103,6 +103,17 @@ fn mostrar_plan(raiz: &Path) {
     println!("Equipo: {}", plan.nombre);
     println!("Canal: {}", plan.canal);
     println!("Escritorio: {}", plan.escritorio);
+
+    if plan.noctalia {
+        if plan.noctalia_version.is_empty() {
+            println!("Noctalia: activo");
+        } else {
+            println!("Noctalia: activo ({})", plan.noctalia_version);
+        }
+    } else {
+        println!("Noctalia: no se usa");
+    }
+
     println!("Personas:");
 
     for persona in plan.personas {
@@ -285,12 +296,28 @@ fn quitar_aplicacion(raiz: &Path, nombre: &str) {
 }
 
 fn main() {
+    let argumentos: Vec<String> = env::args().skip(1).collect();
+
+    if matches!(
+        argumentos.as_slice(),
+        [grupo, accion] if grupo == "sesion" && accion == "preparar"
+    ) {
+        match sistema::preparar_sesion() {
+            Ok(preparada) => {
+                println!("✓ La sesión quedó preparada.");
+                println!("Noctalia: {}", preparada.configuracion_noctalia.display());
+                println!("Capturas: {}", preparada.capturas.display());
+            }
+            Err(error) => salir_con_error(&error),
+        }
+
+        return;
+    }
+
     let raiz = match raiz_korunix() {
         Ok(raiz) => raiz,
         Err(error) => salir_con_error(&error),
     };
-
-    let argumentos: Vec<String> = env::args().skip(1).collect();
 
     match argumentos.as_slice() {
         [] => validar(&raiz),

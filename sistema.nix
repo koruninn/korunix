@@ -2,6 +2,7 @@
   aplicaciones,
   escritorio,
   lib,
+  noctaliaPackage,
   nombre,
   personas,
   pkgs,
@@ -40,6 +41,8 @@
     else if escritorio == "plasma"
     then "plasma"
     else throw "No conozco el escritorio «${escritorio}».";
+
+  noctaliaActivo = escritorio == "niri" || escritorio == "hyprland";
 in {
   imports = [./hardware.nix];
 
@@ -73,7 +76,82 @@ in {
   services.xserver.desktopManager.cinnamon.enable = escritorio == "cinnamon";
   services.desktopManager.plasma6.enable = escritorio == "plasma";
 
-  environment.systemPackages = aplicaciones ++ [programa];
+  environment.sessionVariables = lib.mkIf (escritorio == "niri") {
+    NIRI_CONFIG = "/etc/niri/config.kdl";
+  };
+
+  environment.etc."niri/config.kdl" = lib.mkIf (escritorio == "niri") {
+    source = ./niri.kdl;
+  };
+
+  environment.etc."korunix/noctalia.toml" = lib.mkIf noctaliaActivo {
+    source = ./noctalia.toml;
+  };
+
+  # Noctalia necesita estas piezas para sus controles. No se añaden applets
+  # gráficos de NetworkManager ni Blueman.
+  hardware.bluetooth = lib.mkIf noctaliaActivo {
+    enable = true;
+    powerOnBoot = true;
+  };
+
+  services.upower.enable = lib.mkIf noctaliaActivo true;
+  services.power-profiles-daemon.enable = lib.mkIf noctaliaActivo true;
+
+  security.polkit.enable = true;
+  security.rtkit.enable = lib.mkIf noctaliaActivo true;
+
+  services.pipewire = lib.mkIf noctaliaActivo {
+    enable = true;
+    alsa.enable = true;
+    alsa.support32Bit = true;
+    pulse.enable = true;
+  };
+
+  # Antes de abrir Noctalia, Korunix prepara únicamente su política de capturas.
+  systemd.user.services.korunix-sesion = lib.mkIf noctaliaActivo {
+    description = "Prepara la sesión de Korunix";
+    wantedBy = ["graphical-session.target"];
+    before = ["noctalia.service"];
+
+    environment.KORUNIX_NOCTALIA_BASE = "/etc/korunix/noctalia.toml";
+
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${programa}/bin/korunix sesion preparar";
+    };
+  };
+
+  # Noctalia solo pertenece a Niri y Hyprland.
+  systemd.user.services.noctalia = lib.mkIf noctaliaActivo {
+    description = "Noctalia";
+    partOf = ["graphical-session.target"];
+    wantedBy = ["graphical-session.target"];
+    after = [
+      "graphical-session.target"
+      "korunix-sesion.service"
+    ];
+    requires = ["korunix-sesion.service"];
+
+    enableDefaultPath = false;
+
+    serviceConfig = {
+      ExecStart = lib.getExe noctaliaPackage;
+      Restart = "on-failure";
+    };
+  };
+
+  environment.systemPackages =
+    aplicaciones
+    ++ [programa]
+    ++ lib.optionals noctaliaActivo [
+      noctaliaPackage
+      pkgs.alacritty
+      pkgs.nautilus
+    ]
+    ++ lib.optionals (escritorio == "niri") [
+      pkgs.xwayland-satellite
+    ];
 
   # Conserva la compatibilidad de la instalación actual.
   system.stateVersion = "26.05";

@@ -16,6 +16,7 @@
     canal = configuracion.canal or "estable";
     personas = configuracion.personas or [];
     escritorio = (configuracion.escritorio or {}).principal or "niri";
+    noctaliaActivo = escritorio == "niri" || escritorio == "hyprland";
 
     nixpkgs =
       if canal == "estable"
@@ -36,6 +37,13 @@
       # Algunas aplicaciones necesitan esto para poder instalarse.
       config.allowUnfree = true;
     };
+
+    # NixOS 26.05 todavía no trae Noctalia. En ese canal solo esta pieza
+    # concreta viene del Nixpkgs inestable que ya forma parte del flake.
+    noctaliaPackage =
+      if builtins.hasAttr "noctalia" pkgs
+      then pkgs.noctalia
+      else nixpkgs-inestable.legacyPackages.${sistema}.noctalia;
 
     resolver = elegida:
       if builtins.hasAttr elegida pkgs
@@ -85,6 +93,11 @@
         personas = planPersonas;
         revision = nixpkgs.rev or "";
         aplicaciones = planAplicaciones;
+        noctalia = noctaliaActivo;
+        noctalia_version =
+          if noctaliaActivo
+          then noctaliaPackage.version or ""
+          else "";
       };
     };
   in {
@@ -102,7 +115,14 @@
       system = sistema;
 
       specialArgs = {
-        inherit aplicaciones escritorio nombre personas programa;
+        inherit
+          aplicaciones
+          escritorio
+          noctaliaPackage
+          nombre
+          personas
+          programa
+          ;
       };
 
       modules = [./sistema.nix];
