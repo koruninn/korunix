@@ -4,11 +4,35 @@
   inputs = {
     nixpkgs-estable.url = "github:NixOS/nixpkgs/nixos-26.05";
     nixpkgs-inestable.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+    figma-linux-next.url = "github:arximus88/figma-linux-next";
+
+    aagl-inestable = {
+      url = "github:ezKEa/aagl-gtk-on-nix";
+      inputs.nixpkgs.follows = "nixpkgs-inestable";
+    };
+
+    aagl-estable = {
+      url = "github:ezKEa/aagl-gtk-on-nix/release-26.05";
+      inputs.nixpkgs.follows = "nixpkgs-estable";
+    };
+
+    nix-flatpak.url = "github:gmodena/nix-flatpak?ref=latest";
+
+    spicetify-nix = {
+      url = "github:Gerg-L/spicetify-nix";
+      inputs.nixpkgs.follows = "nixpkgs-inestable";
+    };
   };
 
   outputs = {
+    aagl-estable,
+    aagl-inestable,
+    figma-linux-next,
+    nix-flatpak,
     nixpkgs-estable,
     nixpkgs-inestable,
+    spicetify-nix,
     ...
   }: let
     configuracion = builtins.fromTOML (builtins.readFile ./configuracion.toml);
@@ -83,6 +107,13 @@
       then nixpkgs-inestable
       else throw "No conozco el canal «${canal}».";
 
+    aagl =
+      if canal == "estable"
+      then aagl-estable
+      else aagl-inestable;
+
+    ajustesAagl = aagl.nixConfig;
+
     sistema = "x86_64-linux";
 
     pkgs = import nixpkgs {
@@ -90,12 +121,43 @@
       config.allowUnfree = true;
     };
 
+    paquetesSpicetify = spicetify-nix.legacyPackages.${sistema};
+
     noctaliaPackage =
       if builtins.hasAttr "noctalia" pkgs
       then pkgs.noctalia
       else nixpkgs-inestable.legacyPackages.${sistema}.noctalia;
 
     aplicacionesElegidas = configuracion.aplicaciones.instaladas or [];
+
+    # Estas aplicaciones siguen siendo elecciones normales. Solo cambia la forma
+    # técnica de obtenerlas.
+    aplicacionesEspeciales = {
+      cohesion = {
+        nombre = "Cohesion (Flatpak)";
+        version = "";
+      };
+
+      "figma-linux-next" = {
+        nombre = "Figma";
+        version = figma-linux-next.packages.${sistema}.default.version or "";
+      };
+
+      "genshin-impact" = {
+        nombre = "Genshin Impact";
+        version = "";
+      };
+
+      "honkai-star-rail" = {
+        nombre = "Honkai: Star Rail";
+        version = "";
+      };
+
+      spotify = {
+        nombre = "Spotify con Spicetify";
+        version = "";
+      };
+    };
 
     paquetePorNombre = elegida:
       if elegida == "kate"
@@ -106,22 +168,30 @@
       then builtins.getAttr elegida pkgs
       else null;
 
-    resolver = elegida: let
-      paquete = paquetePorNombre elegida;
-    in
-      if paquete != null
-      then {
-        inherit elegida paquete;
-        nombre =
-          if paquete ? pname && paquete.pname != null
-          then builtins.toString paquete.pname
-          else elegida;
-        version =
-          if paquete ? version && paquete.version != null
-          then builtins.toString paquete.version
-          else "";
-      }
-      else throw "No encontré «${elegida}» en Nixpkgs.";
+    resolver = elegida:
+      if builtins.hasAttr elegida aplicacionesEspeciales
+      then
+        {
+          inherit elegida;
+          paquete = null;
+        }
+        // builtins.getAttr elegida aplicacionesEspeciales
+      else let
+        paquete = paquetePorNombre elegida;
+      in
+        if paquete != null
+        then {
+          inherit elegida paquete;
+          nombre =
+            if paquete ? pname && paquete.pname != null
+            then builtins.toString paquete.pname
+            else elegida;
+          version =
+            if paquete ? version && paquete.version != null
+            then builtins.toString paquete.version
+            else "";
+        }
+        else throw "No encontré «${elegida}» en Nixpkgs.";
 
     resueltas = map resolver aplicacionesElegidas;
 
@@ -133,7 +203,10 @@
       map
       (aplicacion: aplicacion.paquete)
       (builtins.filter
-        (aplicacion: !(builtins.elem aplicacion.elegida aplicacionesConModulo))
+        (aplicacion:
+          aplicacion.paquete
+          != null
+          && !(builtins.elem aplicacion.elegida aplicacionesConModulo))
         resueltas);
 
     planAplicaciones =
@@ -271,6 +344,7 @@
 
       specialArgs = {
         inherit
+          ajustesAagl
           almacenamiento
           aplicaciones
           aplicacionesElegidas
@@ -281,6 +355,7 @@
           monitor
           noctaliaPackage
           nombre
+          paquetesSpicetify
           personas
           programa
           steam
@@ -290,7 +365,13 @@
           ;
       };
 
-      modules = [./sistema.nix];
+      modules = [
+        aagl.nixosModules.default
+        figma-linux-next.nixosModules.default
+        nix-flatpak.nixosModules.nix-flatpak
+        spicetify-nix.nixosModules.default
+        ./sistema.nix
+      ];
     };
 
     formatter.${sistema} = pkgs.alejandra;

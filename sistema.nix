@@ -1,4 +1,5 @@
 {
+  ajustesAagl,
   almacenamiento,
   aplicaciones,
   aplicacionesElegidas,
@@ -11,6 +12,7 @@
   monitor,
   noctaliaPackage,
   nombre,
+  paquetesSpicetify,
   personas,
   pkgs,
   programa,
@@ -35,9 +37,14 @@
   plasmaActivo = builtins.elem "plasma" escritoriosValidos;
   noctaliaActivo = niriActivo || hyprlandActivo;
 
+  cohesionActivo = builtins.elem "cohesion" aplicacionesElegidas;
+  figmaActivo = builtins.elem "figma-linux-next" aplicacionesElegidas;
+  genshinActivo = builtins.elem "genshin-impact" aplicacionesElegidas;
+  honkaiActivo = builtins.elem "honkai-star-rail" aplicacionesElegidas;
   localsendActivo = builtins.elem "localsend" aplicacionesElegidas;
   obsActivo = builtins.elem "obs-studio" aplicacionesElegidas;
   scrcpyActivo = builtins.elem "scrcpy" aplicacionesElegidas;
+  spotifyActivo = builtins.elem "spotify" aplicacionesElegidas;
 
   cuentas = map (persona: persona.cuenta) personas;
 
@@ -230,7 +237,11 @@ in {
   networking.hostName = nombre;
   networking.networkmanager.enable = true;
 
-  nix.settings.experimental-features = ["nix-command" "flakes"];
+  nix.settings =
+    {
+      experimental-features = ["nix-command" "flakes"];
+    }
+    // lib.optionalAttrs (genshinActivo || honkaiActivo) ajustesAagl;
   nixpkgs.config.allowUnfree = true;
 
   hardware.enableRedistributableFirmware = true;
@@ -245,7 +256,16 @@ in {
     binfmt = true;
   };
 
-  services.flatpak.enable = true;
+  services.flatpak = {
+    enable = true;
+
+    packages = lib.optionals cohesionActivo [
+      "io.github.brunofin.Cohesion"
+    ];
+
+    # Las actualizaciones de aplicaciones pasan por Korunix; no se hacen solas.
+    update.auto.enable = false;
+  };
 
   services.openssh = {
     enable = true;
@@ -442,6 +462,23 @@ in {
   boot.extraModulePackages = lib.optionals obsActivo [
     config.boot.kernelPackages.v4l2loopback
   ];
+
+  programs.figma-linux-next.enable = figmaActivo;
+
+  programs.anime-game-launcher.enable = genshinActivo;
+  programs.honkers-railway-launcher.enable = honkaiActivo;
+
+  programs.spicetify = lib.mkIf spotifyActivo {
+    enable = true;
+    wayland = true;
+    spotifyLaunchFlags = "--enable-features=WaylandWindowDecorations,UseOzonePlatform";
+
+    enabledExtensions = with paquetesSpicetify.extensions; [
+      adblock
+      spicyLyrics
+      oneko
+    ];
+  };
 
   programs.steam = lib.mkIf (steam.activo or false) {
     enable = true;
