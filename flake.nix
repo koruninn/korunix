@@ -48,6 +48,28 @@
       then [escritorio]
       else escritoriosDeclarados;
 
+    apariencia =
+      configuracion.apariencia or {
+        estilo = "predeterminado";
+        modo = "automatico";
+      };
+
+    aparienciaNoctalia = {
+      source =
+        if apariencia.estilo == "dinamico"
+        then "wallpaper"
+        else if apariencia.estilo == "everforest"
+        then "community"
+        else "builtin";
+
+      mode =
+        if apariencia.modo == "claro"
+        then "light"
+        else if apariencia.modo == "oscuro"
+        then "dark"
+        else "auto";
+    };
+
     idioma =
       configuracion.idioma or {
         sistema = "español";
@@ -69,6 +91,11 @@
     almacenamiento =
       configuracion.almacenamiento or {
         disponibles = [];
+      };
+
+    bluetooth =
+      configuracion.bluetooth or {
+        activo = false;
       };
 
     sunshine =
@@ -218,6 +245,8 @@
       map (persona: {
         inherit (persona) cuenta;
         administrador = persona.administrador or false;
+        avatar = persona.avatar or null;
+        clave_github = persona.clave_github or null;
       })
       personas;
 
@@ -277,6 +306,13 @@
           then noctaliaPackage.version or ""
           else "";
 
+        apariencia = {
+          estilo = apariencia.estilo;
+          modo = apariencia.modo;
+          noctalia_source = aparienciaNoctalia.source;
+          noctalia_mode = aparienciaNoctalia.mode;
+        };
+
         idioma = {
           sistema = idioma.sistema;
           region = idioma.region;
@@ -308,6 +344,8 @@
             ruta = "/mnt/${unidad}";
           })
           almacenamiento.disponibles;
+
+        bluetooth = bluetooth.activo or false;
 
         sunshine = {
           activo = sunshine.activo or false;
@@ -346,8 +384,11 @@
         inherit
           ajustesAagl
           almacenamiento
+          apariencia
+          aparienciaNoctalia
           aplicaciones
           aplicacionesElegidas
+          bluetooth
           escritorio
           escritorios
           idioma

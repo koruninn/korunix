@@ -19,15 +19,25 @@ pub struct Plan {
     pub aplicaciones: Vec<Aplicacion>,
     pub noctalia: bool,
     pub noctalia_version: String,
+    pub apariencia: AparienciaPlan,
     pub idioma: IdiomaPlan,
     pub teclado: TecladoPlan,
     pub monitor: MonitorPlan,
     pub entrada: EntradaPlan,
     pub almacenamiento: Vec<UnidadPlan>,
+    pub bluetooth: bool,
     pub sunshine: SunshinePlan,
     pub steam: SteamPlan,
     pub impresion: ImpresionPlan,
     pub virtualizacion: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AparienciaPlan {
+    pub estilo: String,
+    pub modo: String,
+    pub noctalia_source: String,
+    pub noctalia_mode: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -87,6 +97,8 @@ pub struct ImpresionPlan {
 pub struct PersonaPlan {
     pub cuenta: String,
     pub administrador: bool,
+    pub avatar: Option<String>,
+    pub clave_github: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -155,6 +167,28 @@ fn comprobar_plan(configuracion: &Configuracion, plan: &Plan) -> Result<(), Stri
     if plan.noctalia != noctalia_esperado {
         return Err(
             "Noctalia no coincide con el escritorio elegido. No voy a usar ese plan.".to_string(),
+        );
+    }
+
+    let source_esperado = match configuracion.apariencia.estilo.as_str() {
+        "dinamico" => "wallpaper",
+        "everforest" => "community",
+        _ => "builtin",
+    };
+
+    let modo_esperado = match configuracion.apariencia.modo.as_str() {
+        "claro" => "light",
+        "oscuro" => "dark",
+        _ => "auto",
+    };
+
+    if plan.apariencia.estilo != configuracion.apariencia.estilo
+        || plan.apariencia.modo != configuracion.apariencia.modo
+        || plan.apariencia.noctalia_source != source_esperado
+        || plan.apariencia.noctalia_mode != modo_esperado
+    {
+        return Err(
+            "La apariencia que resolvió Nix no coincide con configuracion.toml.".to_string(),
         );
     }
 
@@ -233,6 +267,10 @@ fn comprobar_plan(configuracion: &Configuracion, plan: &Plan) -> Result<(), Stri
         );
     }
 
+    if plan.bluetooth != configuracion.bluetooth.activo {
+        return Err("Bluetooth no coincide con configuracion.toml.".to_string());
+    }
+
     if plan.sunshine.activo != configuracion.sunshine.activo
         || plan.sunshine.autoinicio != configuracion.sunshine.autoinicio
     {
@@ -256,16 +294,30 @@ fn comprobar_plan(configuracion: &Configuracion, plan: &Plan) -> Result<(), Stri
         return Err("La virtualización no coincide con configuracion.toml.".to_string());
     }
 
-    let personas: Vec<(&str, bool)> = plan
+    let personas: Vec<(&str, bool, Option<&str>, Option<&str>)> = plan
         .personas
         .iter()
-        .map(|persona| (persona.cuenta.as_str(), persona.administrador))
+        .map(|persona| {
+            (
+                persona.cuenta.as_str(),
+                persona.administrador,
+                persona.avatar.as_deref(),
+                persona.clave_github.as_deref(),
+            )
+        })
         .collect();
 
-    let esperadas: Vec<(&str, bool)> = configuracion
+    let esperadas: Vec<(&str, bool, Option<&str>, Option<&str>)> = configuracion
         .personas
         .iter()
-        .map(|persona| (persona.cuenta.as_str(), persona.administrador))
+        .map(|persona| {
+            (
+                persona.cuenta.as_str(),
+                persona.administrador,
+                persona.avatar.as_deref(),
+                persona.clave_github.as_deref(),
+            )
+        })
         .collect();
 
     if personas != esperadas {
@@ -447,7 +499,12 @@ fn guardar_toml(ruta: &Path, texto: &str) -> Result<(), String> {
     resultado
 }
 
-fn fusionar_capturas(ruta: &Path, capturas: &Path) -> Result<(), String> {
+fn fusionar_noctalia(
+    ruta: &Path,
+    capturas: &Path,
+    tema: Option<(&str, &str)>,
+    tiene_avatar: bool,
+) -> Result<(), String> {
     let texto = fs::read_to_string(ruta)
         .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
 
@@ -458,20 +515,38 @@ fn fusionar_capturas(ruta: &Path, capturas: &Path) -> Result<(), String> {
         )
     })?;
 
-    let shell = tabla(documento.as_table_mut(), "shell", "shell")?;
-    let screenshot = tabla(shell, "screenshot", "shell.screenshot")?;
+    {
+        let shell = tabla(documento.as_table_mut(), "shell", "shell")?;
+        let screenshot = tabla(shell, "screenshot", "shell.screenshot")?;
 
-    screenshot["directory"] = value(capturas.to_string_lossy().to_string());
-    screenshot["filename_pattern"] = value(PATRON_CAPTURA);
+        screenshot["directory"] = value(capturas.to_string_lossy().to_string());
+        screenshot["filename_pattern"] = value(PATRON_CAPTURA);
+
+        if tiene_avatar {
+            shell["avatar_path"] = value("~/.face");
+        }
+    }
+
+    if let Some((source, mode)) = tema {
+        let theme = tabla(documento.as_table_mut(), "theme", "theme")?;
+        theme["source"] = value(source);
+        theme["mode"] = value(mode);
+    }
 
     guardar_toml(ruta, &documento.to_string())
 }
 
-fn preparar_sesion_en(
+fn fusionar_capturas(ruta: &Path, capturas: &Path) -> Result<(), String> {
+    fusionar_noctalia(ruta, capturas, None, false)
+}
+
+fn preparar_sesion_en_con_politica(
     base: &Path,
     home: &Path,
     config_home: &Path,
     state_home: &Path,
+    tema: Option<(&str, &str)>,
+    tiene_avatar: bool,
 ) -> Result<SesionPreparada, String> {
     if !base.is_file() {
         return Err(format!(
@@ -504,18 +579,27 @@ fn preparar_sesion_en(
         })?;
     }
 
-    fusionar_capturas(&configuracion_noctalia, &capturas)?;
+    fusionar_noctalia(&configuracion_noctalia, &capturas, tema, tiene_avatar)?;
 
     let settings = state_home.join("noctalia/settings.toml");
 
     if settings.is_file() {
-        fusionar_capturas(&settings, &capturas)?;
+        fusionar_noctalia(&settings, &capturas, tema, tiene_avatar)?;
     }
 
     Ok(SesionPreparada {
         configuracion_noctalia,
         capturas,
     })
+}
+
+fn preparar_sesion_en(
+    base: &Path,
+    home: &Path,
+    config_home: &Path,
+    state_home: &Path,
+) -> Result<SesionPreparada, String> {
+    preparar_sesion_en_con_politica(base, home, config_home, state_home, None, false)
 }
 
 pub fn preparar_sesion() -> Result<SesionPreparada, String> {
@@ -535,15 +619,33 @@ pub fn preparar_sesion() -> Result<SesionPreparada, String> {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/etc/korunix/noctalia.toml"));
 
-    preparar_sesion_en(&base, &home, &config_home, &state_home)
+    let tema = match (
+        env::var("KORUNIX_NOCTALIA_SOURCE").ok(),
+        env::var("KORUNIX_NOCTALIA_MODE").ok(),
+    ) {
+        (Some(source), Some(mode)) => Some((source, mode)),
+        _ => None,
+    };
+
+    let tiene_avatar = home.join(".face").exists();
+
+    preparar_sesion_en_con_politica(
+        &base,
+        &home,
+        &config_home,
+        &state_home,
+        tema.as_ref()
+            .map(|(source, mode)| (source.as_str(), mode.as_str())),
+        tiene_avatar,
+    )
 }
 
 #[cfg(test)]
 mod pruebas {
     use super::*;
     use crate::configuracion::{
-        Almacenamiento, Aplicaciones, Escritorio, Idioma, Impresion, Monitor, Persona, Steam,
-        Sunshine, Teclado, Virtualizacion,
+        Almacenamiento, Apariencia, Aplicaciones, Bluetooth, Escritorio, Idioma, Impresion,
+        Monitor, Persona, Steam, Sunshine, Teclado, Virtualizacion,
     };
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -555,6 +657,8 @@ mod pruebas {
                 cuenta: "koru".to_string(),
                 nombre: "André".to_string(),
                 administrador: true,
+                avatar: Some("avatar-koru.jpg".to_string()),
+                clave_github: Some(".ssh/blep".to_string()),
             }],
             escritorio: Escritorio {
                 principal: "niri".to_string(),
@@ -565,12 +669,17 @@ mod pruebas {
                     "cinnamon".to_string(),
                 ],
             },
+            apariencia: Apariencia {
+                estilo: "dinamico".to_string(),
+                modo: "automatico".to_string(),
+            },
             idioma: Idioma::default(),
             teclado: Teclado::default(),
             monitor: Monitor::default(),
             almacenamiento: Almacenamiento {
                 disponibles: vec!["datos".to_string()],
             },
+            bluetooth: Bluetooth { activo: true },
             sunshine: Sunshine {
                 activo: true,
                 autoinicio: true,
@@ -605,6 +714,8 @@ mod pruebas {
             personas: vec![PersonaPlan {
                 cuenta: "koru".to_string(),
                 administrador: true,
+                avatar: Some("avatar-koru.jpg".to_string()),
+                clave_github: Some(".ssh/blep".to_string()),
             }],
             revision: "abc123".to_string(),
             aplicaciones: vec![
@@ -621,6 +732,12 @@ mod pruebas {
             ],
             noctalia: true,
             noctalia_version: "5".to_string(),
+            apariencia: AparienciaPlan {
+                estilo: "dinamico".to_string(),
+                modo: "automatico".to_string(),
+                noctalia_source: "wallpaper".to_string(),
+                noctalia_mode: "auto".to_string(),
+            },
             idioma: IdiomaPlan {
                 sistema: "español".to_string(),
                 region: "Perú".to_string(),
@@ -645,6 +762,7 @@ mod pruebas {
                 nombre: "datos".to_string(),
                 ruta: "/mnt/datos".to_string(),
             }],
+            bluetooth: true,
             sunshine: SunshinePlan {
                 activo: true,
                 autoinicio: true,
@@ -678,13 +796,24 @@ mod pruebas {
           "canal": "inestable",
           "escritorio": "niri",
           "escritorios": ["niri", "hyprland", "plasma", "cinnamon"],
-          "personas": [{"cuenta": "koru", "administrador": true}],
+          "personas": [{
+            "cuenta": "koru",
+            "administrador": true,
+            "avatar": "avatar-koru.jpg",
+            "clave_github": ".ssh/blep"
+          }],
           "revision": "abc123",
           "aplicaciones": [
             {"elegida": "firefox", "nombre": "firefox", "version": "1"}
           ],
           "noctalia": true,
           "noctalia_version": "5",
+          "apariencia": {
+            "estilo": "dinamico",
+            "modo": "automatico",
+            "noctalia_source": "wallpaper",
+            "noctalia_mode": "auto"
+          },
           "idioma": {
             "sistema": "español",
             "region": "Perú",
@@ -708,6 +837,7 @@ mod pruebas {
           "almacenamiento": [
             {"nombre": "datos", "ruta": "/mnt/datos"}
           ],
+          "bluetooth": true,
           "sunshine": {
             "activo": true,
             "autoinicio": true
@@ -1009,5 +1139,103 @@ filename_pattern = "viejo"
         assert!(despues.contains("[dock]"));
         assert!(despues.contains("enabled = false"));
         assert!(despues.contains(PATRON_CAPTURA));
+    }
+    #[test]
+    fn rechaza_un_plan_con_otra_apariencia() {
+        let configuracion = configuracion();
+        let mut plan = plan();
+        plan.apariencia.noctalia_source = "community".to_string();
+
+        let error = comprobar_plan(&configuracion, &plan)
+            .expect_err("una apariencia distinta debería rechazarse");
+
+        assert!(error.contains("apariencia"));
+    }
+
+    #[test]
+    fn rechaza_un_plan_con_otro_bluetooth() {
+        let configuracion = configuracion();
+        let mut plan = plan();
+        plan.bluetooth = false;
+
+        let error = comprobar_plan(&configuracion, &plan)
+            .expect_err("Bluetooth distinto debería rechazarse");
+
+        assert!(error.contains("Bluetooth"));
+    }
+
+    #[test]
+    fn preparar_sesion_aplica_apariencia_y_avatar_sin_borrar_preferencias() {
+        let carpeta = temporal("apariencia");
+        let home = carpeta.join("home");
+        let config_home = carpeta.join("config");
+        let state_home = carpeta.join("state");
+        let base = carpeta.join("base.toml");
+        let settings_dir = state_home.join("noctalia");
+
+        fs::create_dir_all(&home).expect("debería crear HOME");
+        fs::create_dir_all(&settings_dir).expect("debería crear el estado");
+        fs::write(home.join(".face"), b"avatar").expect("debería crear el avatar");
+
+        fs::write(
+            &base,
+            r#"[shell.screenshot]
+directory = ""
+filename_pattern = ""
+"#,
+        )
+        .expect("debería escribir la base");
+
+        fs::create_dir_all(config_home.join("noctalia")).expect("debería crear Noctalia");
+        fs::write(
+            config_home.join("noctalia/config.toml"),
+            r#"[dock]
+enabled = false
+
+[theme]
+source = "community"
+mode = "light"
+"#,
+        )
+        .expect("debería escribir config.toml");
+
+        fs::write(
+            settings_dir.join("settings.toml"),
+            r#"[bar]
+enabled = true
+
+[theme]
+source = "community"
+mode = "light"
+"#,
+        )
+        .expect("debería escribir settings.toml");
+
+        preparar_sesion_en_con_politica(
+            &base,
+            &home,
+            &config_home,
+            &state_home,
+            Some(("wallpaper", "auto")),
+            true,
+        )
+        .expect("debería preparar la sesión");
+
+        let config = fs::read_to_string(config_home.join("noctalia/config.toml"))
+            .expect("debería leer config.toml");
+        let settings = fs::read_to_string(settings_dir.join("settings.toml"))
+            .expect("debería leer settings.toml");
+        let _ = fs::remove_dir_all(&carpeta);
+
+        for texto in [&config, &settings] {
+            assert!(texto.contains("source = \"wallpaper\""));
+            assert!(texto.contains("mode = \"auto\""));
+            assert!(texto.contains("avatar_path = \"~/.face\""));
+        }
+
+        assert!(config.contains("[dock]"));
+        assert!(config.contains("enabled = false"));
+        assert!(settings.contains("[bar]"));
+        assert!(settings.contains("enabled = true"));
     }
 }

@@ -83,6 +83,10 @@ fn validar(raiz: &Path) {
                 configuracion.escritorio.instalados_efectivos().join(", ")
             );
             println!(
+                "Apariencia: {} · {}",
+                configuracion.apariencia.estilo, configuracion.apariencia.modo
+            );
+            println!(
                 "Idioma: {} — {}",
                 configuracion.idioma.sistema, configuracion.idioma.region
             );
@@ -101,6 +105,14 @@ fn validar(raiz: &Path) {
                     "ninguna".to_string()
                 } else {
                     configuracion.almacenamiento.disponibles.join(", ")
+                }
+            );
+            println!(
+                "Bluetooth: {}",
+                if configuracion.bluetooth.activo {
+                    "activo"
+                } else {
+                    "apagado"
                 }
             );
             println!(
@@ -176,6 +188,10 @@ fn mostrar_plan(raiz: &Path) {
     println!("Escritorio principal: {}", plan.escritorio);
     println!("Escritorios instalados: {}", plan.escritorios.join(", "));
     println!(
+        "Apariencia: {} · {}",
+        plan.apariencia.estilo, plan.apariencia.modo
+    );
+    println!(
         "Idioma: {} — {} ({})",
         plan.idioma.sistema, plan.idioma.region, plan.idioma.locale
     );
@@ -217,7 +233,20 @@ fn mostrar_plan(raiz: &Path) {
         } else {
             "usuario"
         };
-        println!("  - {} ({tipo})", persona.cuenta);
+
+        let avatar = if persona.avatar.is_some() {
+            " · avatar sí"
+        } else {
+            ""
+        };
+
+        let github = if persona.clave_github.is_some() {
+            " · GitHub sí"
+        } else {
+            ""
+        };
+
+        println!("  - {} ({tipo}){avatar}{github}", persona.cuenta);
     }
 
     if plan.aplicaciones.is_empty() {
@@ -246,6 +275,11 @@ fn mostrar_plan(raiz: &Path) {
             println!("  - {} → {}", unidad.nombre, unidad.ruta);
         }
     }
+
+    println!(
+        "Bluetooth: {}",
+        if plan.bluetooth { "activo" } else { "apagado" }
+    );
 
     println!(
         "Sunshine: {} · autoinicio {}",
@@ -357,7 +391,21 @@ fn mostrar_personas(raiz: &Path) {
                 } else {
                     "usuario"
                 };
-                println!("  - {} — {} ({tipo})", persona.cuenta, persona.nombre);
+                let avatar = if persona.avatar.is_some() {
+                    " · avatar sí"
+                } else {
+                    ""
+                };
+                let github = if persona.clave_github.is_some() {
+                    " · GitHub sí"
+                } else {
+                    ""
+                };
+
+                println!(
+                    "  - {} — {} ({tipo}){avatar}{github}",
+                    persona.cuenta, persona.nombre
+                );
             }
         }
         Err(error) => salir_con_error(&error),

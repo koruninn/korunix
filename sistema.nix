@@ -1,8 +1,11 @@
 {
   ajustesAagl,
   almacenamiento,
+  apariencia,
+  aparienciaNoctalia,
   aplicaciones,
   aplicacionesElegidas,
+  bluetooth,
   config,
   escritorio,
   escritorios,
@@ -47,6 +50,73 @@
   spotifyActivo = builtins.elem "spotify" aplicacionesElegidas;
 
   cuentas = map (persona: persona.cuenta) personas;
+
+  rutaHumanaValida = valor:
+    valor
+    != ""
+    && !(lib.hasPrefix "/" valor)
+    && !(builtins.elem ".." (lib.splitString "/" valor));
+
+  avatarDe = persona: let
+    nombreAvatar = persona.avatar or null;
+    rutaAvatar =
+      if nombreAvatar == null
+      then null
+      else ./. + "/${nombreAvatar}";
+  in
+    if nombreAvatar == null
+    then null
+    else if !rutaHumanaValida nombreAvatar
+    then throw "El avatar de «${persona.cuenta}» tiene una ruta que no es segura."
+    else if !builtins.pathExists rutaAvatar
+    then throw "No encontré el avatar «${nombreAvatar}» de «${persona.cuenta}»."
+    else rutaAvatar;
+
+  clavesGithub = lib.concatMapStringsSep "\n" (persona: let
+    clave = persona.clave_github or null;
+  in
+    lib.optionalString (clave != null) (
+      if !rutaHumanaValida clave
+      then throw "La clave de GitHub de «${persona.cuenta}» tiene una ruta que no es segura."
+      else ''
+        Match host github.com localuser ${persona.cuenta}
+          IdentityFile /home/${persona.cuenta}/${clave}
+          IdentitiesOnly yes
+          AddKeysToAgent yes
+      ''
+    ))
+  personas;
+
+  hayAvatar = builtins.any (persona: avatarDe persona != null) personas;
+
+  casosAvatar = lib.concatMapStrings (persona: let
+    avatar = avatarDe persona;
+  in
+    lib.optionalString (avatar != null) ''
+      ${persona.cuenta})
+        avatar=${lib.escapeShellArg (toString avatar)}
+        ;;
+    '')
+  personas;
+
+  prepararPersona = pkgs.writeShellScript "korunix-prepara-persona" ''
+    set -eu
+
+    avatar=""
+
+    case "''${USER:-}" in
+    ${casosAvatar}
+      *)
+        exit 0
+        ;;
+    esac
+
+    if [ -L "$HOME/.face" ]; then
+      ${pkgs.coreutils}/bin/ln -sfn "$avatar" "$HOME/.face"
+    elif [ ! -e "$HOME/.face" ]; then
+      ${pkgs.coreutils}/bin/ln -s "$avatar" "$HOME/.face"
+    fi
+  '';
 
   personasValidas =
     if personas == []
@@ -285,7 +355,10 @@ in {
   systemd.timers.fwupd-refresh.enable = false;
 
   services.gnome.gcr-ssh-agent.enable = false;
-  programs.ssh.startAgent = true;
+  programs.ssh = {
+    startAgent = true;
+    extraConfig = clavesGithub;
+  };
 
   programs.fish.enable = true;
 
@@ -392,9 +465,10 @@ in {
     source = ./noctalia.toml;
   };
 
-  hardware.bluetooth = lib.mkIf noctaliaActivo {
-    enable = true;
-    powerOnBoot = true;
+  # Bluetooth es una decisión del equipo, no una consecuencia de usar Noctalia.
+  hardware.bluetooth = {
+    enable = bluetooth.activo or false;
+    powerOnBoot = bluetooth.activo or false;
   };
 
   services.upower.enable = lib.mkIf noctaliaActivo true;
@@ -410,14 +484,32 @@ in {
   };
 
   # Este servicio existe si hay Niri o Hyprland, pero no arranca en Plasma o Cinnamon.
+  systemd.user.services.korunix-persona = lib.mkIf hayAvatar {
+    description = "Prepara las preferencias personales de Korunix";
+    wantedBy = ["default.target"];
+
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = prepararPersona;
+    };
+  };
+
   systemd.user.services.noctalia = lib.mkIf noctaliaActivo {
     description = "Noctalia";
     partOf = ["graphical-session.target"];
     wantedBy = ["graphical-session.target"];
-    after = ["graphical-session.target"];
+    wants = lib.optionals hayAvatar ["korunix-persona.service"];
+    after =
+      ["graphical-session.target"]
+      ++ lib.optionals hayAvatar ["korunix-persona.service"];
     enableDefaultPath = false;
 
-    environment.KORUNIX_NOCTALIA_BASE = "/etc/korunix/noctalia.toml";
+    environment = {
+      KORUNIX_NOCTALIA_BASE = "/etc/korunix/noctalia.toml";
+      KORUNIX_NOCTALIA_SOURCE = aparienciaNoctalia.source;
+      KORUNIX_NOCTALIA_MODE = aparienciaNoctalia.mode;
+    };
 
     serviceConfig = {
       ExecCondition = sesionNoctalia;

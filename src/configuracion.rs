@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Component, Path};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 use toml_edit::{value, Array, DocumentMut, Item, Table, Value};
@@ -22,6 +22,9 @@ pub struct Configuracion {
     pub escritorio: Escritorio,
 
     #[serde(default)]
+    pub apariencia: Apariencia,
+
+    #[serde(default)]
     pub idioma: Idioma,
 
     #[serde(default)]
@@ -32,6 +35,9 @@ pub struct Configuracion {
 
     #[serde(default)]
     pub almacenamiento: Almacenamiento,
+
+    #[serde(default)]
+    pub bluetooth: Bluetooth,
 
     #[serde(default)]
     pub sunshine: Sunshine,
@@ -64,6 +70,12 @@ pub struct Persona {
 
     #[serde(default)]
     pub administrador: bool,
+
+    #[serde(default)]
+    pub avatar: Option<String>,
+
+    #[serde(default)]
+    pub clave_github: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -91,6 +103,25 @@ impl Default for Escritorio {
         Self {
             principal: escritorio_por_defecto(),
             instalados: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Apariencia {
+    #[serde(default = "estilo_por_defecto")]
+    pub estilo: String,
+
+    #[serde(default = "modo_por_defecto")]
+    pub modo: String,
+}
+
+impl Default for Apariencia {
+    fn default() -> Self {
+        Self {
+            estilo: estilo_por_defecto(),
+            modo: modo_por_defecto(),
         }
     }
 }
@@ -158,6 +189,13 @@ pub struct Almacenamiento {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct Bluetooth {
+    #[serde(default)]
+    pub activo: bool,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Sunshine {
     #[serde(default)]
     pub activo: bool,
@@ -190,6 +228,14 @@ pub struct Impresion {
 pub struct Virtualizacion {
     #[serde(default)]
     pub activa: bool,
+}
+
+fn estilo_por_defecto() -> String {
+    "predeterminado".to_string()
+}
+
+fn modo_por_defecto() -> String {
+    "automatico".to_string()
 }
 
 fn idioma_por_defecto() -> String {
@@ -304,6 +350,28 @@ fn revisar_cuenta(cuenta: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn revisar_ruta_humana(valor: &str, nombre: &str) -> Result<(), String> {
+    if valor.is_empty() || valor.trim() != valor {
+        return Err(format!(
+            "«{nombre}» necesita una ruta relativa sin espacios de más."
+        ));
+    }
+
+    let ruta = Path::new(valor);
+
+    if ruta.is_absolute()
+        || ruta
+            .components()
+            .any(|parte| matches!(parte, Component::ParentDir | Component::RootDir))
+    {
+        return Err(format!(
+            "«{nombre}» tiene que apuntar dentro de la carpeta esperada, sin usar / al comienzo ni «..»."
+        ));
+    }
+
+    Ok(())
+}
+
 fn revisar_persona(persona: &Persona) -> Result<(), String> {
     revisar_cuenta(&persona.cuenta)?;
 
@@ -318,6 +386,35 @@ fn revisar_persona(persona: &Persona) -> Result<(), String> {
         return Err(format!(
             "El nombre visible de «{}» tiene espacios de más al comienzo o al final.",
             persona.cuenta
+        ));
+    }
+
+    if let Some(avatar) = persona.avatar.as_deref() {
+        revisar_ruta_humana(avatar, "avatar")?;
+    }
+
+    if let Some(clave) = persona.clave_github.as_deref() {
+        revisar_ruta_humana(clave, "clave_github")?;
+    }
+
+    Ok(())
+}
+
+fn revisar_apariencia(apariencia: &Apariencia) -> Result<(), String> {
+    if !matches!(
+        apariencia.estilo.as_str(),
+        "predeterminado" | "dinamico" | "everforest"
+    ) {
+        return Err(format!(
+            "No conozco el estilo «{}». Pon «predeterminado», «dinamico» o «everforest».",
+            apariencia.estilo
+        ));
+    }
+
+    if !matches!(apariencia.modo.as_str(), "claro" | "oscuro" | "automatico") {
+        return Err(format!(
+            "No conozco el modo «{}». Pon «claro», «oscuro» o «automatico».",
+            apariencia.modo
         ));
     }
 
@@ -489,6 +586,7 @@ pub fn revisar(configuracion: &Configuracion) -> Result<(), String> {
     revisar_nombre(&configuracion.nombre)?;
     revisar_canal(&configuracion.canal)?;
     revisar_escritorios(&configuracion.escritorio)?;
+    revisar_apariencia(&configuracion.apariencia)?;
     revisar_idioma(&configuracion.idioma)?;
     revisar_teclado(&configuracion.teclado)?;
     revisar_monitor(&configuracion.monitor)?;
@@ -1417,5 +1515,76 @@ instaladas = ["steam"]
 
         assert!(error.contains("[steam]"));
         assert!(error.contains("No lo repitas"));
+    }
+    #[test]
+    fn apariencia_humana_se_valida() {
+        let configuracion = leer_texto(
+            r#"
+[apariencia]
+estilo = "dinamico"
+modo = "automatico"
+"#,
+        )
+        .expect("la apariencia debería ser válida");
+
+        assert_eq!(configuracion.apariencia.estilo, "dinamico");
+        assert_eq!(configuracion.apariencia.modo, "automatico");
+    }
+
+    #[test]
+    fn apariencia_inventada_se_rechaza() {
+        let error = leer_texto(
+            r#"
+[apariencia]
+estilo = "superbonito"
+modo = "automatico"
+"#,
+        )
+        .expect_err("un estilo inventado debería rechazarse");
+
+        assert!(error.contains("superbonito"));
+    }
+
+    #[test]
+    fn datos_personales_no_permiten_salir_de_su_carpeta() {
+        let error = leer_texto(
+            r#"
+[[personas]]
+cuenta = "koru"
+nombre = "André"
+avatar = "../otra-cosa.jpg"
+"#,
+        )
+        .expect_err("el avatar no debería escapar de Korunix");
+
+        assert!(error.contains("avatar"));
+        assert!(error.contains(".."));
+    }
+
+    #[test]
+    fn bluetooth_y_datos_personales_son_decisiones_humanas() {
+        let configuracion = leer_texto(
+            r#"
+[[personas]]
+cuenta = "koru"
+nombre = "André"
+avatar = "avatar-koru.jpg"
+clave_github = ".ssh/blep"
+
+[bluetooth]
+activo = true
+"#,
+        )
+        .expect("las decisiones deberían ser válidas");
+
+        assert!(configuracion.bluetooth.activo);
+        assert_eq!(
+            configuracion.personas[0].avatar.as_deref(),
+            Some("avatar-koru.jpg")
+        );
+        assert_eq!(
+            configuracion.personas[0].clave_github.as_deref(),
+            Some(".ssh/blep")
+        );
     }
 }

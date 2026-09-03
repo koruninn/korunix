@@ -10,12 +10,23 @@ cuenta = "koru"
 nombre = "André"
 administrador = true
 
+# El avatar sí puede vivir con Korunix; no contiene credenciales.
+avatar = "avatar-koru.jpg"
+
+# La clave privada sigue en ~/.ssh. Aquí solo se recuerda cuál usar para GitHub.
+clave_github = ".ssh/blep"
+
 [escritorio]
 # Este es el escritorio que se abre por defecto.
 principal = "niri"
 
 # Estos escritorios quedan disponibles al iniciar sesión.
 instalados = ["niri", "hyprland", "plasma", "cinnamon"]
+
+[apariencia]
+# La GUI de Noctalia tiene esta elección efectiva actualmente.
+estilo = "dinamico"
+modo = "automatico"
 
 [idioma]
 sistema = "español"
@@ -32,6 +43,9 @@ hz = 120
 [almacenamiento]
 # Korunix ya conoce el disco por dentro; aquí solo eliges si quieres tenerlo disponible.
 disponibles = ["datos"]
+
+[bluetooth]
+activo = true
 
 [sunshine]
 activo = true
