@@ -9,6 +9,9 @@ use toml_edit::{value, Array, DocumentMut, Item, Table, Value};
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Configuracion {
+    #[serde(default = "nombre_por_defecto")]
+    pub nombre: String,
+
     #[serde(default = "canal_por_defecto")]
     pub canal: String,
 
@@ -23,8 +26,28 @@ pub struct Aplicaciones {
     pub instaladas: Vec<String>,
 }
 
+fn nombre_por_defecto() -> String {
+    "nixos".to_string()
+}
+
 fn canal_por_defecto() -> String {
     "estable".to_string()
+}
+
+fn revisar_nombre(nombre: &str) -> Result<(), String> {
+    let largo_valido = !nombre.is_empty() && nombre.len() <= 63;
+    let caracteres_validos = nombre
+        .bytes()
+        .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
+    let bordes_validos = !nombre.starts_with('-') && !nombre.ends_with('-');
+
+    if !largo_valido || !caracteres_validos || !bordes_validos {
+        return Err(format!(
+            "El nombre «{nombre}» no sirve para la computadora.\nUsa letras minúsculas, números y guiones, sin empezar ni terminar con guion."
+        ));
+    }
+
+    Ok(())
 }
 
 fn revisar_canal(canal: &str) -> Result<(), String> {
@@ -72,6 +95,7 @@ fn revisar_nombre_aplicacion(nombre: &str) -> Result<(), String> {
 }
 
 pub fn revisar(configuracion: &Configuracion) -> Result<(), String> {
+    revisar_nombre(&configuracion.nombre)?;
     revisar_canal(&configuracion.canal)?;
 
     let mut vistas = HashSet::new();
@@ -157,6 +181,26 @@ fn quitar_en_texto(texto: &str, nombre: &str) -> Result<Option<String>, String> 
     Ok(Some(nuevo))
 }
 
+fn cambiar_nombre_en_texto(texto: &str, nombre: &str) -> Result<Option<String>, String> {
+    revisar_nombre(nombre)?;
+    let actual = entender(texto, "la configuración")?;
+
+    if actual.nombre == nombre {
+        return Ok(None);
+    }
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+
+    documento["nombre"] = value(nombre);
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
 fn cambiar_canal_en_texto(texto: &str, canal: &str) -> Result<Option<String>, String> {
     revisar_canal(canal)?;
     let actual = entender(texto, "la configuración")?;
@@ -231,6 +275,19 @@ pub fn quitar_aplicacion(ruta: &Path, nombre: &str) -> Result<bool, String> {
         .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
 
     let Some(nuevo) = quitar_en_texto(&texto, nombre)? else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
+}
+
+pub fn cambiar_nombre(ruta: &Path, nombre: &str) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    let Some(nuevo) = cambiar_nombre_en_texto(&texto, nombre)? else {
         return Ok(false);
     };
 
@@ -502,5 +559,66 @@ instaladas = ["firefox"]
             .expect_err("un canal inventado debería rechazarse");
 
         assert!(error.contains("No conozco el canal «rapidito»"));
+    }
+
+    #[test]
+    fn si_no_se_escribe_nombre_se_usa_nixos() {
+        let configuracion = leer_texto(
+            r#"
+canal = "estable"
+"#,
+        )
+        .expect("la configuración debería usar un nombre seguro");
+
+        assert_eq!(configuracion.nombre, "nixos");
+    }
+
+    #[test]
+    fn un_nombre_raro_se_rechaza() {
+        let error = leer_texto(
+            r#"
+nombre = "Mi PC"
+canal = "estable"
+"#,
+        )
+        .expect_err("el nombre debería rechazarse");
+
+        assert!(error.contains("letras minúsculas"));
+    }
+
+    #[test]
+    fn cambiar_nombre_conserva_el_resto() {
+        let original = r#"# Así aparece esta computadora en la red.
+nombre = "korunix"
+
+# Este comentario también tiene que quedarse.
+canal = "inestable"
+
+[aplicaciones]
+instaladas = ["firefox", "karere"]
+"#;
+
+        let nuevo = cambiar_nombre_en_texto(original, "korunix-sala")
+            .expect("debería poder cambiar el nombre")
+            .expect("debería existir un cambio");
+
+        assert!(nuevo.contains("# Así aparece esta computadora en la red."));
+        assert!(nuevo.contains("# Este comentario también tiene que quedarse."));
+        assert!(nuevo.contains("nombre = \"korunix-sala\""));
+        assert!(nuevo.contains("canal = \"inestable\""));
+        assert!(nuevo.contains("\"firefox\""));
+        assert!(nuevo.contains("\"karere\""));
+    }
+
+    #[test]
+    fn poner_el_mismo_nombre_no_cambia_nada() {
+        let original = r#"nombre = "korunix"
+canal = "estable"
+"#;
+
+        let nuevo =
+            cambiar_nombre_en_texto(original, "korunix").expect("la operación debería ser válida");
+
+        assert!(nuevo.is_none());
     }
 }

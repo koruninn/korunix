@@ -1,3 +1,6 @@
+# Así aparece esta computadora en la red.
+nombre = "korunix"
+
 # "estable" cambia menos; "inestable" trae cosas más nuevas.
 canal = "inestable"
 

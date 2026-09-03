@@ -12,6 +12,7 @@
     ...
   }: let
     configuracion = builtins.fromTOML (builtins.readFile ./configuracion.toml);
+    nombre = configuracion.nombre or "nixos";
     canal = configuracion.canal or "estable";
 
     nixpkgs =
@@ -34,7 +35,34 @@
       config.allowUnfree = true;
     };
 
-    resultado = import ./sistema.nix {inherit pkgs;};
+    resolver = elegida:
+      if builtins.hasAttr elegida pkgs
+      then let
+        paquete = builtins.getAttr elegida pkgs;
+      in {
+        inherit elegida paquete;
+        nombre =
+          if paquete ? pname && paquete.pname != null
+          then builtins.toString paquete.pname
+          else elegida;
+        version =
+          if paquete ? version && paquete.version != null
+          then builtins.toString paquete.version
+          else "";
+      }
+      else
+        throw ''
+          No encontré «${elegida}» en Nixpkgs.
+          Revisa el nombre en configuracion.toml.
+        '';
+
+    resueltas = map resolver (configuracion.aplicaciones.instaladas or []);
+    aplicaciones = map (aplicacion: aplicacion.paquete) resueltas;
+
+    planAplicaciones =
+      map
+      (aplicacion: builtins.removeAttrs aplicacion ["paquete"])
+      resueltas;
 
     programa = pkgs.rustPlatform.buildRustPackage {
       pname = "korunix";
@@ -44,9 +72,9 @@
       cargoLock.lockFile = ./Cargo.lock;
 
       passthru.plan = {
-        inherit canal;
+        inherit nombre canal;
         revision = nixpkgs.rev or "";
-        aplicaciones = resultado.plan;
+        aplicaciones = planAplicaciones;
       };
     };
   in {
@@ -56,8 +84,18 @@
 
       aplicaciones = pkgs.buildEnv {
         name = "korunix-aplicaciones";
-        paths = resultado.aplicaciones;
+        paths = aplicaciones;
       };
+    };
+
+    nixosConfigurations.korunix = nixpkgs.lib.nixosSystem {
+      system = sistema;
+
+      specialArgs = {
+        inherit aplicaciones nombre programa;
+      };
+
+      modules = [./sistema.nix];
     };
 
     formatter.${sistema} = pkgs.alejandra;

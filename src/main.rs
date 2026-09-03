@@ -2,6 +2,7 @@ mod configuracion;
 mod sistema;
 
 use std::env;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -9,6 +10,7 @@ fn es_raiz(ruta: &Path) -> bool {
     ruta.join("configuracion.toml").is_file()
         && ruta.join("flake.nix").is_file()
         && ruta.join("sistema.nix").is_file()
+        && ruta.join("hardware.nix").is_file()
 }
 
 fn raiz_korunix() -> Result<PathBuf, String> {
@@ -49,6 +51,9 @@ fn ayuda() {
     eprintln!("Por ahora puedes usar:");
     eprintln!("  korunix validar");
     eprintln!("  korunix plan");
+    eprintln!("  korunix construir");
+    eprintln!("  korunix nombre");
+    eprintln!("  korunix nombre <nuevo>");
     eprintln!("  korunix canal");
     eprintln!("  korunix canal <estable|inestable>");
     eprintln!("  korunix aplicaciones");
@@ -67,6 +72,7 @@ fn validar(raiz: &Path) {
     match configuracion::leer(&raiz.join("configuracion.toml")) {
         Ok(configuracion) => {
             println!("✓ La configuración está bien.");
+            println!("Equipo: {}", configuracion.nombre);
             println!("Canal: {}", configuracion.canal);
             println!(
                 "Aplicaciones elegidas: {}",
@@ -89,6 +95,7 @@ fn mostrar_plan(raiz: &Path) {
     };
 
     println!("Plan");
+    println!("Equipo: {}", plan.nombre);
     println!("Canal: {}", plan.canal);
 
     if plan.aplicaciones.is_empty() {
@@ -114,6 +121,45 @@ fn mostrar_plan(raiz: &Path) {
 
     println!();
     println!("NixOS no cambió.");
+}
+
+fn construir(raiz: &Path) {
+    if let Err(error) = configuracion::leer(&raiz.join("configuracion.toml")) {
+        salir_con_error(&error);
+    }
+
+    println!("Construyendo una generación de NixOS...");
+    let _ = io::stdout().flush();
+
+    match sistema::construir_generacion(raiz) {
+        Ok(ruta) => {
+            println!("✓ La generación quedó construida.");
+            println!("Ruta: {}", ruta.display());
+            println!("No se activó.");
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn mostrar_nombre(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => println!("Nombre: {}", configuracion.nombre),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn cambiar_nombre(raiz: &Path, nombre: &str) {
+    match configuracion::cambiar_nombre(&raiz.join("configuracion.toml"), nombre) {
+        Ok(true) => {
+            println!("✓ El nombre ahora es «{nombre}» en configuracion.toml.");
+            println!("NixOS todavía no cambió.");
+        }
+        Ok(false) => {
+            println!("El nombre ya era «{nombre}».");
+            println!("No cambié nada.");
+        }
+        Err(error) => salir_con_error(&error),
+    }
 }
 
 fn mostrar_canal(raiz: &Path) {
@@ -195,6 +241,9 @@ fn main() {
         [] => validar(&raiz),
         [comando] if comando == "validar" => validar(&raiz),
         [comando] if comando == "plan" => mostrar_plan(&raiz),
+        [comando] if comando == "construir" => construir(&raiz),
+        [comando] if comando == "nombre" => mostrar_nombre(&raiz),
+        [comando, nombre] if comando == "nombre" => cambiar_nombre(&raiz, nombre),
         [comando] if comando == "canal" => mostrar_canal(&raiz),
         [comando, canal] if comando == "canal" => cambiar_canal(&raiz, canal),
         [comando] if comando == "aplicaciones" => listar_aplicaciones(&raiz),
