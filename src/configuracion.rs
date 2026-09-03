@@ -22,6 +22,15 @@ pub struct Configuracion {
     pub escritorio: Escritorio,
 
     #[serde(default)]
+    pub idioma: Idioma,
+
+    #[serde(default)]
+    pub teclado: Teclado,
+
+    #[serde(default)]
+    pub monitor: Monitor,
+
+    #[serde(default)]
     pub aplicaciones: Aplicaciones,
 }
 
@@ -55,6 +64,84 @@ impl Default for Escritorio {
             principal: escritorio_por_defecto(),
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Idioma {
+    #[serde(default = "idioma_por_defecto")]
+    pub sistema: String,
+    #[serde(default = "region_por_defecto")]
+    pub region: String,
+}
+
+impl Default for Idioma {
+    fn default() -> Self {
+        Self {
+            sistema: idioma_por_defecto(),
+            region: region_por_defecto(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Teclado {
+    #[serde(default = "teclados_por_defecto")]
+    pub distribuciones: Vec<String>,
+    #[serde(default = "cambio_por_defecto")]
+    pub cambio: String,
+}
+
+impl Default for Teclado {
+    fn default() -> Self {
+        Self {
+            distribuciones: teclados_por_defecto(),
+            cambio: cambio_por_defecto(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Monitor {
+    #[serde(default = "resolucion_por_defecto")]
+    pub resolucion: String,
+    #[serde(default = "hz_por_defecto")]
+    pub hz: u32,
+}
+
+impl Default for Monitor {
+    fn default() -> Self {
+        Self {
+            resolucion: resolucion_por_defecto(),
+            hz: hz_por_defecto(),
+        }
+    }
+}
+
+fn idioma_por_defecto() -> String {
+    "español".to_string()
+}
+
+fn region_por_defecto() -> String {
+    "Perú".to_string()
+}
+
+fn teclados_por_defecto() -> Vec<String> {
+    vec!["españa".to_string(), "latinoamérica".to_string()]
+}
+
+fn cambio_por_defecto() -> String {
+    "alt+shift".to_string()
+}
+
+fn resolucion_por_defecto() -> String {
+    "1920x1080".to_string()
+}
+
+fn hz_por_defecto() -> u32 {
+    120
 }
 
 fn escritorio_por_defecto() -> String {
@@ -181,6 +268,80 @@ fn revisar_escritorio(escritorio: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn revisar_idioma(idioma: &Idioma) -> Result<(), String> {
+    if idioma.sistema != "español" {
+        return Err(format!(
+            "Todavía no conozco el idioma «{}» en esta reimplementación.",
+            idioma.sistema
+        ));
+    }
+
+    if idioma.region != "Perú" {
+        return Err(format!(
+            "Todavía no conozco la región «{}» en esta reimplementación.",
+            idioma.region
+        ));
+    }
+
+    Ok(())
+}
+
+fn revisar_teclado(teclado: &Teclado) -> Result<(), String> {
+    if teclado.distribuciones.is_empty() {
+        return Err("Elige al menos una distribución de teclado.".to_string());
+    }
+
+    let mut vistas = HashSet::new();
+
+    for distribucion in &teclado.distribuciones {
+        if !matches!(distribucion.as_str(), "españa" | "latinoamérica") {
+            return Err(format!(
+                "Todavía no conozco el teclado «{distribucion}» en esta reimplementación."
+            ));
+        }
+
+        if !vistas.insert(distribucion.as_str()) {
+            return Err(format!(
+                "El teclado «{distribucion}» aparece más de una vez."
+            ));
+        }
+    }
+
+    if teclado.cambio != "alt+shift" {
+        return Err(format!(
+            "No conozco «{}» para cambiar de teclado. Usa «alt+shift».",
+            teclado.cambio
+        ));
+    }
+
+    Ok(())
+}
+
+fn revisar_monitor(monitor: &Monitor) -> Result<(), String> {
+    let Some((ancho, alto)) = monitor.resolucion.split_once('x') else {
+        return Err(format!(
+            "No entiendo la resolución «{}». Usa algo como «1920x1080».",
+            monitor.resolucion
+        ));
+    };
+
+    let ancho = ancho.parse::<u32>().ok();
+    let alto = alto.parse::<u32>().ok();
+
+    if ancho.unwrap_or(0) == 0 || alto.unwrap_or(0) == 0 {
+        return Err(format!(
+            "No entiendo la resolución «{}». Usa algo como «1920x1080».",
+            monitor.resolucion
+        ));
+    }
+
+    if monitor.hz == 0 {
+        return Err("Los Hz del monitor tienen que ser mayores que cero.".to_string());
+    }
+
+    Ok(())
+}
+
 fn revisar_nombre_aplicacion(nombre: &str) -> Result<(), String> {
     if nombre.trim().is_empty() {
         return Err("La aplicación necesita un nombre.".to_string());
@@ -200,6 +361,9 @@ pub fn revisar(configuracion: &Configuracion) -> Result<(), String> {
     revisar_nombre(&configuracion.nombre)?;
     revisar_canal(&configuracion.canal)?;
     revisar_escritorio(&configuracion.escritorio.principal)?;
+    revisar_idioma(&configuracion.idioma)?;
+    revisar_teclado(&configuracion.teclado)?;
+    revisar_monitor(&configuracion.monitor)?;
 
     let mut cuentas = HashSet::new();
 
@@ -919,5 +1083,61 @@ principal = "niri"
             cambiar_escritorio_en_texto(original, "niri").expect("la operación debería ser válida");
 
         assert!(nuevo.is_none());
+    }
+    #[test]
+    fn un_teclado_repetido_se_rechaza() {
+        let error = leer_texto(
+            r#"
+[teclado]
+distribuciones = ["españa", "españa"]
+cambio = "alt+shift"
+"#,
+        )
+        .expect_err("un teclado repetido debería rechazarse");
+
+        assert!(error.contains("más de una vez"));
+    }
+
+    #[test]
+    fn una_resolucion_rara_se_explica() {
+        let error = leer_texto(
+            r#"
+[monitor]
+resolucion = "grande"
+hz = 120
+"#,
+        )
+        .expect_err("una resolución rara debería rechazarse");
+
+        assert!(error.contains("1920x1080"));
+    }
+
+    #[test]
+    fn idioma_y_region_se_escriben_con_nombres_humanos() {
+        let configuracion = leer_texto(
+            r#"
+[idioma]
+sistema = "español"
+region = "Perú"
+"#,
+        )
+        .expect("la configuración debería ser válida");
+
+        assert_eq!(configuracion.idioma.sistema, "español");
+        assert_eq!(configuracion.idioma.region, "Perú");
+    }
+
+    #[test]
+    fn el_cambio_de_teclado_no_expone_xkb() {
+        let configuracion = leer_texto(
+            r#"
+[teclado]
+distribuciones = ["españa", "latinoamérica"]
+cambio = "alt+shift"
+"#,
+        )
+        .expect("la configuración debería ser válida");
+
+        assert_eq!(configuracion.teclado.cambio, "alt+shift");
     }
 }

@@ -8,6 +8,10 @@
     (modulesPath + "/installer/scan/not-detected.nix")
   ];
 
+  # Esta salida de vídeo es un hecho detectado de este equipo.
+  # La resolución y los Hz se eligen en configuracion.toml.
+  _module.args.salidaMonitor = "DP-1";
+
   boot.initrd.availableKernelModules = ["xhci_pci" "ahci" "nvme" "usbhid" "usb_storage" "sd_mod"];
   boot.initrd.kernelModules = [];
   boot.kernelModules = [];

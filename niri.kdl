@@ -1,11 +1,11 @@
 // Niri usa Noctalia para launcher, controles, bloqueo y capturas.
 // Alacritty es la terminal y Nautilus abre los archivos.
 
-input {
-    keyboard {
-        numlock
-    }
+// Estas partes dependen del equipo y de configuracion.toml.
+include optional=true "/etc/korunix/niri-output.kdl"
+include optional=true "/etc/korunix/niri-input.kdl"
 
+input {
     touchpad {
         tap
         natural-scroll

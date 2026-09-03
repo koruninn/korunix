@@ -14,6 +14,18 @@ administrador = true
 # Este es el escritorio que se abre por defecto.
 principal = "niri"
 
+[idioma]
+sistema = "español"
+region = "Perú"
+
+[teclado]
+distribuciones = ["españa", "latinoamérica"]
+cambio = "alt+shift"
+
+[monitor]
+resolucion = "1920x1080"
+hz = 120
+
 [aplicaciones]
 # Pon aquí las aplicaciones que quieres tener.
 instaladas = [

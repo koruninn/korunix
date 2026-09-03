@@ -78,6 +78,18 @@ fn validar(raiz: &Path) {
             println!("Equipo: {}", configuracion.nombre);
             println!("Canal: {}", configuracion.canal);
             println!("Escritorio: {}", configuracion.escritorio.principal);
+            println!(
+                "Idioma: {} — {}",
+                configuracion.idioma.sistema, configuracion.idioma.region
+            );
+            println!(
+                "Teclados: {}",
+                configuracion.teclado.distribuciones.join(", ")
+            );
+            println!(
+                "Monitor: {} @ {} Hz",
+                configuracion.monitor.resolucion, configuracion.monitor.hz
+            );
             println!("Personas: {}", configuracion.personas.len());
             println!(
                 "Aplicaciones elegidas: {}",
@@ -103,6 +115,29 @@ fn mostrar_plan(raiz: &Path) {
     println!("Equipo: {}", plan.nombre);
     println!("Canal: {}", plan.canal);
     println!("Escritorio: {}", plan.escritorio);
+    println!(
+        "Idioma: {} — {} ({})",
+        plan.idioma.sistema, plan.idioma.region, plan.idioma.locale
+    );
+    println!("Zona horaria: {}", plan.idioma.zona_horaria);
+    println!(
+        "Teclados: {} · cambio {}",
+        plan.teclado.distribuciones.join(", "),
+        plan.teclado.cambio
+    );
+    println!(
+        "Monitor: {} @ {} Hz",
+        plan.monitor.resolucion, plan.monitor.hz
+    );
+    println!(
+        "Entrada: {}{}",
+        plan.entrada.backend,
+        if plan.entrada.wayland {
+            " (Wayland)"
+        } else {
+            ""
+        }
+    );
 
     if plan.noctalia {
         if plan.noctalia_version.is_empty() {

@@ -16,6 +16,22 @@
     canal = configuracion.canal or "estable";
     personas = configuracion.personas or [];
     escritorio = (configuracion.escritorio or {}).principal or "niri";
+    idioma =
+      configuracion.idioma or {
+        sistema = "español";
+        region = "Perú";
+      };
+    teclado =
+      configuracion.teclado or {
+        distribuciones = ["españa" "latinoamérica"];
+        cambio = "alt+shift";
+      };
+    monitor =
+      configuracion.monitor or {
+        resolucion = "1920x1080";
+        hz = 120;
+      };
+
     noctaliaActivo = escritorio == "niri" || escritorio == "hyprland";
 
     nixpkgs =
@@ -23,23 +39,15 @@
       then nixpkgs-estable
       else if canal == "inestable"
       then nixpkgs-inestable
-      else
-        throw ''
-          No conozco el canal «${canal}».
-          Pon "estable" o "inestable" en configuracion.toml.
-        '';
+      else throw "No conozco el canal «${canal}».";
 
     sistema = "x86_64-linux";
 
     pkgs = import nixpkgs {
       system = sistema;
-
-      # Algunas aplicaciones necesitan esto para poder instalarse.
       config.allowUnfree = true;
     };
 
-    # NixOS 26.05 todavía no trae Noctalia. En ese canal solo esta pieza
-    # concreta viene del Nixpkgs inestable que ya forma parte del flake.
     noctaliaPackage =
       if builtins.hasAttr "noctalia" pkgs
       then pkgs.noctalia
@@ -60,11 +68,7 @@
           then builtins.toString paquete.version
           else "";
       }
-      else
-        throw ''
-          No encontré «${elegida}» en Nixpkgs.
-          Revisa el nombre en configuracion.toml.
-        '';
+      else throw "No encontré «${elegida}» en Nixpkgs.";
 
     resueltas = map resolver (configuracion.aplicaciones.instaladas or []);
     aplicaciones = map (aplicacion: aplicacion.paquete) resueltas;
@@ -81,11 +85,49 @@
       })
       personas;
 
+    idiomaCodigo =
+      if idioma.sistema == "español"
+      then "es"
+      else throw "Todavía no conozco el idioma «${idioma.sistema}».";
+
+    region =
+      if idioma.region == "Perú"
+      then {
+        codigo = "PE";
+        zonaHoraria = "America/Lima";
+      }
+      else throw "Todavía no conozco la región «${idioma.region}».";
+
+    locale = "${idiomaCodigo}_${region.codigo}.UTF-8";
+
+    teclados = {
+      "españa" = {
+        xkb = "es";
+        variante = "deadtilde";
+      };
+      "latinoamérica" = {
+        xkb = "latam";
+        variante = "";
+      };
+    };
+
+    resolverTeclado = nombreTeclado:
+      teclados.${nombreTeclado}
+      or (throw "Todavía no conozco el teclado «${nombreTeclado}».");
+
+    tecladosResueltos = map resolverTeclado teclado.distribuciones;
+    xkbLayouts = map (valor: valor.xkb) tecladosResueltos;
+    xkbVariantes = map (valor: valor.variante) tecladosResueltos;
+
+    cambioXkb =
+      if teclado.cambio == "alt+shift"
+      then "grp:alt_shift_toggle"
+      else throw "No conozco la combinación «${teclado.cambio}».";
+
     programa = pkgs.rustPlatform.buildRustPackage {
       pname = "korunix";
       version = "0.1.0";
       src = ./.;
-
       cargoLock.lockFile = ./Cargo.lock;
 
       passthru.plan = {
@@ -98,13 +140,36 @@
           if noctaliaActivo
           then noctaliaPackage.version or ""
           else "";
+
+        idioma = {
+          sistema = idioma.sistema;
+          region = idioma.region;
+          inherit locale;
+          zona_horaria = region.zonaHoraria;
+        };
+
+        teclado = {
+          distribuciones = teclado.distribuciones;
+          cambio = teclado.cambio;
+          xkb = xkbLayouts;
+          variantes = xkbVariantes;
+        };
+
+        monitor = {
+          resolucion = monitor.resolucion;
+          hz = monitor.hz;
+        };
+
+        entrada = {
+          backend = "ibus";
+          wayland = true;
+        };
       };
     };
   in {
     packages.${sistema} = {
       default = programa;
       korunix = programa;
-
       aplicaciones = pkgs.buildEnv {
         name = "korunix-aplicaciones";
         paths = aplicaciones;
@@ -118,10 +183,13 @@
         inherit
           aplicaciones
           escritorio
+          idioma
+          monitor
           noctaliaPackage
           nombre
           personas
           programa
+          teclado
           ;
       };
 

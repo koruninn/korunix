@@ -18,6 +18,38 @@ pub struct Plan {
     pub aplicaciones: Vec<Aplicacion>,
     pub noctalia: bool,
     pub noctalia_version: String,
+    pub idioma: IdiomaPlan,
+    pub teclado: TecladoPlan,
+    pub monitor: MonitorPlan,
+    pub entrada: EntradaPlan,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct IdiomaPlan {
+    pub sistema: String,
+    pub region: String,
+    pub locale: String,
+    pub zona_horaria: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TecladoPlan {
+    pub distribuciones: Vec<String>,
+    pub cambio: String,
+    pub xkb: Vec<String>,
+    pub variantes: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MonitorPlan {
+    pub resolucion: String,
+    pub hz: u32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EntradaPlan {
+    pub backend: String,
+    pub wayland: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,6 +116,37 @@ fn comprobar_plan(configuracion: &Configuracion, plan: &Plan) -> Result<(), Stri
         return Err(
             "Noctalia no coincide con el escritorio elegido. No voy a usar ese plan.".to_string(),
         );
+    }
+
+    if plan.idioma.sistema != configuracion.idioma.sistema
+        || plan.idioma.region != configuracion.idioma.region
+    {
+        return Err(
+            "El idioma que resolvió Nix no coincide con configuracion.toml. No voy a usar ese plan."
+                .to_string(),
+        );
+    }
+
+    if plan.teclado.distribuciones != configuracion.teclado.distribuciones
+        || plan.teclado.cambio != configuracion.teclado.cambio
+    {
+        return Err(
+            "El teclado que resolvió Nix no coincide con configuracion.toml. No voy a usar ese plan."
+                .to_string(),
+        );
+    }
+
+    if plan.monitor.resolucion != configuracion.monitor.resolucion
+        || plan.monitor.hz != configuracion.monitor.hz
+    {
+        return Err(
+            "El monitor que resolvió Nix no coincide con configuracion.toml. No voy a usar ese plan."
+                .to_string(),
+        );
+    }
+
+    if plan.entrada.backend != "ibus" || !plan.entrada.wayland {
+        return Err("El método de entrada no conserva IBus con su frontend Wayland.".to_string());
     }
 
     let personas: Vec<(&str, bool)> = plan
@@ -371,7 +434,7 @@ pub fn preparar_sesion() -> Result<SesionPreparada, String> {
 #[cfg(test)]
 mod pruebas {
     use super::*;
-    use crate::configuracion::{Aplicaciones, Escritorio, Persona};
+    use crate::configuracion::{Aplicaciones, Escritorio, Idioma, Monitor, Persona, Teclado};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn configuracion() -> Configuracion {
@@ -386,6 +449,9 @@ mod pruebas {
             escritorio: Escritorio {
                 principal: "niri".to_string(),
             },
+            idioma: Idioma::default(),
+            teclado: Teclado::default(),
+            monitor: Monitor::default(),
             aplicaciones: Aplicaciones {
                 instaladas: vec!["firefox".to_string(), "karere".to_string()],
             },
@@ -416,6 +482,26 @@ mod pruebas {
             ],
             noctalia: true,
             noctalia_version: "5".to_string(),
+            idioma: IdiomaPlan {
+                sistema: "español".to_string(),
+                region: "Perú".to_string(),
+                locale: "es_PE.UTF-8".to_string(),
+                zona_horaria: "America/Lima".to_string(),
+            },
+            teclado: TecladoPlan {
+                distribuciones: vec!["españa".to_string(), "latinoamérica".to_string()],
+                cambio: "alt+shift".to_string(),
+                xkb: vec!["es".to_string(), "latam".to_string()],
+                variantes: vec!["deadtilde".to_string(), "".to_string()],
+            },
+            monitor: MonitorPlan {
+                resolucion: "1920x1080".to_string(),
+                hz: 120,
+            },
+            entrada: EntradaPlan {
+                backend: "ibus".to_string(),
+                wayland: true,
+            },
         }
     }
 
@@ -430,7 +516,7 @@ mod pruebas {
 
     #[test]
     fn entiende_el_plan_de_nix() {
-        let texto = br#"{
+        let texto = r#"{
           "nombre": "korunix",
           "canal": "inestable",
           "escritorio": "niri",
@@ -440,10 +526,30 @@ mod pruebas {
             {"elegida": "firefox", "nombre": "firefox", "version": "1"}
           ],
           "noctalia": true,
-          "noctalia_version": "5"
+          "noctalia_version": "5",
+          "idioma": {
+            "sistema": "español",
+            "region": "Perú",
+            "locale": "es_PE.UTF-8",
+            "zona_horaria": "America/Lima"
+          },
+          "teclado": {
+            "distribuciones": ["españa", "latinoamérica"],
+            "cambio": "alt+shift",
+            "xkb": ["es", "latam"],
+            "variantes": ["deadtilde", ""]
+          },
+          "monitor": {
+            "resolucion": "1920x1080",
+            "hz": 120
+          },
+          "entrada": {
+            "backend": "ibus",
+            "wayland": true
+          }
         }"#;
 
-        let plan = leer_plan(texto).expect("el plan debería entenderse");
+        let plan = leer_plan(texto.as_bytes()).expect("el plan debería entenderse");
 
         assert_eq!(plan.nombre, "korunix");
         assert_eq!(plan.escritorio, "niri");
@@ -474,6 +580,31 @@ mod pruebas {
             .expect_err("un canal distinto debería rechazarse");
 
         assert!(error.contains("no coincide"));
+    }
+
+    #[test]
+    fn rechaza_un_plan_con_otro_teclado() {
+        let configuracion = configuracion();
+        let mut plan = plan();
+        plan.teclado.distribuciones = vec!["latinoamérica".to_string()];
+
+        let error = comprobar_plan(&configuracion, &plan)
+            .expect_err("un teclado distinto debería rechazarse");
+
+        assert!(error.contains("teclado"));
+    }
+
+    #[test]
+    fn rechaza_un_plan_sin_ibus_wayland() {
+        let configuracion = configuracion();
+        let mut plan = plan();
+        plan.entrada.wayland = false;
+
+        let error =
+            comprobar_plan(&configuracion, &plan).expect_err("IBus Wayland debería conservarse");
+
+        assert!(error.contains("IBus"));
+        assert!(error.contains("Wayland"));
     }
 
     #[test]
