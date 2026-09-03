@@ -109,6 +109,46 @@ in {
   nix.settings.experimental-features = ["nix-command" "flakes"];
   nixpkgs.config.allowUnfree = true;
 
+  # Estas capacidades forman parte de la base de Korunix.
+  hardware.enableRedistributableFirmware = true;
+
+  hardware.graphics = {
+    enable = true;
+    enable32Bit = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
+  };
+
+  programs.appimage = {
+    enable = true;
+    binfmt = true;
+  };
+
+  services.flatpak.enable = true;
+
+  # SSH siempre está disponible. El firewall abre únicamente su regla.
+  services.openssh = {
+    enable = true;
+    openFirewall = true;
+  };
+
+  # El descubrimiento local también forma parte de la base.
+  services.avahi = {
+    enable = true;
+    openFirewall = true;
+  };
+
+  # Nautilus y otras aplicaciones pueden descubrir y usar unidades extraíbles.
+  services.udisks2.enable = true;
+  services.gvfs.enable = true;
+
+  # Korunix decide cuándo consultar actualizaciones de firmware.
+  services.fwupd.enable = true;
+  systemd.services.fwupd-refresh.enable = false;
+  systemd.timers.fwupd-refresh.enable = false;
+
+  # El agente normal de OpenSSH administra las claves de terminal.
+  services.gnome.gcr-ssh-agent.enable = false;
+  programs.ssh.startAgent = true;
+
   programs.fish.enable = true;
 
   users.mutableUsers = true;
@@ -263,7 +303,20 @@ in {
 
   environment.systemPackages =
     aplicaciones
-    ++ [programa]
+    ++ [
+      programa
+
+      # Herramientas pequeñas que forman parte de la experiencia inicial.
+      pkgs.git
+      pkgs.just
+      pkgs.tree
+      pkgs.wget
+
+      # Las interfaces gráficas usan estos servicios, pero los comandos también
+      # quedan disponibles cuando hace falta revisar una unidad o el firmware.
+      pkgs.udisks2
+      pkgs.fwupd
+    ]
     ++ lib.optionals noctaliaActivo [
       noctaliaPackage
       pkgs.alacritty
