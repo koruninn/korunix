@@ -115,6 +115,8 @@ La persona no debe editar varios archivos para expresar una sola decisión.
 
 TOML es la entrada manual normal. GUI, CLI y edición manual representan las mismas decisiones.
 
+Cuando Korunix cambie `configuracion.toml`, toca solamente lo que se pidió. Los comentarios y las opciones que no tienen nada que ver se conservan. La GUI y la CLI no deben convertir un archivo fácil de leer en texto generado difícil de editar.
+
 Ejemplo:
 
 ```toml
@@ -473,51 +475,52 @@ Ese corte demuestra soluciones que funcionaron. No obliga a copiar su estructura
 
 ## 21. Estado de `desde-cero`
 
-El primer Lego mínimo quedó publicado en:
+Primer Lego:
 
 ```text
 2452268a138c54eeb89b119e803a4ffe964a92be
 ```
 
-Ese corte demostró:
-
-```text
-configuracion.toml
-→ elige estable/inestable
-→ lista aplicaciones por nombre humano
-→ Nix resuelve las aplicaciones
-```
-
-Karere se resolvió sin añadirla a un catálogo curado y Home Manager quedó fuera de la rama nueva.
-
-La primera validación en Rust quedó publicada en:
+Primera validación en Rust:
 
 ```text
 cc062f9a8d4f8b68350f1053f4749e94a55bc381
 ```
 
-Ahora el árbol añade solamente lo necesario para que el programa pueda revisar las decisiones humanas:
+Primera edición de aplicaciones desde la CLI:
 
 ```text
-Cargo.toml
-Cargo.lock
-src/
-├── main.rs
-└── configuracion.rs
+a8dc1c7de221ef8bf10555a5b40bab798a6df3fc
 ```
 
-Este corte comprueba que:
+Ahora funciona así:
 
-- Rust lee el mismo `configuracion.toml` que usa Nix;
-- un canal desconocido se rechaza antes del flujo técnico normal;
-- una opción TOML inventada no se ignora;
-- nombres vacíos, repetidos o con espacios accidentales se explican;
-- una configuración válida no necesita ejecutar `nix eval` para ser leída por Rust;
-- Nix empaqueta el mismo programa;
-- la lista humana de aplicaciones sigue derivándose por separado;
-- todavía no hay GUI, daemon, DBus propio ni capas adicionales.
+```text
+configuracion.toml
+→ Rust lo lee y revisa
+→ la CLI puede añadir o quitar una aplicación
+→ se conserva el resto del archivo
+→ Nix sigue sacando de ahí los paquetes
+```
 
-El siguiente paso es ampliar este mismo modelo, no crear otro: añadir una decisión sencilla más, hacer que Rust la valide y que Nix derive su resultado técnico.
+Comandos disponibles:
+
+```text
+korunix validar
+korunix aplicaciones
+korunix aplicaciones agregar <nombre>
+korunix aplicaciones quitar <nombre>
+```
+
+Agregar o quitar una aplicación solo cambia `configuracion.toml`. NixOS no cambia hasta que exista y se use el flujo de preview/apply.
+
+Repetir `agregar` con algo que ya está en la lista no lo duplica. Repetir `quitar` con algo que ya no está tampoco rompe nada.
+
+En este corte también se limpiaron los comentarios viejos de `desde-cero` para usar el tono humano definido en esta guía.
+
+La edición sigue dentro de `configuracion.rs`. Todavía no hace falta inventar otro archivo solo para mover unas cuantas funciones.
+
+El siguiente bloque debe añadir otra propiedad humana sencilla, validarla en Rust y hacer que Nix saque de ella el cambio correspondiente.
 
 ## 22. Regla final
 
