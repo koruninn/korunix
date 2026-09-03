@@ -2477,21 +2477,63 @@ fn noctalia_idiomas_json(raiz: &Path) -> Result<String, String> {
     Ok(json_lista_textos(&idiomas))
 }
 
-fn localectl_campo(raiz: &Path, campo: &str) -> String {
-    let salida = capturar_opcional("localectl", &["status", "--no-pager"], raiz);
-    let prefijo = format!("{campo}:");
+fn localectl_campos_desde_salida(salida: &str) -> (String, String, String) {
+    let mut layout = String::new();
+    let mut variant = String::new();
+    let mut options = String::new();
 
     for linea in salida.lines() {
         let limpia = linea.trim_start();
-        if let Some(valor) = limpia.strip_prefix(&prefijo) {
-            return valor.trim_start().to_string();
+
+        for (prefijo, destino) in [
+            ("X11 Layout:", &mut layout),
+            ("X11 Variant:", &mut variant),
+            ("X11 Options:", &mut options),
+        ] {
+            if let Some(valor) = limpia.strip_prefix(prefijo) {
+                *destino = valor.trim_start().to_string();
+                break;
+            }
         }
     }
 
-    String::new()
+    (layout, variant, options)
+}
+
+fn localectl_campos(raiz: &Path) -> (String, String, String) {
+    let salida = capturar_opcional("localectl", &["status", "--no-pager"], raiz);
+    localectl_campos_desde_salida(&salida)
+}
+
+#[cfg(test)]
+#[test]
+fn localectl_se_lee_una_sola_vez_y_sus_campos_se_parsean_juntos() {
+    let salida = r#"
+       System Locale: LANG=es_PE.UTF-8
+           VC Keymap: es
+          X11 Layout: es,latam
+         X11 Variant: deadtilde,
+         X11 Options: grp:alt_shift_toggle
+    "#;
+
+    assert_eq!(
+        localectl_campos_desde_salida(salida),
+        (
+            "es,latam".to_string(),
+            "deadtilde,".to_string(),
+            "grp:alt_shift_toggle".to_string(),
+        )
+    );
 }
 
 fn runtime_lang(raiz: &Path) -> String {
+    if let Ok(valor) = env::var("LANG") {
+        let valor = valor.trim().trim_matches('"');
+        if !valor.is_empty() {
+            return valor.to_string();
+        }
+    }
+
     let salida = capturar_opcional("locale", &[], raiz);
 
     for linea in salida.lines() {
@@ -2552,9 +2594,7 @@ fn localizacion_json_runtime(
         &["show", "--property=Timezone", "--value"],
         raiz,
     );
-    let actual_layout = localectl_campo(raiz, "X11 Layout");
-    let actual_variant = localectl_campo(raiz, "X11 Variant");
-    let actual_options = localectl_campo(raiz, "X11 Options");
+    let (actual_layout, actual_variant, actual_options) = localectl_campos(raiz);
     let actual_console = runtime_console();
 
     let noctalia = localization
@@ -2856,9 +2896,7 @@ fn localizacion_json(raiz: &Path) -> Result<String, String> {
         &["show", "--property=Timezone", "--value"],
         raiz,
     );
-    let actual_layout = localectl_campo(raiz, "X11 Layout");
-    let actual_variant = localectl_campo(raiz, "X11 Variant");
-    let actual_options = localectl_campo(raiz, "X11 Options");
+    let (actual_layout, actual_variant, actual_options) = localectl_campos(raiz);
     let actual_console = runtime_console();
 
     let usuarios = usuarios_json(raiz)?;

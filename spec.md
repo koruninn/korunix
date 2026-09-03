@@ -470,6 +470,16 @@ precarga únicamente `Resumen` y cada sección obtiene y construye sus propios d
 cuando la persona entra en ella. Una sección ya leída puede conservarse en memoria
 hasta que una acción la invalide o la persona solicite actualizarla.
 
+Las lecturas de secciones independientes no se serializan detrás de una única
+bandera global. Si Idioma y región está leyendo datos vivos, la persona puede
+entrar en Personas, Copias o Mantenimiento y cada área completa su propia lectura
+sin esperar a la anterior. Las operaciones mutantes pueden conservar una frontera
+de exclusión propia; una lectura cotidiana no debe apropiarse de ella.
+
+Una misma lectura tampoco debe invocar repetidamente una herramienta del sistema
+para obtener campos del mismo estado. Por ejemplo, los campos XKB de `localectl`
+se obtienen con una sola consulta y se parsean juntos.
+
 La lectura normal de páginas no utiliza un porcentaje global ficticio. Cada área
 muestra su propio `LoadingState` mientras obtiene información real. La barra de
 progreso queda reservada para operaciones que sí tienen fases o progreso propios,
@@ -719,7 +729,17 @@ appearance.mode  = light | dark | auto
 
 “Dinámico” no es sinónimo de “Automático”. El primero describe de dónde proviene y cómo evoluciona la apariencia; el segundo describe la selección claro/oscuro.
 
-La disponibilidad de un estilo se calcula sobre todos los escritorios seleccionados. Korunix no debe ofrecer como elección global una apariencia que no pueda sostener de forma coherente en el conjunto instalado. Si un estilo solo está implementado en algunos escritorios, debe aparecer como no disponible para esa combinación y explicar qué escritorio limita la elección, en vez de aplicar silenciosamente resultados distintos.
+La disponibilidad de un estilo se calcula por la familia de escritorio a la que
+realmente se aplica. **Tener un escritorio instalado no equivale a elegirlo para
+la vista previa ni obliga a que todas las sesiones compartan la misma integración
+visual.** Niri y Hyprland comparten la familia Noctalia; Plasma y Cinnamon
+conservan su apariencia nativa o neutral mientras una integración equivalente no
+esté implementada.
+
+Por tanto, tener Plasma o Cinnamon instalados no bloquea Dinámico o Everforest
+para Niri/Hyprland. Korunix debe explicar dónde se aplica el estilo y mantener
+las demás sesiones sin contaminación visual. Solo se deshabilita una elección
+cuando ninguno de los escritorios seleccionados puede aplicarla realmente.
 
 Un gestor global de apariencia debe alimentar toda la aplicación. Ninguna página debe mantener su propia lógica de tema.
 
@@ -815,7 +835,16 @@ No se deben etiquetar escritorios como “para expertos” de forma que expulse 
 
 Cuando haya varios escritorios seleccionados, la vista principal mantiene una única captura grande y permite cambiar entre ellos mediante pestañas o controles equivalentes.
 
-La elección de estilo y modo se mantiene mientras se cambia el escritorio previsualizado para que la persona pueda comprobar cómo queda la misma decisión en cada sesión instalada. La disponibilidad de estilos se obtiene de la intersección de capacidades de todos los escritorios seleccionados cuando la decisión vaya a aplicarse globalmente.
+La elección de estilo y modo se mantiene mientras se cambia el escritorio
+previsualizado para que la persona pueda comprobar cómo queda la misma decisión
+en cada sesión instalada. Cambiar la vista previa **no cambia el escritorio
+principal, no instala ni elimina sesiones y no modifica por sí solo la apariencia
+guardada**.
+
+La compatibilidad se presenta por escritorio o familia. Si la decisión corresponde
+a Noctalia, Niri/Hyprland pueden aplicarla aunque Plasma o Cinnamon también estén
+instalados; esas otras sesiones conservan su integración propia hasta disponer de
+una implementación equivalente.
 
 Debe distinguirse entre:
 
@@ -1198,6 +1227,23 @@ Paridad de experiencia significa:
 ## 22. Aplicaciones por roles
 
 Korunix debe modelar roles humanos, no solamente listas de paquetes.
+
+La página de Aplicaciones debe distinguir entre el catálogo recomendado y las
+aplicaciones que la persona ya decidió instalar. Una selección válida **no puede
+desaparecer de la interfaz solo porque no tenga una entrada curada en
+`applicationPresentation`**.
+
+Cuando una persona añade por nombre una aplicación resoluble de Nixpkgs o
+Flatpak, Korunix conserva una representación humana corta en `configuracion/` y
+la muestra después como aplicación añadida/instalada. Verla, quitarla o volver a
+encontrarla no debe exigir buscar otra vez su atributo de Nixpkgs, App ID de
+Flatpak ni editar `sistema/`.
+
+Las piezas internas que sí pertenecen al catálogo técnico de Korunix pero están
+ocultas deliberadamente como dependencias siguen sin convertirse en elecciones
+visibles. La diferencia se obtiene del modelo: una selección humana fuera del
+catálogo curado se conserva visible; una dependencia interna no se inventa como
+aplicación de usuario.
 
 ### 22.1. Navegador
 

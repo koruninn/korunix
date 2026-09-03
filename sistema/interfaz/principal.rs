@@ -2473,6 +2473,7 @@ struct Estado {
     cargando: Cell<bool>,
     paginas_cargadas: RefCell<HashSet<String>>,
     pagina_pendiente: RefCell<Option<(String, bool)>>,
+    paginas_independientes_cargando: RefCell<HashSet<String>>,
     ocupado: Cell<bool>,
     camara_preview_activa: Cell<bool>,
     _apariencia: AparienciaViva,
@@ -10595,6 +10596,26 @@ fn ids_aplicaciones_seleccionadas(datos: &Value) -> Vec<String> {
         .collect()
 }
 
+fn aplicaciones_fuera_catalogo(seleccionadas: &[String], catalogo: &[String]) -> Vec<String> {
+    seleccionadas
+        .iter()
+        .filter(|id| !catalogo.iter().any(|conocida| conocida == *id))
+        .cloned()
+        .collect()
+}
+
+fn fuente_e_id_aplicacion_adicional(seleccion: &str) -> (String, String) {
+    if let Some(id) = seleccion.strip_prefix("flatpak:") {
+        return ("flatpak".to_string(), id.to_string());
+    }
+
+    if let Some(id) = seleccion.strip_prefix("nixpkgs:") {
+        return ("nixpkgs".to_string(), id.to_string());
+    }
+
+    ("nixpkgs".to_string(), seleccion.to_string())
+}
+
 fn escritorio_usa_noctalia(datos: &Value) -> bool {
     let principal = datos
         .pointer("/desktop/primary")
@@ -11365,6 +11386,36 @@ fn pagina_aplicaciones(
         &[],
     );
 
+    let adicionales = aplicaciones_fuera_catalogo(&seleccionados, &catalogo);
+
+    if !adicionales.is_empty() {
+        let grupo_adicionales = adw::PreferencesGroup::new();
+        grupo_adicionales.set_title(&localizar_visible(idioma_actual(), "Aplicaciones añadidas"));
+        grupo_adicionales.set_description(Some(&localizar_visible(
+            idioma_actual(),
+            "Aplicaciones que decidiste instalar por nombre aunque no formen parte del catálogo recomendado de Korunix.",
+        )));
+
+        for seleccion in adicionales {
+            let (fuente, id) = fuente_e_id_aplicacion_adicional(&seleccion);
+            let nombre = nombre_aplicacion_historial(&seleccion);
+            let fila = fila_aplicacion(
+                Rc::clone(&estado),
+                id,
+                fuente,
+                nombre,
+                localizar_visible(
+                    idioma_actual(),
+                    "Añadida por nombre y administrada por Korunix.",
+                ),
+                true,
+            );
+            grupo_adicionales.add(&fila);
+        }
+
+        pagina.add(&grupo_adicionales);
+    }
+
     // El buscador pertenece al inicio de Aplicaciones. Filtra el catálogo
     // curado al escribir y solo consulta catálogos externos cuando la persona
     // lo pide; la fuente concreta nunca se convierte en una pregunta.
@@ -11647,7 +11698,7 @@ fn estilo_disponible_para_escritorios(
 
     escritorios
         .iter()
-        .all(|escritorio| soporte.iter().any(|soportado| soportado == escritorio))
+        .any(|escritorio| soporte.iter().any(|soportado| soportado == escritorio))
 }
 
 fn nombre_estilo_humano(estilo: &str) -> &'static str {
@@ -11817,7 +11868,7 @@ fn refrescar_compatibilidad_estilos(
         if dynamic_ok {
             descripcion_estilo_humano("dynamic")
         } else {
-            "No disponible con la selección actual: Dinámico requiere que todos los escritorios elegidos sean Niri o Hyprland."
+            "No disponible con la selección actual: Dinámico necesita al menos una sesión Niri o Hyprland."
         },
     ));
 
@@ -11828,7 +11879,7 @@ fn refrescar_compatibilidad_estilos(
         if everforest_ok {
             descripcion_estilo_humano("everforest")
         } else {
-            "No disponible con la selección actual: la integración Everforest completa para Plasma y Cinnamon sigue pendiente."
+            "No disponible con la selección actual: Everforest necesita al menos una sesión Niri o Hyprland mientras la integración de Plasma y Cinnamon siga pendiente."
         },
     ));
 
@@ -11924,18 +11975,15 @@ fn pagina_escritorio_apariencia(
         .collect::<Vec<_>>();
 
     let grupo_preview = adw::PreferencesGroup::new();
-    grupo_preview.set_title(&localizar_visible(idioma_actual(), "Previsualización"));
+    grupo_preview.set_title(&localizar_visible(idioma_actual(), "Vista previa"));
     grupo_preview.set_description(Some(&localizar_visible(
         idioma_actual(),
-        "Compara cómo quedará la misma decisión en cada escritorio. Las capturas representan el resultado final, no el tema de la ventana de Korunix.",
+        "Muestra cómo quedará la apariencia en la sesión elegida. Cambiar esta vista no cambia el escritorio principal ni instala o elimina sesiones.",
     )));
 
     let modelo_preview = gtk::StringList::new(&catalogo_refs);
     let escritorio_preview = adw::ComboRow::new();
-    escritorio_preview.set_title(&localizar_visible(
-        idioma_actual(),
-        "Escritorio que quieres comparar",
-    ));
+    escritorio_preview.set_title(&localizar_visible(idioma_actual(), "Vista previa de"));
     escritorio_preview.set_model(Some(&modelo_preview));
     escritorio_preview.set_selected(indice(&escritorio_actual, &catalogo));
     grupo_preview.add(&escritorio_preview);
@@ -12008,10 +12056,13 @@ fn pagina_escritorio_apariencia(
     pagina.add(&grupo_apariencia);
 
     let grupo_escritorio = adw::PreferencesGroup::new();
-    grupo_escritorio.set_title(&localizar_visible(idioma_actual(), "Escritorios"));
+    grupo_escritorio.set_title(&localizar_visible(
+        idioma_actual(),
+        "Escritorios instalados",
+    ));
     grupo_escritorio.set_description(Some(&localizar_visible(
         idioma_actual(),
-        "El escritorio principal inicia por defecto. Los demás quedan disponibles como sesiones adicionales.",
+        "El principal inicia por defecto. Las demás sesiones instaladas siguen disponibles y no cambian la vista previa ni la apariencia de otras familias.",
     )));
 
     let modelo_escritorios = gtk::StringList::new(&catalogo_refs);
@@ -12075,7 +12126,6 @@ fn pagina_escritorio_apariencia(
         let everforest_principal = everforest.clone();
         let fila_everforest_principal = fila_everforest.clone();
         let principal_compat = principal.clone();
-        let escritorio_preview_principal = escritorio_preview.clone();
 
         principal.connect_selected_notify(move |selector| {
             let Some(nuevo) = catalogo_principal.get(selector.selected() as usize) else {
@@ -12104,8 +12154,6 @@ fn pagina_escritorio_apariencia(
             }
 
             *principal_actual_cambio.borrow_mut() = nuevo.clone();
-            escritorio_preview_principal.set_selected(selector.selected());
-
             refrescar_compatibilidad_estilos(
                 &soporte_principal,
                 &catalogo_principal,
@@ -12237,7 +12285,7 @@ fn pagina_escritorio_apariencia(
     fila_guardar.set_title(&localizar_visible(idioma_actual(), "Guardar decisiones"));
     fila_guardar.set_subtitle(&localizar_visible(
         idioma_actual(),
-        "Korunix valida la apariencia y todas las sesiones seleccionadas antes de aplicar el conjunto.",
+        "Korunix aplica el estilo donde existe integración y conserva la apariencia nativa o neutral en las demás sesiones.",
     ));
     let guardar = gtk::Button::with_label(texto(estado.idioma, "save_apply"));
     guardar.add_css_class("suggested-action");
@@ -12254,8 +12302,7 @@ fn pagina_escritorio_apariencia(
     let everforest_guardar = everforest.clone();
 
     guardar.connect_clicked(move |boton| {
-        let style = estilo_elegido(&dinamico_guardar, &everforest_guardar)
-        .to_string();
+        let style = estilo_elegido(&dinamico_guardar, &everforest_guardar).to_string();
 
         let mode = modos_guardar
             .get(modo.selected() as usize)
@@ -12273,7 +12320,7 @@ fn pagina_escritorio_apariencia(
             mostrar_error(
                 &estado_guardar,
                 format!(
-                    "{} no está disponible de forma completa para todos los escritorios seleccionados.",
+                    "{} no está disponible para ninguno de los escritorios seleccionados.",
                     nombre_estilo_humano(&style)
                 ),
             );
@@ -12325,7 +12372,7 @@ fn pagina_escritorio_apariencia(
             boton,
             &estado_guardar,
             &format!(
-                "¿Guardar y aplicar {} · {} para los escritorios seleccionados?",
+                "¿Guardar y aplicar {} · {} en las sesiones compatibles?",
                 nombre_estilo_humano(&style),
                 match mode.as_str() {
                     "light" => "Claro",
@@ -13004,6 +13051,205 @@ fn pagina_precarga_inicial() -> &'static str {
     "summary"
 }
 
+fn pagina_usa_carga_independiente(nombre: &str) -> bool {
+    matches!(
+        nombre,
+        "localization" | "people" | "backups" | "maintenance"
+    )
+}
+
+enum DatosPaginaIndependiente {
+    Localizacion(Value),
+    Personas(Value),
+    Copias(Value),
+    Mantenimiento {
+        recuperacion: Value,
+        limpieza: Value,
+        limpieza_total: Value,
+        privilegios: Value,
+    },
+}
+
+fn ejecutar_json_lectura_directa(
+    motor: &Path,
+    raiz: &Path,
+    argumentos: &[&str],
+) -> Result<Value, String> {
+    let salida = Command::new(motor)
+        .args(argumentos)
+        .current_dir(raiz)
+        .env("KORUNIX_ROOT", raiz)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| format!("No pude iniciar la lectura de Korunix: {error}"))?;
+
+    if !salida.status.success() {
+        let error = String::from_utf8_lossy(&salida.stderr).trim().to_string();
+        return Err(if error.is_empty() {
+            "La lectura de Korunix terminó con error.".to_string()
+        } else {
+            error
+        });
+    }
+
+    serde_json::from_slice::<Value>(&salida.stdout)
+        .map_err(|error| format!("El motor devolvió JSON inválido durante la lectura: {error}"))
+}
+
+fn leer_pagina_independiente(
+    motor: &Path,
+    raiz: &Path,
+    nombre: &str,
+) -> Result<DatosPaginaIndependiente, String> {
+    match nombre {
+        "localization" => ejecutar_json_lectura_directa(motor, raiz, &["localization", "--json"])
+            .map(DatosPaginaIndependiente::Localizacion),
+        "people" => ejecutar_json_lectura_directa(motor, raiz, &["users", "--json"])
+            .map(DatosPaginaIndependiente::Personas),
+        "backups" => ejecutar_json_lectura_directa(motor, raiz, &["history", "--json"])
+            .map(DatosPaginaIndependiente::Copias),
+        "maintenance" => Ok(DatosPaginaIndependiente::Mantenimiento {
+            recuperacion: ejecutar_json_lectura_directa(
+                motor,
+                raiz,
+                &["rollback", "--list", "--json"],
+            )?,
+            limpieza: ejecutar_json_lectura_directa(motor, raiz, &["clean-preview", "--json"])?,
+            limpieza_total: ejecutar_json_lectura_directa(
+                motor,
+                raiz,
+                &["clean-all-preview", "--json"],
+            )?,
+            privilegios: ejecutar_json_lectura_directa(motor, raiz, &["privileges", "--json"])?,
+        }),
+        _ => Err(format!("La página {nombre} no usa carga independiente.")),
+    }
+}
+
+fn terminar_carga_independiente(
+    estado: Rc<Estado>,
+    nombre: String,
+    resultado: Result<DatosPaginaIndependiente, String>,
+) {
+    estado
+        .paginas_independientes_cargando
+        .borrow_mut()
+        .remove(&nombre);
+
+    match resultado {
+        Ok(DatosPaginaIndependiente::Localizacion(datos)) => {
+            reemplazar_pagina(
+                &estado.stack,
+                &nombre,
+                texto(estado.idioma, "localization"),
+                &pagina_localizacion(Rc::clone(&estado), &datos),
+            );
+            estado.paginas_cargadas.borrow_mut().insert(nombre);
+        }
+        Ok(DatosPaginaIndependiente::Personas(datos)) => {
+            reemplazar_pagina(
+                &estado.stack,
+                &nombre,
+                texto(estado.idioma, "people"),
+                &pagina_personas(Rc::clone(&estado), &datos),
+            );
+            estado.paginas_cargadas.borrow_mut().insert(nombre);
+        }
+        Ok(DatosPaginaIndependiente::Copias(datos)) => {
+            reemplazar_pagina(
+                &estado.stack,
+                &nombre,
+                texto(estado.idioma, "backups_history"),
+                &pagina_copias_historial(Rc::clone(&estado), &datos),
+            );
+            estado.paginas_cargadas.borrow_mut().insert(nombre);
+        }
+        Ok(DatosPaginaIndependiente::Mantenimiento {
+            recuperacion,
+            limpieza,
+            limpieza_total,
+            privilegios,
+        }) => {
+            reemplazar_pagina(
+                &estado.stack,
+                &nombre,
+                texto(estado.idioma, "maintenance"),
+                &pagina_mantenimiento(
+                    Rc::clone(&estado),
+                    &recuperacion,
+                    &limpieza,
+                    &limpieza_total,
+                    &privilegios,
+                ),
+            );
+            estado.paginas_cargadas.borrow_mut().insert(nombre);
+        }
+        Err(error) => {
+            reemplazar_pagina(
+                &estado.stack,
+                &nombre,
+                texto(estado.idioma, clave_titulo_pagina(&nombre)),
+                &pagina_error(estado.idioma, &error),
+            );
+        }
+    }
+}
+
+fn cargar_pagina_independiente(estado: Rc<Estado>, nombre: &str, forzar: bool) {
+    if !forzar && estado.paginas_cargadas.borrow().contains(nombre) {
+        return;
+    }
+
+    {
+        let mut cargando = estado.paginas_independientes_cargando.borrow_mut();
+        if !cargando.insert(nombre.to_string()) {
+            return;
+        }
+    }
+
+    reemplazar_pagina(
+        &estado.stack,
+        nombre,
+        texto(estado.idioma, clave_titulo_pagina(nombre)),
+        &pagina_cargando(estado.idioma),
+    );
+
+    let motor = estado.motor.clone();
+    let raiz = estado.raiz.clone();
+    let nombre_hilo = nombre.to_string();
+    let nombre_resultado = nombre.to_string();
+    let (emisor, receptor) = mpsc::channel::<Result<DatosPaginaIndependiente, String>>();
+
+    thread::spawn(move || {
+        let resultado = leer_pagina_independiente(&motor, &raiz, &nombre_hilo);
+        let _ = emisor.send(resultado);
+    });
+
+    glib::timeout_add_local(Duration::from_millis(12), move || {
+        match receptor.try_recv() {
+            Ok(resultado) => {
+                terminar_carga_independiente(
+                    Rc::clone(&estado),
+                    nombre_resultado.clone(),
+                    resultado,
+                );
+                glib::ControlFlow::Break
+            }
+            Err(TryRecvError::Empty) => glib::ControlFlow::Continue,
+            Err(TryRecvError::Disconnected) => {
+                terminar_carga_independiente(
+                    Rc::clone(&estado),
+                    nombre_resultado.clone(),
+                    Err("La lectura terminó inesperadamente.".to_string()),
+                );
+                glib::ControlFlow::Break
+            }
+        }
+    });
+}
+
 fn terminar_carga_pagina(estado: Rc<Estado>, nombre: &str) {
     estado
         .paginas_cargadas
@@ -13022,6 +13268,11 @@ fn terminar_carga_pagina(estado: Rc<Estado>, nombre: &str) {
 
 fn cargar_pagina(estado: Rc<Estado>, nombre: &str, forzar: bool) {
     if indice_pagina(nombre).is_none() {
+        return;
+    }
+
+    if pagina_usa_carga_independiente(nombre) {
+        cargar_pagina_independiente(estado, nombre, forzar);
         return;
     }
 
@@ -13941,6 +14192,7 @@ fn construir_ventana_con_idioma(
         cargando: Cell::new(false),
         paginas_cargadas: RefCell::new(HashSet::new()),
         pagina_pendiente: RefCell::new(None),
+        paginas_independientes_cargando: RefCell::new(HashSet::new()),
         ocupado: Cell::new(false),
         camara_preview_activa: Cell::new(false),
         _apariencia: apariencia,
@@ -14043,6 +14295,71 @@ mod pruebas_roles_predeterminados_gui {
     }
 
     #[test]
+    fn selecciones_humanas_fuera_del_catalogo_siguen_visibles() {
+        let seleccionadas = vec![
+            "firefox".to_string(),
+            "karere".to_string(),
+            "blender".to_string(),
+        ];
+        let catalogo = vec!["firefox".to_string(), "git".to_string()];
+
+        assert_eq!(
+            aplicaciones_fuera_catalogo(&seleccionadas, &catalogo),
+            vec!["karere".to_string(), "blender".to_string()]
+        );
+        assert_eq!(
+            fuente_e_id_aplicacion_adicional("karere"),
+            ("nixpkgs".to_string(), "karere".to_string())
+        );
+        assert_eq!(
+            fuente_e_id_aplicacion_adicional("flatpak:org.example.App"),
+            ("flatpak".to_string(), "org.example.App".to_string())
+        );
+    }
+
+    #[test]
+    fn plasma_y_cinnamon_no_bloquean_estilos_de_noctalia() {
+        let apariencia = serde_json::json!({
+            "styleSupport": {
+                "default": ["niri", "hyprland", "plasma", "cinnamon"],
+                "dynamic": ["niri", "hyprland"],
+                "everforest": ["niri", "hyprland"]
+            }
+        });
+
+        assert!(estilo_disponible_para_escritorios(
+            &apariencia,
+            "dynamic",
+            &[
+                "niri".to_string(),
+                "plasma".to_string(),
+                "cinnamon".to_string()
+            ]
+        ));
+        assert!(estilo_disponible_para_escritorios(
+            &apariencia,
+            "everforest",
+            &["hyprland".to_string(), "plasma".to_string()]
+        ));
+        assert!(!estilo_disponible_para_escritorios(
+            &apariencia,
+            "dynamic",
+            &["plasma".to_string(), "cinnamon".to_string()]
+        ));
+    }
+
+    #[test]
+    fn cuatro_paginas_finales_tienen_carga_independiente() {
+        for pagina in ["localization", "people", "backups", "maintenance"] {
+            assert!(pagina_usa_carga_independiente(pagina));
+        }
+
+        for pagina in ["summary", "applications", "appearance"] {
+            assert!(!pagina_usa_carga_independiente(pagina));
+        }
+    }
+
+    #[test]
     fn identidades_visuales_cubren_las_doce_paginas_y_varian_composicion() {
         let paginas = [
             "summary",
@@ -14123,7 +14440,7 @@ mod pruebas_roles_predeterminados_gui {
     }
 
     #[test]
-    fn apariencia_respeta_capacidades_de_todos_los_escritorios() {
+    fn apariencia_respeta_capacidades_por_familia_de_escritorio() {
         let apariencia = serde_json::json!({
             "styleSupport": {
                 "default": ["niri", "hyprland", "cinnamon", "plasma"],
@@ -14134,28 +14451,31 @@ mod pruebas_roles_predeterminados_gui {
 
         assert!(estilo_disponible_para_escritorios(
             &apariencia,
-            "dynamic",
-            &["niri".to_string(), "hyprland".to_string()]
-        ));
-        assert!(!estilo_disponible_para_escritorios(
-            &apariencia,
-            "dynamic",
-            &["niri".to_string(), "plasma".to_string()]
-        ));
-        assert!(!estilo_disponible_para_escritorios(
-            &apariencia,
-            "everforest",
-            &["niri".to_string(), "cinnamon".to_string()]
-        ));
-        assert!(estilo_disponible_para_escritorios(
-            &apariencia,
             "default",
             &[
                 "niri".to_string(),
                 "hyprland".to_string(),
-                "cinnamon".to_string(),
-                "plasma".to_string()
+                "plasma".to_string(),
+                "cinnamon".to_string()
             ]
+        ));
+
+        assert!(estilo_disponible_para_escritorios(
+            &apariencia,
+            "dynamic",
+            &["niri".to_string(), "plasma".to_string()]
+        ));
+
+        assert!(estilo_disponible_para_escritorios(
+            &apariencia,
+            "everforest",
+            &["niri".to_string(), "cinnamon".to_string()]
+        ));
+
+        assert!(!estilo_disponible_para_escritorios(
+            &apariencia,
+            "dynamic",
+            &["plasma".to_string(), "cinnamon".to_string()]
         ));
     }
 

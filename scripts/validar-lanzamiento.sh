@@ -322,6 +322,23 @@ else
 fi
 
 
+if grep -Fq 'fn aplicaciones_fuera_catalogo(' sistema/interfaz/principal.rs \
+   && grep -Fq 'selecciones_humanas_fuera_del_catalogo_siguen_visibles' sistema/interfaz/principal.rs \
+   && grep -Fq 'plasma_y_cinnamon_no_bloquean_estilos_de_noctalia' sistema/interfaz/principal.rs \
+   && grep -Fq 'apariencia_respeta_capacidades_por_familia_de_escritorio' sistema/interfaz/principal.rs \
+   && ! grep -Fq 'apariencia_respeta_capacidades_de_todos_los_escritorios' sistema/interfaz/principal.rs \
+   && grep -Fq 'cuatro_paginas_finales_tienen_carga_independiente' sistema/interfaz/principal.rs \
+   && grep -Fq 'Aplicaciones añadidas' sistema/interfaz/principal.rs \
+   && ! grep -Fq '"Escritorio que quieres comparar"' sistema/interfaz/principal.rs \
+   && grep -Fq 'Vista previa de' sistema/interfaz/principal.rs \
+   && grep -Fq 'no se serializan detrás de una única' spec.md
+then
+  ok 'aplicaciones humanas, escritorios y las cuatro páginas finales conservan el flujo corregido'
+else
+  fallo 'regresó un flujo oculto, acoplado o serializado de la interfaz'
+fi
+
+
 printf '\n%s\n' '→ Producto y contrato'
 
 if rg -q 'fn build_candidate\(raiz: &Path, json: bool\)' sistema/programa/operaciones.rs \
