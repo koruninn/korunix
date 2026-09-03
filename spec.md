@@ -485,7 +485,7 @@ Los nombres visibles son humanos. Los identificadores técnicos quedan debajo.
 
 Se conserva como referencia el trabajo comprobado con IBus y composición Wayland para Niri/Hyprland, pero la nueva implementación debe buscar la forma más simple de cumplir el comportamiento.
 
-La corrección más reciente de ese frente es vinculante: XKB administra las distribuciones normales y IBus es el backend normal para composición y diacríticos. En Niri y Hyprland IBus usa su frontend Wayland. `XMODIFIERS=@im=ibus` sigue disponible, pero Korunix no fuerza `GTK_IM_MODULE` ni `QT_IM_MODULE`. Fcitx5 queda reservado para métodos de entrada avanzados cuando se implementen.
+La corrección más reciente de ese frente es vinculante: XKB administra las distribuciones normales y IBus es el backend normal para composición y diacríticos. En Niri y Hyprland IBus usa su frontend Wayland. `XMODIFIERS=@im=ibus` sigue disponible en la sesión mientras IBus sea el backend normal, pero Korunix no fuerza `GTK_IM_MODULE` ni `QT_IM_MODULE`. `NIRI_CONFIG` sigue siendo exclusivo de Niri. Fcitx5 queda reservado para métodos de entrada avanzados cuando se implementen.
 
 La configuración humana no expone `es_PE.UTF-8`, `deadtilde`, `grp:alt_shift_toggle` ni el nombre del conector de vídeo si Korunix puede derivarlos. El primer corte de `desde-cero` expresa las decisiones actuales así:
 
@@ -853,7 +853,23 @@ La nueva candidata, todavía sin activar, es:
 
 El TOML humano no cambió. Cohesion sigue siendo una sola elección humana y el pin queda como detalle técnico derivado. El sistema activo y el perfil persistente permanecieron intactos.
 
-El siguiente paso vuelve a ser la **auditoría integral de la candidata completa**. Si esa puerta no encuentra otra regresión real, la generación ya puede convertirse en el primer `preview` aplicable.
+La auditoría integral encontró una regresión concreta antes del primer preview: IBus y su frontend Wayland seguían activos, pero `XMODIFIERS=@im=ibus` no estaba materializado en `environment.sessionVariables`.
+
+Se recuperó sin volver a forzar módulos GTK/Qt y sin acoplarlo a Niri:
+
+```text
+9573c32f32928507f1e2ef404670f48f1c53e649
+```
+
+La candidata corregida, todavía sin activar, es:
+
+```text
+/nix/store/lviixrls6k95c3fnrsc9qhjb2z6q4w25-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+`XMODIFIERS=@im=ibus` permanece disponible también con Plasma/Cinnamon, mientras `NIRI_CONFIG` y Noctalia continúan aislados a los escritorios que les corresponden. El sistema activo y el perfil persistente permanecieron intactos.
+
+El siguiente paso vuelve a ser la **auditoría integral de la candidata completa**. No se avanza a `preview` aplicable hasta que esa puerta llegue al final sin otra regresión real.
 
 ## 22. Regla final
 
