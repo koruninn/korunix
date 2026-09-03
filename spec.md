@@ -8,7 +8,7 @@
 
 Korunix es una capa sencilla sobre NixOS para que una persona no técnica pueda configurar, mantener, entender y recuperar su sistema sin aprender toda la parte interna de NixOS.
 
-Prioridades, en este orden práctico:
+Prioridades:
 
 - rápido;
 - seguro;
@@ -54,7 +54,7 @@ Home Manager no forma parte de la arquitectura nueva.
 
 No se empieza con daemon propio, DBus propio, base de datos, varios crates ni capas de arquitectura porque sí.
 
-## 4. El modelo Lego
+## 4. El modelo Lego, entendido como propiedades de un componente
 
 La idea central es:
 
@@ -67,20 +67,36 @@ lo que la persona quiere
 
 Una decisión humana se expresa una sola vez.
 
+La comparación útil es Figma: `configuracion.toml` funciona como el panel de propiedades o variantes de un componente. Rust comprueba que la combinación tenga sentido. Nix es la parte técnica que sabe producir el resultado correcto a partir de esas propiedades.
+
+Cambiar una propiedad no significa que Korunix deba abrir y reescribir a mano muchos archivos técnicos. La implementación debe estar preparada para **leer las decisiones y derivar el resultado**.
+
+```text
+configuracion.toml
+        ↓
+propiedades humanas
+        ↓
+Rust valida
+        ↓
+Nix deriva paquetes, servicios y archivos
+        ↓
+NixOS resultante
+```
+
 Ejemplos:
 
 ```toml
 canal = "estable"
 ```
 
-Eso debe ajustar todo lo necesario para usar el canal estable.
+Eso ajusta todo lo necesario para usar el canal estable.
 
 ```toml
 [escritorio]
 principal = "niri"
 ```
 
-Eso debe ajustar lo necesario para Niri.
+Eso ajusta lo necesario para Niri.
 
 ```toml
 [aplicaciones]
@@ -91,15 +107,13 @@ instaladas = [
 ]
 ```
 
-Eso debe instalar esas aplicaciones si pueden resolverse de forma fiable, aunque alguna no tenga ficha curada.
+Eso instala esas aplicaciones si pueden resolverse de forma fiable, aunque alguna no tenga ficha curada.
 
 La persona no debe editar varios archivos para expresar una sola decisión.
 
 ## 5. TOML es la configuración humana
 
-TOML es la entrada manual normal.
-
-GUI, CLI y edición manual representan las mismas decisiones.
+TOML es la entrada manual normal. GUI, CLI y edición manual representan las mismas decisiones.
 
 Ejemplo:
 
@@ -139,11 +153,7 @@ La persona no debe escribir rutas de atributos de Nixpkgs, nombres de systemd, g
 
 Una función puede tener un control principal y opciones internas.
 
-Apagar una subopción no apaga necesariamente la función principal.
-
-Apagar el control principal no borra las preferencias internas. Simplemente deja de aplicarlas mientras esté apagado.
-
-Ejemplo:
+Apagar una subopción no apaga necesariamente la función principal. Apagar el control principal no borra las preferencias internas; simplemente deja de aplicarlas mientras esté apagado.
 
 ```toml
 [sunshine]
@@ -152,8 +162,6 @@ autoinicio = false
 ```
 
 Sunshine sigue disponible, pero no arranca solo.
-
-Ejemplo:
 
 ```toml
 [steam]
@@ -167,23 +175,9 @@ remote_play = true
 
 Todo lo que una persona pueda leer debe hablar en español humano, directo y sencillo.
 
-Esto incluye:
+Esto incluye nombres de archivos y opciones, comentarios, documentación, mensajes, errores, Rust, Nix, TOML, Niri, Noctalia, scripts y configuración de aplicaciones.
 
-- nombres de archivos y opciones;
-- comentarios;
-- documentación;
-- mensajes y errores;
-- Rust;
-- Nix;
-- TOML;
-- Niri;
-- Noctalia;
-- scripts;
-- configuración de aplicaciones.
-
-No usar nombres pretenciosos porque “así se programa”.
-
-Evitar palabras como `orchestrator`, `provider`, `repository`, `facade`, `adapter`, `domain`, `materialization` y similares cuando una palabra normal explica mejor lo mismo.
+No usar nombres pretenciosos porque “así se programa”. Evitar `orchestrator`, `provider`, `repository`, `facade`, `adapter`, `domain`, `materialization` y similares cuando una palabra normal explica mejor lo mismo.
 
 Si administra aplicaciones: `aplicaciones`.
 
@@ -222,9 +216,7 @@ korunix/
     └── interfaz.rs
 ```
 
-Una carpeta nueva solo aparece cuando de verdad existe una colección que la necesita.
-
-Si un archivo crece tanto que dividirlo mejora la comprensión, recién se divide.
+Una carpeta nueva solo aparece cuando de verdad existe una colección que la necesita. Si un archivo crece tanto que dividirlo mejora la comprensión, recién se divide.
 
 No crear carpetas profundas ni capas preventivas “por buenas prácticas”.
 
@@ -234,22 +226,16 @@ Rust administra decisiones, estado, validación, flujo, errores, GUI y CLI.
 
 Nix sigue siendo quien configura NixOS.
 
-La GUI no implementa NixOS por su cuenta. La CLI tampoco.
-
 ```text
 GUI → mismo Rust → Nix → NixOS
 CLI → mismo Rust → Nix → NixOS
 ```
 
-No escribir una segunda lógica para la GUI.
-
-No usar Rust para reinventar lo que NixOS ya hace bien.
+La GUI no implementa NixOS por su cuenta. La CLI tampoco. No usar Rust para reinventar lo que NixOS ya hace bien.
 
 ## 9. Rapidez
 
-Korunix debe sentirse inmediato.
-
-Usar Rust no basta. El programa debe evitar trabajo inútil.
+Korunix debe sentirse inmediato. Usar Rust no basta: hay que evitar trabajo inútil.
 
 Al arrancar:
 
@@ -268,11 +254,7 @@ abrir primero
 
 No ejecutar `nix eval`, `localectl`, `pgrep` u otros procesos repetidamente al abrir cada página.
 
-Las tareas lentas no pueden congelar GTK.
-
-Las páginas no deben serializarse detrás de una única espera global.
-
-Las operaciones remotas, firmware, actualizaciones y otras lecturas lentas trabajan aparte cuando sea posible.
+Las tareas lentas no pueden congelar GTK. Las páginas no deben serializarse detrás de una única espera global. Las operaciones remotas, firmware, actualizaciones y otras lecturas lentas trabajan aparte cuando sea posible.
 
 Korunix es offline-first: si una operación puede resolverse con datos locales, Internet no debe ser requisito.
 
@@ -286,7 +268,7 @@ Si alguien pone:
 principal = "niry"
 ```
 
-Korunix debe explicar el problema, sugerir `niri` cuando sea razonable y conservar el último estado válido.
+Korunix explica el problema, sugiere `niri` cuando sea razonable y conserva el último estado válido.
 
 Antes de un cambio importante:
 
@@ -298,27 +280,13 @@ Antes de un cambio importante:
 
 Preview no modifica el sistema.
 
-Apply activa exactamente la generación revisada, la deja persistente para el siguiente arranque y lo verifica.
+Apply activa exactamente la generación revisada, la deja persistente para el siguiente arranque y lo verifica. La generación activa y la persistente deben coincidir al terminar correctamente.
 
-La generación activa y la persistente deben coincidir al terminar correctamente.
-
-Rollback es una función normal del producto.
-
-Una operación lógica cruza la frontera de privilegios el menor número de veces posible.
-
-Las operaciones largas muestran su fase y no dejan la interfaz muda.
+Rollback es una función normal del producto. Una operación lógica cruza la frontera de privilegios el menor número de veces posible. Las operaciones largas muestran su fase y no dejan la interfaz muda.
 
 ## 11. Aplicaciones
 
-El catálogo curado sirve para:
-
-- nombre bonito;
-- descripción;
-- categoría;
-- opciones especiales;
-- integración adicional.
-
-No limita lo instalable.
+El catálogo curado sirve para nombre bonito, descripción, categoría, opciones especiales e integración adicional. No limita lo instalable.
 
 Una aplicación elegida por la persona debe seguir visible aunque no tenga ficha curada.
 
@@ -328,35 +296,22 @@ Korunix intenta resolver primero una selección humana sencilla, por ejemplo:
 "karere"
 ```
 
-Si puede resolverse de forma fiable en Nixpkgs, se instala sin obligar a escribir una ruta técnica.
-
-Flatpak puede servir como segunda fuente cuando corresponda.
+Si puede resolverse de forma fiable en Nixpkgs, se instala sin obligar a escribir una ruta técnica. Flatpak puede servir como segunda fuente cuando corresponda.
 
 Las dependencias internas que la persona no eligió no deben convertirse automáticamente en aplicaciones visibles.
 
 ## 12. Escritorios y apariencia
 
-Los escritorios soportados son:
+Los escritorios soportados son Niri, Hyprland, Cinnamon y KDE Plasma. GNOME puede aportar aplicaciones o integraciones, pero no es un escritorio soportado de Korunix.
 
-- Niri;
-- Hyprland;
-- Cinnamon;
-- KDE Plasma.
-
-GNOME puede aportar aplicaciones o integraciones, pero no es un escritorio soportado de Korunix.
-
-Estas ideas son distintas:
+Estas ideas son distintas y no se acoplan:
 
 - escritorio instalado;
 - escritorio principal;
 - escritorio usado para vista previa;
 - compatibilidad de un estilo.
 
-No se deben acoplar.
-
-Niri y Hyprland comparten la familia Noctalia.
-
-Plasma y Cinnamon conservan su apariencia nativa o neutral cuando una integración equivalente no existe.
+Niri y Hyprland comparten la familia Noctalia. Plasma y Cinnamon conservan su apariencia nativa o neutral cuando una integración equivalente no existe.
 
 Tener Plasma o Cinnamon instalados no bloquea Dinámico o Everforest para Niri/Hyprland.
 
@@ -364,11 +319,6 @@ Los ejes de apariencia son distintos:
 
 ```text
 Predeterminado / Dinámico / Everforest
-```
-
-y:
-
-```text
 Claro / Oscuro / Automático
 ```
 
@@ -376,19 +326,13 @@ Las plantillas visuales de Noctalia no deben contaminar Plasma o Cinnamon.
 
 ## 13. Servicios y funciones granulares
 
-Funciones como Steam y Sunshine deben permitir opciones internas sin convertir cada detalle técnico en una pregunta.
+Funciones como Steam y Sunshine permiten opciones internas sin convertir cada detalle técnico en una pregunta.
 
-Puertos y permisos se derivan de la función.
-
-El firewall permanece activo.
-
-Un puerto solo se abre cuando una función que realmente lo necesita está activa.
+Puertos y permisos se derivan de la función. El firewall permanece activo. Un puerto solo se abre cuando una función que realmente lo necesita está activa.
 
 SSH sigue siendo una capacidad prevista del producto.
 
-Sunshine pertenece al acceso/transmisión remota y puede tener autoinicio independiente.
-
-Steam puede tener Remote Play y servidor dedicado como preferencias independientes.
+Sunshine pertenece al acceso/transmisión remota y puede tener autoinicio independiente. Steam puede tener Remote Play y servidor dedicado como preferencias independientes.
 
 El acceso remoto más amplio puede integrar Sunshine/Moonlight y Tailscale cuando se trabaje ese frente; no es requisito del primer corte desde cero.
 
@@ -396,27 +340,13 @@ El acceso remoto más amplio puede integrar Sunshine/Moonlight y Tailscale cuand
 
 Korunix debe detectar antes de preguntar cuando sea fiable.
 
-Debe contemplar:
-
-- x86_64;
-- aarch64;
-- UEFI;
-- BIOS;
-- portátil o sobremesa;
-- CPU;
-- GPU;
-- memoria;
-- almacenamiento;
-- firmware;
-- dispositivos de audio;
-- micrófonos;
-- cámaras.
+Debe contemplar x86_64, aarch64, UEFI, BIOS, portátil o sobremesa, CPU, GPU, memoria, almacenamiento, firmware, audio, micrófonos y cámaras.
 
 La detección no debe convertirse en una excusa para llenar el arranque de procesos repetidos.
 
 ## 15. Idioma, teclado y personas
 
-Korunix debe mantener separadas las decisiones de:
+Korunix mantiene separadas estas decisiones:
 
 - idioma de la interfaz;
 - idiomas preferidos;
@@ -427,7 +357,7 @@ Korunix debe mantener separadas las decisiones de:
 - variantes;
 - métodos de entrada.
 
-Los nombres visibles deben ser humanos. Los identificadores técnicos quedan debajo.
+Los nombres visibles son humanos. Los identificadores técnicos quedan debajo.
 
 Se conserva como referencia el trabajo comprobado con IBus y composición Wayland para Niri/Hyprland, pero la nueva implementación debe buscar la forma más simple de cumplir el comportamiento.
 
@@ -452,12 +382,7 @@ Se conserva como comportamiento útil:
 
 ## 17. Actualizaciones
 
-Korunix administra también las actualizaciones del sistema.
-
-Debe soportar:
-
-- canal estable;
-- canal inestable.
+Korunix administra también las actualizaciones del sistema y soporta canal estable e inestable.
 
 La persona elige una vez y Korunix deriva los inputs y detalles relacionados.
 
@@ -469,27 +394,9 @@ No inventar porcentajes si Nix no puede ofrecerlos. Sí mostrar fase y actividad
 
 GTK4 + libadwaita son la base visual.
 
-La GUI:
+La GUI muestra, pregunta, manda decisiones al mismo Rust que usa la CLI y presenta resultados. No contiene una segunda implementación del sistema.
 
-- muestra;
-- pregunta;
-- manda decisiones al mismo Rust que usa la CLI;
-- presenta resultados;
-- no contiene una segunda implementación del sistema.
-
-Debe respetar:
-
-- navegación por teclado;
-- foco visible;
-- lectores de pantalla;
-- escalado de texto;
-- contraste;
-- traducciones largas;
-- diacríticos;
-- CJK;
-- preparación para RTL;
-- modo compacto;
-- ausencia de clipping.
+Debe respetar navegación por teclado, foco visible, lectores de pantalla, escalado de texto, contraste, traducciones largas, diacríticos, CJK, preparación para RTL, modo compacto y ausencia de clipping.
 
 Las secciones pueden tener composiciones diferentes según la tarea. Compartir libadwaita no significa clonar la misma página doce veces.
 
@@ -508,7 +415,7 @@ Ejemplos:
 - apply activa lo revisado;
 - activa y persistente coinciden;
 - rollback recupera;
-- una lectura normal no reevaluá Nix sin necesidad;
+- una lectura normal no reevalúa Nix sin necesidad;
 - la GUI no se congela;
 - una página lenta no bloquea las demás.
 
@@ -552,25 +459,47 @@ d0b40b682fcc6e70f9181a5b2f4b93175cbbe609
 
 Ese corte demuestra soluciones que funcionaron. No obliga a copiar su estructura.
 
-## 21. Primer objetivo de `desde-cero`
+## 21. Estado de `desde-cero`
 
-No intentar reconstruir todo Korunix de golpe.
+El primer Lego mínimo quedó publicado en:
 
-Primero hacer una base pequeña que pueda:
+```text
+2452268a138c54eeb89b119e803a4ffe964a92be
+```
 
-1. leer `configuracion.toml`;
-2. validarlo;
-3. mostrar el estado;
-4. añadir o quitar una aplicación;
-5. cambiar una preferencia sencilla;
-6. generar un plan;
-7. previsualizar sin modificar;
-8. aplicar exactamente lo revisado;
-9. verificar la generación activa y persistente;
-10. hacer rollback;
-11. ofrecer la misma lógica por CLI y una GUI mínima.
+Por ahora `desde-cero` contiene solamente:
 
-Cuando eso sea rápido, claro y seguro, se amplía.
+```text
+configuracion.toml
+flake.lock
+flake.nix
+sistema.nix
+```
+
+Ese corte ya demuestra:
+
+```text
+configuracion.toml
+→ elige estable/inestable
+→ lista aplicaciones por nombre humano
+→ Nix resuelve las aplicaciones
+```
+
+Karere se resolvió sin añadirla a un catálogo curado. Home Manager quedó fuera de la rama nueva.
+
+Esto todavía no es un Korunix completo. El siguiente paso es añadir Rust para leer y validar el mismo TOML, explicar errores humanos y evitar que una configuración inválida llegue a Nix.
+
+Después se avanza hacia:
+
+1. mostrar el estado;
+2. añadir o quitar una aplicación;
+3. cambiar una preferencia sencilla;
+4. generar un plan;
+5. previsualizar sin modificar;
+6. aplicar exactamente lo revisado;
+7. verificar generación activa y persistente;
+8. rollback;
+9. misma lógica por CLI y GUI mínima.
 
 ## 22. Regla final
 
