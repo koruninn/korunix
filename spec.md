@@ -382,6 +382,18 @@ Predeterminado / Dinámico / Everforest
 Claro / Oscuro / Automático
 ```
 
+Cuando se adopta una sesión Noctalia existente, `settings.toml` representa los cambios hechos desde la GUI y tiene prioridad efectiva sobre la base de `config.toml`. Una decisión reciente de la GUI no se reemplaza por un valor histórico de Korunix durante la migración.
+
+En el equipo actual la apariencia efectiva adoptada es:
+
+```toml
+[apariencia]
+estilo = "dinamico"
+modo = "automatico"
+```
+
+Korunix traduce eso para Noctalia como `source = "wallpaper"` y `mode = "auto"`. Como esas propiedades ya tienen una decisión en TOML, Korunix las alinea en las dos capas de Noctalia; las demás preferencias de Noctalia se conservan.
+
 Las plantillas visuales de Noctalia no deben contaminar Plasma o Cinnamon.
 
 Elegir Niri o Hyprland deriva Noctalia como parte de esa familia de escritorio. Cinnamon y Plasma no reciben su servicio ni su configuración. En el primer corte de `desde-cero`, Niri usa una configuración KDL pequeña y explícita con launcher, controles, bloqueo, capturas, terminal, archivos y navegación básica.
@@ -399,6 +411,13 @@ Funciones como Steam y Sunshine permiten opciones internas sin convertir cada de
 Puertos y permisos se derivan de la función. El firewall permanece activo. Un puerto solo se abre cuando una función que realmente lo necesita está activa.
 
 SSH forma parte permanente de la base de Korunix y abre únicamente su regla en el firewall. Avahi también forma parte de la base para el descubrimiento local.
+
+Bluetooth no depende del escritorio instalado. Si la persona lo mantiene activo, sigue activo en Niri, Hyprland, Plasma y Cinnamon. En el equipo actual se expresa así:
+
+```toml
+[bluetooth]
+activo = true
+```
 
 Flatpak y AppImage son capacidades del sistema aunque en ese momento no haya ninguna aplicación elegida desde esas fuentes. Nautilus dispone de UDisks2 y GVfs para el uso cotidiano de unidades extraíbles.
 
@@ -480,7 +499,22 @@ Este primer catálogo solo contiene las elecciones que usa el equipo actual. No 
 
 Personas debe permitir gestionar usuarios y preferencias sin pedir rutas o identificadores técnicos cuando una selección gráfica pueda resolverlo.
 
-Las cuentas locales se expresan como bloques `[[personas]]`. Cada bloque puede indicar el nombre de la cuenta, el nombre visible y si es administradora. Las contraseñas y sus hashes no se guardan en TOML ni en Git. Mientras se adopta una cuenta que ya existe, NixOS mantiene `users.mutableUsers = true` y Korunix no declara una contraseña.
+Las cuentas locales se expresan como bloques `[[personas]]`. Cada bloque puede indicar el nombre de la cuenta, el nombre visible y si es administradora.
+
+Una persona también puede conservar un avatar y qué clave local usa con GitHub:
+
+```toml
+[[personas]]
+cuenta = "koru"
+nombre = "André"
+administrador = true
+avatar = "avatar-koru.jpg"
+clave_github = ".ssh/blep"
+```
+
+El avatar puede formar parte de Korunix porque no contiene credenciales. Korunix prepara `~/.face` sin reemplazar un archivo manual. `clave_github` guarda únicamente una ruta relativa dentro de la carpeta personal: la clave privada sigue fuera de Nix y de Git. Nix deriva la configuración de OpenSSH para `github.com`.
+
+Las contraseñas y sus hashes no se guardan en TOML ni en Git. Mientras se adopta una cuenta que ya existe, NixOS mantiene `users.mutableUsers = true` y Korunix no declara una contraseña.
 
 ## 16. Almacenamiento, copias e historial
 
@@ -760,7 +794,34 @@ La candidata completa de este bloque se construyó sin activarse:
 
 El sistema activo y el perfil persistente permanecieron intactos. El canal estable también produjo una derivación válida con las cinco integraciones.
 
-Ya no quedan decisiones de aplicaciones del equipo actual pendientes de migrar desde `pruebas`. El siguiente paso es una **auditoría integral de la candidata completa** contra la intención humana vigente y el sistema activo para detectar regresiones reales antes de llamar `preview` a una generación aplicable.
+La primera pasada de esa auditoría encontró cuatro decisiones humanas que todavía no estaban expresadas en `desde-cero`: apariencia, Bluetooth, avatar e identidad SSH de GitHub. Se revisó el estado vivo antes de migrarlas para no restaurar valores viejos por accidente.
+
+El estado vivo confirmó:
+
+```text
+apariencia efectiva → Dinámico + Automático
+Bluetooth           → activo
+avatar              → coincide con koru.jpg de pruebas
+GitHub              → ~/.ssh/blep sigue siendo la identidad efectiva
+```
+
+Estas decisiones quedaron migradas en:
+
+```text
+c533d474df92e7fffa8b200e904e697a1efc42c6
+```
+
+La candidata corregida se construyó sin activarse:
+
+```text
+/nix/store/zhys4vx6c4yc923wydzsw6fv3kfvfvd5-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+Bluetooth ya no depende de que Niri o Hyprland estén instalados. El avatar prepara `~/.face` y conserva un archivo manual. La clave privada de GitHub no entra al repositorio. Noctalia recibe `wallpaper + auto` en las propiedades que Korunix administra y conserva el resto.
+
+El sistema activo y el perfil persistente permanecieron intactos.
+
+El siguiente paso vuelve a ser la **auditoría integral de la candidata completa**, ahora con las decisiones humanas conocidas ya migradas, antes de llamarla `preview` aplicable.
 
 ## 22. Regla final
 
