@@ -330,11 +330,20 @@ in {
     enable = true;
 
     packages = lib.optionals cohesionActivo [
-      "io.github.brunofin.Cohesion"
+      {
+        appId = "io.github.brunofin.Cohesion";
+        commit = "a476d7d1dbee231266f9e904d878ec931bcafe6e37b14191430b5feb1d3da21e";
+      }
     ];
 
-    # Las actualizaciones de aplicaciones pasan por Korunix; no se hacen solas.
-    update.auto.enable = false;
+    # Una generación revisada no cambia Flatpaks por detrás.
+    update = {
+      onActivation = false;
+      auto.enable = false;
+    };
+
+    # Los Flatpaks instalados fuera de Korunix se conservan.
+    uninstallUnmanaged = false;
   };
 
   services.openssh = {
