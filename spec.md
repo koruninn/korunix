@@ -467,16 +467,7 @@ El primer Lego mínimo quedó publicado en:
 2452268a138c54eeb89b119e803a4ffe964a92be
 ```
 
-Por ahora `desde-cero` contiene solamente:
-
-```text
-configuracion.toml
-flake.lock
-flake.nix
-sistema.nix
-```
-
-Ese corte ya demuestra:
+Ese corte demostró:
 
 ```text
 configuracion.toml
@@ -485,21 +476,36 @@ configuracion.toml
 → Nix resuelve las aplicaciones
 ```
 
-Karere se resolvió sin añadirla a un catálogo curado. Home Manager quedó fuera de la rama nueva.
+Karere se resolvió sin añadirla a un catálogo curado y Home Manager quedó fuera de la rama nueva.
 
-Esto todavía no es un Korunix completo. El siguiente paso es añadir Rust para leer y validar el mismo TOML, explicar errores humanos y evitar que una configuración inválida llegue a Nix.
+La primera validación en Rust quedó publicada en:
 
-Después se avanza hacia:
+```text
+cc062f9a8d4f8b68350f1053f4749e94a55bc381
+```
 
-1. mostrar el estado;
-2. añadir o quitar una aplicación;
-3. cambiar una preferencia sencilla;
-4. generar un plan;
-5. previsualizar sin modificar;
-6. aplicar exactamente lo revisado;
-7. verificar generación activa y persistente;
-8. rollback;
-9. misma lógica por CLI y GUI mínima.
+Ahora el árbol añade solamente lo necesario para que el programa pueda revisar las decisiones humanas:
+
+```text
+Cargo.toml
+Cargo.lock
+src/
+├── main.rs
+└── configuracion.rs
+```
+
+Este corte comprueba que:
+
+- Rust lee el mismo `configuracion.toml` que usa Nix;
+- un canal desconocido se rechaza antes del flujo técnico normal;
+- una opción TOML inventada no se ignora;
+- nombres vacíos, repetidos o con espacios accidentales se explican;
+- una configuración válida no necesita ejecutar `nix eval` para ser leída por Rust;
+- Nix empaqueta el mismo programa;
+- la lista humana de aplicaciones sigue derivándose por separado;
+- todavía no hay GUI, daemon, DBus propio ni capas adicionales.
+
+El siguiente paso es ampliar este mismo modelo, no crear otro: añadir una decisión sencilla más, hacer que Rust la valide y que Nix derive su resultado técnico.
 
 ## 22. Regla final
 
