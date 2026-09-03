@@ -34,12 +34,27 @@
     };
 
     resultado = import ./sistema.nix {inherit pkgs;};
+
+    # Rust revisa las decisiones humanas. Nix empaqueta el mismo programa.
+    programa = pkgs.rustPlatform.buildRustPackage {
+      pname = "korunix";
+      version = "0.1.0";
+      src = ./.;
+
+      cargoLock = {
+        lockFile = ./Cargo.lock;
+      };
+    };
   in {
-    # Por ahora este resultado solo demuestra el modelo Lego:
-    # nombres humanos arriba → paquetes reales abajo.
-    packages.${sistema}.default = pkgs.buildEnv {
-      name = "korunix-aplicaciones";
-      paths = resultado.aplicaciones;
+    packages.${sistema} = {
+      default = programa;
+      korunix = programa;
+
+      # Esto sigue demostrando que los nombres humanos se convierten en paquetes.
+      aplicaciones = pkgs.buildEnv {
+        name = "korunix-aplicaciones";
+        paths = resultado.aplicaciones;
+      };
     };
 
     formatter.${sistema} = pkgs.alejandra;
