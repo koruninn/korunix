@@ -366,7 +366,17 @@ SSH forma parte permanente de la base de Korunix y abre únicamente su regla en 
 
 Flatpak y AppImage son capacidades del sistema aunque en ese momento no haya ninguna aplicación elegida desde esas fuentes. Nautilus dispone de UDisks2 y GVfs para el uso cotidiano de unidades extraíbles.
 
-Sunshine pertenece al acceso/transmisión remota y puede tener autoinicio independiente. Steam puede tener Remote Play y servidor dedicado como preferencias independientes.
+Sunshine pertenece al acceso/transmisión remota y puede tener autoinicio independiente. En el equipo migrado se expresa como:
+
+```toml
+[sunshine]
+activo = true
+autoinicio = true
+```
+
+Impresión y virtualización también son decisiones humanas. El controlador de impresión actual se conserva mientras todavía no exista detección fiable que permita derivarlo sin preguntar.
+
+Steam puede tener Remote Play y servidor dedicado como preferencias independientes.
 
 El acceso remoto más amplio puede integrar Sunshine/Moonlight y Tailscale cuando se trabaje ese frente; no es requisito del primer corte desde cero.
 
@@ -428,6 +438,15 @@ Personas debe permitir gestionar usuarios y preferencias sin pedir rutas o ident
 Las cuentas locales se expresan como bloques `[[personas]]`. Cada bloque puede indicar el nombre de la cuenta, el nombre visible y si es administradora. Las contraseñas y sus hashes no se guardan en TOML ni en Git. Mientras se adopta una cuenta que ya existe, NixOS mantiene `users.mutableUsers = true` y Korunix no declara una contraseña.
 
 ## 16. Almacenamiento, copias e historial
+
+La configuración humana elige unidades adoptadas por un nombre sencillo. Por ejemplo:
+
+```toml
+[almacenamiento]
+disponibles = ["datos"]
+```
+
+La UUID, el formato, UID/GID y otros hechos detectados no se escriben en TOML. En el equipo actual, `hardware.nix` conoce esos datos y Nix deriva `/mnt/datos`, automount y las opciones necesarias.
 
 Se conserva como comportamiento útil:
 
@@ -628,7 +647,31 @@ Antes de llamar preview aplicable a una generación de `desde-cero`, hay que mig
 
 Los UUID, UID/GID, conector de monitor y otros hechos físicos no se convierten en preguntas humanas durante esa migración.
 
-La generación candidata sigue sin activarse. El siguiente bloque debe empezar la migración de esas decisiones humanas al TOML plano sin copiar la arquitectura de `pruebas`.
+Primer bloque de decisiones del equipo migrado:
+
+```text
+5771e6884e733f1ba4db4a6b5696791a94d6e863
+```
+
+`configuracion.toml` ya conserva:
+
+```text
+Niri como principal
++ Hyprland
++ Plasma
++ Cinnamon
+
+datos disponible
+Sunshine activo + autoinicio
+impresión activa + controlador actual
+virtualización activa
+```
+
+Los hechos de `datos` siguen fuera del TOML. Antes de adoptarlos se comprobó que la UUID `036F8E656FF00FB2` sigue presente como NTFS y que la cuenta local conserva los identificadores esperados.
+
+Nix deriva `/mnt/datos`, automount, acceso, servicio y firewall de Sunshine, impresión, escáner, libvirt y los cuatro escritorios. Noctalia está instalado cuando existe Niri/Hyprland y su servicio tiene una condición de sesión para no arrancar en Plasma ni Cinnamon. Si `XDG_CURRENT_DESKTOP` identifica la sesión actual, esa señal tiene prioridad sobre variables viejas de una sesión anterior.
+
+La generación candidata sigue sin activarse. Lo principal que queda por migrar antes del preview aplicable es la selección real de aplicaciones y sus integraciones especiales —Steam, LocalSend, OBS, Spotify, launchers y demás— sin convertir dependencias internas en elecciones humanas ni copiar las 345 entradas `.desktop` del sistema activo.
 
 ## 22. Regla final
 
