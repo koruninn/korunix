@@ -397,6 +397,28 @@ Los nombres visibles son humanos. Los identificadores técnicos quedan debajo.
 
 Se conserva como referencia el trabajo comprobado con IBus y composición Wayland para Niri/Hyprland, pero la nueva implementación debe buscar la forma más simple de cumplir el comportamiento.
 
+La corrección más reciente de ese frente es vinculante: XKB administra las distribuciones normales y IBus es el backend normal para composición y diacríticos. En Niri y Hyprland IBus usa su frontend Wayland. `XMODIFIERS=@im=ibus` sigue disponible, pero Korunix no fuerza `GTK_IM_MODULE` ni `QT_IM_MODULE`. Fcitx5 queda reservado para métodos de entrada avanzados cuando se implementen.
+
+La configuración humana no expone `es_PE.UTF-8`, `deadtilde`, `grp:alt_shift_toggle` ni el nombre del conector de vídeo si Korunix puede derivarlos. El primer corte de `desde-cero` expresa las decisiones actuales así:
+
+```toml
+[idioma]
+sistema = "español"
+region = "Perú"
+
+[teclado]
+distribuciones = ["españa", "latinoamérica"]
+cambio = "alt+shift"
+
+[monitor]
+resolucion = "1920x1080"
+hz = 120
+```
+
+De esas propiedades se derivan `es_PE.UTF-8`, `America/Lima`, los teclados XKB España `deadtilde` + Latinoamérica, Alt+Shift y el modo de monitor. `DP-1` permanece como hecho detectado de este equipo dentro de `hardware.nix`, no como decisión humana.
+
+Este primer catálogo solo contiene las elecciones que usa el equipo actual. No cambia el requisito del producto de poder ofrecer todos los idiomas y distribuciones de teclado de forma humana; ese catálogo se ampliará sin obligar a escribir identificadores XKB.
+
 Personas debe permitir gestionar usuarios y preferencias sin pedir rutas o identificadores técnicos cuando una selección gráfica pueda resolverlo.
 
 Las cuentas locales se expresan como bloques `[[personas]]`. Cada bloque puede indicar el nombre de la cuenta, el nombre visible y si es administradora. Las contraseñas y sus hashes no se guardan en TOML ni en Git. Mientras se adopta una cuenta que ya existe, NixOS mantiene `users.mutableUsers = true` y Korunix no declara una contraseña.
@@ -547,21 +569,32 @@ Sesión Niri básica con Noctalia:
 3791dc183ff838097089e282626d83a69a0b8f7a
 ```
 
-Niri ya recibe un `niri.kdl` pequeño del propio sistema. Tiene atajos para Noctalia, Alacritty, Nautilus, capturas y navegación básica. `xwayland-satellite` queda disponible para aplicaciones X11.
-
-Noctalia se deriva automáticamente cuando el escritorio es Niri o Hyprland. Cinnamon y Plasma no reciben su servicio. El plan muestra esta consecuencia y la versión resuelta de Noctalia.
-
-Antes de Noctalia, `korunix sesion preparar` crea la configuración inicial solo cuando no existe y fusiona la política de capturas sin borrar preferencias personales. También actualiza esa misma política en `settings.toml` si Noctalia ya tiene preferencias guardadas allí.
-
-Las capturas quedan en el directorio XDG de imágenes, dentro de `Capturas de pantalla`, con nombre localizado:
+Idioma, teclado, IBus Wayland y monitor:
 
 ```text
-Captura de pantalla del %Y-%m-%d %H-%M-%S
+6e7c84be34a99ec9e44f682388b7d344796cd4ef
 ```
 
-La generación candidata se valida con el propio `niri validate` y `noctalia config validate`. Sigue sin activarse ni volverse persistente durante las pruebas.
+La configuración humana ya expresa idioma, región, teclados, combinación para alternarlos y modo del monitor con nombres entendibles. Nix deriva los detalles técnicos.
 
-La sesión todavía no está lista para apply. Faltan decisiones que afectan directamente el uso diario, empezando por idioma, teclado/métodos de entrada y la configuración del monitor. Esas decisiones deben llegar al mismo TOML antes de revisar una generación aplicable.
+El equipo actual produce:
+
+```text
+locale        → es_PE.UTF-8
+zona horaria  → America/Lima
+teclados      → España + Latinoamérica
+cambio        → Alt+Shift
+entrada       → IBus Wayland
+monitor       → DP-1 · 1920x1080 @ 120 Hz
+```
+
+`DP-1` no vive en TOML: es un hecho del equipo. La resolución y los Hz sí son decisiones humanas.
+
+Niri carga teclado y monitor mediante fragmentos generados por Nix y la combinación completa pasa `niri validate`.
+
+IBus conserva la corrección ya demostrada en `pruebas`: frontend Wayland en Niri/Hyprland, `XMODIFIERS=@im=ibus` y sin forzar módulos GTK/Qt. No se repite la prueba viva de diacríticos porque ese comportamiento ya estaba cerrado.
+
+La generación candidata sigue sin activarse. El siguiente bloque debe comparar de forma concreta lo que contiene esta generación contra las capacidades esenciales del sistema activo y enumerar qué falta antes de poder llamarla preview aplicable.
 
 ## 22. Regla final
 
