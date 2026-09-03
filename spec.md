@@ -362,7 +362,9 @@ Funciones como Steam y Sunshine permiten opciones internas sin convertir cada de
 
 Puertos y permisos se derivan de la función. El firewall permanece activo. Un puerto solo se abre cuando una función que realmente lo necesita está activa.
 
-SSH sigue siendo una capacidad prevista del producto.
+SSH forma parte permanente de la base de Korunix y abre únicamente su regla en el firewall. Avahi también forma parte de la base para el descubrimiento local.
+
+Flatpak y AppImage son capacidades del sistema aunque en ese momento no haya ninguna aplicación elegida desde esas fuentes. Nautilus dispone de UDisks2 y GVfs para el uso cotidiano de unidades extraíbles.
 
 Sunshine pertenece al acceso/transmisión remota y puede tener autoinicio independiente. Steam puede tener Remote Play y servidor dedicado como preferencias independientes.
 
@@ -379,6 +381,8 @@ La detección no debe convertirse en una excusa para llenar el arranque de proce
 Los UUID de discos, módulos de arranque, arquitectura y otros hechos que NixOS necesita para arrancar no son preferencias humanas y no se meten en TOML. En el primer corte local de `desde-cero` viven en un `hardware.nix` plano. Korunix puede volver a detectarlos más adelante, pero no reemplaza silenciosamente un hardware ya comprobado.
 
 No se crea una carpeta como `generado/equipos/` mientras un solo `hardware.nix` sea suficiente para entender el sistema.
+
+La base habilita firmware redistribuible, fwupd y gráficos de 32 bits cuando la arquitectura es x86_64. Korunix controla cuándo consulta actualizaciones de firmware; el refresco automático de fwupd no se usa como sustituto del flujo de actualizaciones de Korunix.
 
 ## 15. Idioma, teclado y personas
 
@@ -594,7 +598,37 @@ Niri carga teclado y monitor mediante fragmentos generados por Nix y la combinac
 
 IBus conserva la corrección ya demostrada en `pruebas`: frontend Wayland en Niri/Hyprland, `XMODIFIERS=@im=ibus` y sin forzar módulos GTK/Qt. No se repite la prueba viva de diacríticos porque ese comportamiento ya estaba cerrado.
 
-La generación candidata sigue sin activarse. El siguiente bloque debe comparar de forma concreta lo que contiene esta generación contra las capacidades esenciales del sistema activo y enumerar qué falta antes de poder llamarla preview aplicable.
+Auditoría activo vs candidata:
+
+```text
+SSH / Avahi / Flatpak / AppImage / UDisks2 / GVfs / fwupd
+→ faltaban en la primera candidata
+
+git / just / tree / wget
+→ estaban en el sistema activo y forman parte de la base de producto
+```
+
+Base cotidiana recuperada:
+
+```text
+d487d602b0a2fc98b2c3242978133fc82d2d37a0
+```
+
+Estas capacidades no se añaden al TOML como preguntas nuevas: Korunix las deriva como base. El firewall sigue activo y SSH/Avahi abren únicamente las reglas que les corresponden.
+
+La auditoría también confirmó una regla distinta: el sistema activo sirve para descubrir posibles regresiones, pero no se copia ciegamente. La fuente para conservar intención humana es la configuración explícita más reciente.
+
+Antes de llamar preview aplicable a una generación de `desde-cero`, hay que migrar las decisiones humanas vigentes de `pruebas` que todavía no están en TOML. En este equipo incluyen:
+
+- Hyprland, Plasma y Cinnamon como escritorios adicionales;
+- la unidad de datos adoptada y su preferencia de disponibilidad;
+- las aplicaciones generales elegidas, incluidas Steam y las integraciones especiales;
+- Sunshine, impresión y virtualización activas;
+- el controlador de impresión ya elegido.
+
+Los UUID, UID/GID, conector de monitor y otros hechos físicos no se convierten en preguntas humanas durante esa migración.
+
+La generación candidata sigue sin activarse. El siguiente bloque debe empezar la migración de esas decisiones humanas al TOML plano sin copiar la arquitectura de `pruebas`.
 
 ## 22. Regla final
 
