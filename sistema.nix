@@ -1,6 +1,7 @@
 {
   almacenamiento,
   aplicaciones,
+  aplicacionesElegidas,
   config,
   escritorio,
   escritorios,
@@ -15,6 +16,7 @@
   programa,
   salidaMonitor,
   sunshine,
+  steam,
   teclado,
   unidadesDetectadas,
   virtualizacion,
@@ -32,6 +34,10 @@
   cinnamonActivo = builtins.elem "cinnamon" escritoriosValidos;
   plasmaActivo = builtins.elem "plasma" escritoriosValidos;
   noctaliaActivo = niriActivo || hyprlandActivo;
+
+  localsendActivo = builtins.elem "localsend" aplicacionesElegidas;
+  obsActivo = builtins.elem "obs-studio" aplicacionesElegidas;
+  scrcpyActivo = builtins.elem "scrcpy" aplicacionesElegidas;
 
   cuentas = map (persona: persona.cuenta) personas;
 
@@ -52,7 +58,8 @@
         extraGroups =
           ["networkmanager"]
           ++ lib.optionals (persona.administrador or false) ["wheel"]
-          ++ lib.optionals (virtualizacion.activa or false) ["libvirtd"]
+          ++ lib.optionals (sunshine.activo or false) ["input" "uinput"]
+          ++ lib.optionals (virtualizacion.activa or false) ["libvirtd" "kvm"]
           ++ lib.optionals (impresion.activa or false) ["lp" "scanner"];
       };
     })
@@ -408,6 +415,42 @@ in {
     capSysAdmin = sunshine.activo or false;
   };
 
+  programs.localsend = lib.mkIf localsendActivo {
+    enable = true;
+    openFirewall = true;
+  };
+
+  programs.obs-studio = lib.mkIf obsActivo {
+    enable = true;
+
+    package = pkgs.obs-studio.override {
+      cudaSupport = false;
+    };
+
+    plugins = with pkgs.obs-studio-plugins; [
+      wlrobs
+      obs-backgroundremoval
+      obs-pipewire-audio-capture
+      obs-vaapi
+      obs-gstreamer
+      obs-vkcapture
+    ];
+
+    enableVirtualCamera = true;
+  };
+
+  boot.extraModulePackages = lib.optionals obsActivo [
+    config.boot.kernelPackages.v4l2loopback
+  ];
+
+  programs.steam = lib.mkIf (steam.activo or false) {
+    enable = true;
+    remotePlay.openFirewall = steam.remote_play or false;
+    dedicatedServer.openFirewall = steam.servidor_dedicado or false;
+  };
+
+  programs.gamemode.enable = steam.activo or false;
+
   services.printing = {
     enable = impresion.activa or false;
 
@@ -452,6 +495,10 @@ in {
       pkgs.wget
       pkgs.udisks2
       pkgs.fwupd
+    ]
+    ++ lib.optionals scrcpyActivo [
+      # scrcpy necesita adb, pero la persona no tiene que elegirlo dos veces.
+      pkgs.android-tools
     ]
     ++ lib.optionals noctaliaActivo [
       noctaliaPackage

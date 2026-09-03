@@ -25,6 +25,7 @@ pub struct Plan {
     pub entrada: EntradaPlan,
     pub almacenamiento: Vec<UnidadPlan>,
     pub sunshine: SunshinePlan,
+    pub steam: SteamPlan,
     pub impresion: ImpresionPlan,
     pub virtualizacion: bool,
 }
@@ -67,6 +68,13 @@ pub struct UnidadPlan {
 pub struct SunshinePlan {
     pub activo: bool,
     pub autoinicio: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SteamPlan {
+    pub activo: bool,
+    pub remote_play: bool,
+    pub servidor_dedicado: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -168,6 +176,30 @@ fn comprobar_plan(configuracion: &Configuracion, plan: &Plan) -> Result<(), Stri
         );
     }
 
+    let mut xkb_esperado = Vec::new();
+    let mut variantes_esperadas = Vec::new();
+
+    for distribucion in &configuracion.teclado.distribuciones {
+        match distribucion.as_str() {
+            "españa" => {
+                xkb_esperado.push("es".to_string());
+                variantes_esperadas.push("deadtilde".to_string());
+            }
+            "latinoamérica" => {
+                xkb_esperado.push("latam".to_string());
+                variantes_esperadas.push(String::new());
+            }
+            _ => {}
+        }
+    }
+
+    if plan.teclado.xkb != xkb_esperado || plan.teclado.variantes != variantes_esperadas {
+        return Err(
+            "La traducción técnica del teclado no coincide con las distribuciones elegidas."
+                .to_string(),
+        );
+    }
+
     if plan.monitor.resolucion != configuracion.monitor.resolucion
         || plan.monitor.hz != configuracion.monitor.hz
     {
@@ -205,6 +237,13 @@ fn comprobar_plan(configuracion: &Configuracion, plan: &Plan) -> Result<(), Stri
         || plan.sunshine.autoinicio != configuracion.sunshine.autoinicio
     {
         return Err("Sunshine no coincide con configuracion.toml.".to_string());
+    }
+
+    if plan.steam.activo != configuracion.steam.activo
+        || plan.steam.remote_play != configuracion.steam.remote_play
+        || plan.steam.servidor_dedicado != configuracion.steam.servidor_dedicado
+    {
+        return Err("Steam no coincide con configuracion.toml.".to_string());
     }
 
     if plan.impresion.activa != configuracion.impresion.activa
@@ -503,8 +542,8 @@ pub fn preparar_sesion() -> Result<SesionPreparada, String> {
 mod pruebas {
     use super::*;
     use crate::configuracion::{
-        Almacenamiento, Aplicaciones, Escritorio, Idioma, Impresion, Monitor, Persona, Sunshine,
-        Teclado, Virtualizacion,
+        Almacenamiento, Aplicaciones, Escritorio, Idioma, Impresion, Monitor, Persona, Steam,
+        Sunshine, Teclado, Virtualizacion,
     };
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -535,6 +574,11 @@ mod pruebas {
             sunshine: Sunshine {
                 activo: true,
                 autoinicio: true,
+            },
+            steam: Steam {
+                activo: true,
+                remote_play: true,
+                servidor_dedicado: true,
             },
             impresion: Impresion {
                 activa: true,
@@ -605,6 +649,11 @@ mod pruebas {
                 activo: true,
                 autoinicio: true,
             },
+            steam: SteamPlan {
+                activo: true,
+                remote_play: true,
+                servidor_dedicado: true,
+            },
             impresion: ImpresionPlan {
                 activa: true,
                 controlador: Some("epson-201207w".to_string()),
@@ -662,6 +711,11 @@ mod pruebas {
           "sunshine": {
             "activo": true,
             "autoinicio": true
+          },
+          "steam": {
+            "activo": true,
+            "remote_play": true,
+            "servidor_dedicado": true
           },
           "impresion": {
             "activa": true,
@@ -750,6 +804,18 @@ mod pruebas {
             .expect_err("una unidad perdida debería rechazarse");
 
         assert!(error.contains("unidades disponibles"));
+    }
+
+    #[test]
+    fn rechaza_un_plan_con_otro_steam() {
+        let configuracion = configuracion();
+        let mut plan = plan();
+        plan.steam.remote_play = false;
+
+        let error =
+            comprobar_plan(&configuracion, &plan).expect_err("Steam distinto debería rechazarse");
+
+        assert!(error.contains("Steam"));
     }
 
     #[test]

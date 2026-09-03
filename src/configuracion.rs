@@ -37,6 +37,9 @@ pub struct Configuracion {
     pub sunshine: Sunshine,
 
     #[serde(default)]
+    pub steam: Steam,
+
+    #[serde(default)]
     pub impresion: Impresion,
 
     #[serde(default)]
@@ -160,6 +163,17 @@ pub struct Sunshine {
     pub activo: bool,
     #[serde(default)]
     pub autoinicio: bool,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Steam {
+    #[serde(default)]
+    pub activo: bool,
+    #[serde(default)]
+    pub remote_play: bool,
+    #[serde(default)]
+    pub servidor_dedicado: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -498,6 +512,13 @@ pub fn revisar(configuracion: &Configuracion) -> Result<(), String> {
 
     for aplicacion in &configuracion.aplicaciones.instaladas {
         revisar_nombre_aplicacion(aplicacion)?;
+
+        if aplicacion == "steam" {
+            return Err(
+                "Steam se configura en [steam], porque tiene opciones propias. No lo repitas en [aplicaciones]."
+                    .to_string(),
+            );
+        }
 
         if !vistas.insert(aplicacion.as_str()) {
             return Err(format!(
@@ -1361,5 +1382,40 @@ activa = true
             Some("epson-201207w")
         );
         assert!(configuracion.virtualizacion.activa);
+    }
+    #[test]
+    fn apagar_steam_conserva_sus_preferencias() {
+        let configuracion = leer_texto(
+            r#"
+[steam]
+activo = false
+remote_play = true
+servidor_dedicado = true
+"#,
+        )
+        .expect("las preferencias deberían conservarse");
+
+        assert!(!configuracion.steam.activo);
+        assert!(configuracion.steam.remote_play);
+        assert!(configuracion.steam.servidor_dedicado);
+    }
+
+    #[test]
+    fn steam_no_se_duplica_en_aplicaciones() {
+        let error = leer_texto(
+            r#"
+[steam]
+activo = true
+remote_play = true
+servidor_dedicado = true
+
+[aplicaciones]
+instaladas = ["steam"]
+"#,
+        )
+        .expect_err("Steam debería expresarse una sola vez");
+
+        assert!(error.contains("[steam]"));
+        assert!(error.contains("No lo repitas"));
     }
 }

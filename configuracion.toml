@@ -44,10 +44,45 @@ controlador = "epson-201207w"
 [virtualizacion]
 activa = true
 
+[steam]
+activo = true
+remote_play = true
+servidor_dedicado = true
+
 [aplicaciones]
-# Pon aquí las aplicaciones que quieres tener.
+# Estas son las aplicaciones que quieres ver y usar.
+# Las dependencias internas no se escriben aquí.
 instaladas = [
+  "birdfont",
+  "darktable",
   "firefox",
+  "fontforge",
+  "gimp",
+  "google-chrome",
+  "heroic",
+  "inkscape",
+  "kate",
   "karere",
+  "kdenlive",
+  "krita",
+  "localsend",
+  "lutris",
+  "obs-studio",
+  "obsidian",
+  "onlyoffice-desktopeditors",
+  "peazip",
+  "polyglot",
+  "prismlauncher",
+  "protonplus",
+  "pywalfox-native",
+  "rapidraw",
+  "rar",
+  "scrcpy",
+  "spotdl",
+  "thunderbird",
+  "unrar",
+  "vesktop",
+  "vlc",
+  "vscode",
   "blender",
 ]

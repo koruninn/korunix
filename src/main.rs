@@ -117,6 +117,24 @@ fn validar(raiz: &Path) {
                 }
             );
             println!(
+                "Steam: {} · Remote Play {} · servidor dedicado {}",
+                if configuracion.steam.activo {
+                    "activo"
+                } else {
+                    "apagado"
+                },
+                if configuracion.steam.remote_play {
+                    "sí"
+                } else {
+                    "no"
+                },
+                if configuracion.steam.servidor_dedicado {
+                    "sí"
+                } else {
+                    "no"
+                }
+            );
+            println!(
                 "Impresión: {}",
                 if configuracion.impresion.activa {
                     "activa"
@@ -237,6 +255,21 @@ fn mostrar_plan(raiz: &Path) {
             "apagado"
         },
         if plan.sunshine.autoinicio {
+            "sí"
+        } else {
+            "no"
+        }
+    );
+
+    println!(
+        "Steam: {} · Remote Play {} · servidor dedicado {}",
+        if plan.steam.activo {
+            "activo"
+        } else {
+            "apagado"
+        },
+        if plan.steam.remote_play { "sí" } else { "no" },
+        if plan.steam.servidor_dedicado {
             "sí"
         } else {
             "no"

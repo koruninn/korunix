@@ -53,6 +53,13 @@
         autoinicio = false;
       };
 
+    steam =
+      configuracion.steam or {
+        activo = false;
+        remote_play = false;
+        servidor_dedicado = false;
+      };
+
     impresion =
       configuracion.impresion or {
         activa = false;
@@ -88,11 +95,22 @@
       then pkgs.noctalia
       else nixpkgs-inestable.legacyPackages.${sistema}.noctalia;
 
-    resolver = elegida:
-      if builtins.hasAttr elegida pkgs
-      then let
-        paquete = builtins.getAttr elegida pkgs;
-      in {
+    aplicacionesElegidas = configuracion.aplicaciones.instaladas or [];
+
+    paquetePorNombre = elegida:
+      if elegida == "kate"
+      then pkgs.kdePackages.kate
+      else if elegida == "kdenlive"
+      then pkgs.kdePackages.kdenlive
+      else if builtins.hasAttr elegida pkgs
+      then builtins.getAttr elegida pkgs
+      else null;
+
+    resolver = elegida: let
+      paquete = paquetePorNombre elegida;
+    in
+      if paquete != null
+      then {
         inherit elegida paquete;
         nombre =
           if paquete ? pname && paquete.pname != null
@@ -105,8 +123,18 @@
       }
       else throw "No encontré «${elegida}» en Nixpkgs.";
 
-    resueltas = map resolver (configuracion.aplicaciones.instaladas or []);
-    aplicaciones = map (aplicacion: aplicacion.paquete) resueltas;
+    resueltas = map resolver aplicacionesElegidas;
+
+    # LocalSend y OBS usan sus módulos de NixOS. El plan sí los resuelve para
+    # enseñar nombre y versión, pero no se instalan dos veces.
+    aplicacionesConModulo = ["localsend" "obs-studio"];
+
+    aplicaciones =
+      map
+      (aplicacion: aplicacion.paquete)
+      (builtins.filter
+        (aplicacion: !(builtins.elem aplicacion.elegida aplicacionesConModulo))
+        resueltas);
 
     planAplicaciones =
       map
@@ -213,6 +241,12 @@
           autoinicio = sunshine.autoinicio or false;
         };
 
+        steam = {
+          activo = steam.activo or false;
+          remote_play = steam.remote_play or false;
+          servidor_dedicado = steam.servidor_dedicado or false;
+        };
+
         impresion = {
           activa = impresion.activa or false;
           controlador = impresion.controlador or null;
@@ -239,6 +273,7 @@
         inherit
           almacenamiento
           aplicaciones
+          aplicacionesElegidas
           escritorio
           escritorios
           idioma
@@ -248,6 +283,7 @@
           nombre
           personas
           programa
+          steam
           sunshine
           teclado
           virtualizacion
