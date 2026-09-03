@@ -247,6 +247,8 @@ CLI → mismo Rust → Nix → NixOS
 
 La GUI no implementa NixOS por su cuenta. La CLI tampoco. No usar Rust para reinventar lo que NixOS ya hace bien.
 
+La CLI no debe depender de abrir una terminal en una carpeta exacta. Si Korunix está en `~/.korunix`, el ejecutable tiene que encontrarlo desde cualquier carpeta.
+
 ## 9. Rapidez
 
 Korunix debe sentirse inmediato. Usar Rust no basta: hay que evitar trabajo inútil.
@@ -292,7 +294,11 @@ Antes de un cambio importante:
 - explicar si necesita autorización;
 - pedir privilegios solo cuando hagan falta.
 
-Preview no modifica el sistema.
+Korunix no llama `preview` a una lista de intenciones. Mientras todavía no exista una generación completa de NixOS que pueda aplicarse después, se llama `plan`.
+
+El plan puede pedirle a Nix que resuelva paquetes y otras consecuencias técnicas, pero no promete ser todavía la diferencia contra el sistema activo.
+
+Preview no modifica el sistema. Cuando exista, tiene que representar una generación completa y concreta.
 
 Apply activa exactamente la generación revisada, la deja persistente para el siguiente arranque y lo verifica. La generación activa y la persistente deben coincidir al terminar correctamente.
 
@@ -487,48 +493,44 @@ Primera validación en Rust:
 cc062f9a8d4f8b68350f1053f4749e94a55bc381
 ```
 
-Edición de aplicaciones desde la CLI:
+Edición de aplicaciones:
 
 ```text
 a8dc1c7de221ef8bf10555a5b40bab798a6df3fc
 ```
 
-Edición del canal desde la misma CLI:
+Edición del canal:
 
 ```text
 63685719b5b2067a5348abc0f9c17c7f008f544d
 ```
 
-Ahora hay dos tipos de propiedades que siguen el mismo camino:
+Primer plan resuelto por Nix:
 
 ```text
-aplicaciones
-→ Rust las lee o cambia
-→ Nix saca los paquetes
-
-canal
-→ Rust lo lee o cambia
-→ Nix elige estable o inestable
+b9b922901214be5940992acc7f17bddeba9bffba
 ```
 
-Comandos disponibles:
+`korunix plan` hace esto:
 
 ```text
-korunix validar
-korunix canal
-korunix canal <estable|inestable>
-korunix aplicaciones
-korunix aplicaciones agregar <nombre>
-korunix aplicaciones quitar <nombre>
+Rust revisa configuracion.toml
+→ Nix resuelve el canal y las aplicaciones
+→ Rust comprueba que ambos estén hablando de lo mismo
+→ muestra el resultado
+→ no cambia configuracion.toml
+→ no cambia /run/current-system
 ```
 
-Cambiar el canal conserva las aplicaciones y los comentarios del TOML. Poner el canal que ya estaba elegido no reescribe el archivo.
+El plan muestra el nombre y la versión que Nix resolvió para cada aplicación y la revisión exacta de Nixpkgs usada.
 
-Estos comandos todavía solo cambian `configuracion.toml`. NixOS no cambia hasta que exista y se use el flujo de preview/apply.
+`src/sistema.rs` aparece recién en este corte porque Rust ya tiene una tarea distinta: hablar con Nix. La edición del TOML sigue en `configuracion.rs`.
 
-El árbol sigue igual. No hizo falta crear otro archivo para añadir esta propiedad.
+El ejecutable también encuentra `~/.korunix` aunque se lance desde otra carpeta.
 
-El siguiente bloque ya puede empezar a preparar el plan o preview: tomar las decisiones válidas y mostrar qué cambiaría NixOS sin aplicar nada.
+Esto todavía no se llama preview. Falta producir una generación completa de NixOS que pueda revisarse y después aplicarse exactamente.
+
+El siguiente bloque debe conectar `sistema.nix` con una configuración NixOS completa y construir una generación candidata sin activarla.
 
 ## 22. Regla final
 
