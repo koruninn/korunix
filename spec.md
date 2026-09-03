@@ -117,6 +117,8 @@ TOML es la entrada manual normal. GUI, CLI y edición manual representan las mis
 
 Cuando Korunix cambie `configuracion.toml`, toca solamente lo que se pidió. Los comentarios y las opciones que no tienen nada que ver se conservan. La GUI y la CLI no deben convertir un archivo fácil de leer en texto generado difícil de editar.
 
+El nombre con el que aparece la computadora en la red también es una decisión humana. Se escribe una sola vez en TOML, por ejemplo `nombre = "korunix"`, y Nix lo usa como nombre del equipo.
+
 Ejemplo:
 
 ```toml
@@ -364,6 +366,10 @@ Debe contemplar x86_64, aarch64, UEFI, BIOS, portátil o sobremesa, CPU, GPU, me
 
 La detección no debe convertirse en una excusa para llenar el arranque de procesos repetidos.
 
+Los UUID de discos, módulos de arranque, arquitectura y otros hechos que NixOS necesita para arrancar no son preferencias humanas y no se meten en TOML. En el primer corte local de `desde-cero` viven en un `hardware.nix` plano. Korunix puede volver a detectarlos más adelante, pero no reemplaza silenciosamente un hardware ya comprobado.
+
+No se crea una carpeta como `generado/equipos/` mientras un solo `hardware.nix` sea suficiente para entender el sistema.
+
 ## 15. Idioma, teclado y personas
 
 Korunix mantiene separadas estas decisiones:
@@ -511,26 +517,38 @@ Primer plan resuelto por Nix:
 b9b922901214be5940992acc7f17bddeba9bffba
 ```
 
-`korunix plan` hace esto:
+Primera generación completa construida sin activar:
 
 ```text
-Rust revisa configuracion.toml
-→ Nix resuelve el canal y las aplicaciones
-→ Rust comprueba que ambos estén hablando de lo mismo
-→ muestra el resultado
-→ no cambia configuracion.toml
-→ no cambia /run/current-system
+840e294748903a5d67c7a4b0464eaf6476f74ea6
 ```
 
-El plan muestra el nombre y la versión que Nix resolvió para cada aplicación y la revisión exacta de Nixpkgs usada.
+Ahora existe este camino:
 
-`src/sistema.rs` aparece recién en este corte porque Rust ya tiene una tarea distinta: hablar con Nix. La edición del TOML sigue en `configuracion.rs`.
+```text
+configuracion.toml
+→ Rust valida
+→ Nix resuelve las decisiones
+→ sistema.nix arma NixOS
+→ hardware.nix aporta los hechos comprobados del equipo
+→ korunix construir crea una generación en /nix/store
+→ no la activa
+```
 
-El ejecutable también encuentra `~/.korunix` aunque se lance desde otra carpeta.
+El nombre del equipo ya vive en TOML y puede leerse o cambiarse con:
 
-Esto todavía no se llama preview. Falta producir una generación completa de NixOS que pueda revisarse y después aplicarse exactamente.
+```text
+korunix nombre
+korunix nombre <nuevo>
+```
 
-El siguiente bloque debe conectar `sistema.nix` con una configuración NixOS completa y construir una generación candidata sin activarla.
+La primera base de `hardware.nix` conserva los UUID y módulos que ya arrancan esta computadora, usa x86_64, AMD y UEFI con systemd-boot.
+
+`korunix construir` produce un `system.build.toplevel` real con `activate` y `switch-to-configuration`, pero no ejecuta ninguno de los dos. Tampoco cambia `configuracion.toml`, `/run/current-system` ni el perfil persistente.
+
+Esta generación ya es una generación completa en términos de NixOS, pero **todavía no está lista para apply**. Aún faltan decisiones esenciales del sistema que la implementación nueva no representa, especialmente la cuenta de usuario y el escritorio. No se activa una generación que podría dejar a la persona sin su sesión normal.
+
+El siguiente bloque debe llevar a TOML las decisiones mínimas necesarias para conservar acceso al equipo —primero la cuenta local y el escritorio principal— antes de convertir esta generación en un preview aplicable.
 
 ## 22. Regla final
 
