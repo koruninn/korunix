@@ -320,6 +320,24 @@ Korunix intenta resolver primero una selección humana sencilla, por ejemplo:
 
 Si puede resolverse de forma fiable en Nixpkgs, se instala sin obligar a escribir una ruta técnica. Flatpak puede servir como segunda fuente cuando corresponda.
 
+La fuente de instalación y la fuente de información visual son cosas distintas. La futura interfaz de Aplicaciones usa **AppStream** como fuente preferida para enriquecer fichas con nombre, resumen, descripción, icono, capturas, categorías y enlaces. Los metadatos AppStream publicados por Flathub se pueden aprovechar aunque Korunix instale esa misma aplicación desde Nixpkgs.
+
+Ejemplo:
+
+```text
+Darktable
+→ instalación: Nixpkgs
+→ ficha visual: AppStream de Flathub
+```
+
+Usar datos de Flathub no convierte automáticamente la instalación en Flatpak.
+
+El emparejamiento tiene que ser fiable: se prefieren AppStream ID, desktop ID o una correspondencia curada. No se asume que dos programas sean el mismo únicamente porque sus nombres se parecen.
+
+Los metadatos y las imágenes se guardan localmente para que la vista abra rápido y siga siendo útil sin conexión. La actualización remota ocurre después, en segundo plano. Si una aplicación no tiene ficha AppStream o no puede emparejarse con seguridad, sigue apareciendo y sigue siendo instalable; Korunix usa la información local disponible y una ficha sencilla.
+
+El catálogo curado queda para lo que Korunix realmente necesita corregir o añadir: nombre humano, categoría, explicación especial, correspondencia AppStream y controles propios. No tiene que duplicar manualmente descripciones y capturas que AppStream ya ofrece bien.
+
 Las dependencias internas que la persona no eligió no deben convertirse automáticamente en aplicaciones visibles.
 
 ## 12. Escritorios y apariencia
@@ -376,7 +394,16 @@ autoinicio = true
 
 Impresión y virtualización también son decisiones humanas. El controlador de impresión actual se conserva mientras todavía no exista detección fiable que permita derivarlo sin preguntar.
 
-Steam puede tener Remote Play y servidor dedicado como preferencias independientes.
+Steam tiene un control propio y conserva sus preferencias internas aunque esté apagado:
+
+```toml
+[steam]
+activo = true
+remote_play = true
+servidor_dedicado = true
+```
+
+Steam deriva GameMode. Remote Play y servidor dedicado abren sus reglas únicamente cuando Steam está activo y la subopción correspondiente está encendida. Millennium y la integración visual de Steam no se convierten en nuevas preguntas humanas; se resolverán dentro del frente de apariencia cuando corresponda.
 
 El acceso remoto más amplio puede integrar Sunshine/Moonlight y Tailscale cuando se trabaje ese frente; no es requisito del primer corte desde cero.
 
@@ -671,7 +698,23 @@ Los hechos de `datos` siguen fuera del TOML. Antes de adoptarlos se comprobó qu
 
 Nix deriva `/mnt/datos`, automount, acceso, servicio y firewall de Sunshine, impresión, escáner, libvirt y los cuatro escritorios. Noctalia está instalado cuando existe Niri/Hyprland y su servicio tiene una condición de sesión para no arrancar en Plasma ni Cinnamon. Si `XDG_CURRENT_DESKTOP` identifica la sesión actual, esa señal tiene prioridad sobre variables viejas de una sesión anterior.
 
-La generación candidata sigue sin activarse. Lo principal que queda por migrar antes del preview aplicable es la selección real de aplicaciones y sus integraciones especiales —Steam, LocalSend, OBS, Spotify, launchers y demás— sin convertir dependencias internas en elecciones humanas ni copiar las 345 entradas `.desktop` del sistema activo.
+Aplicaciones normales y Steam migrados:
+
+```text
+c1b48366ecc5da508dcd4bf13e6f081e461aadff
+```
+
+La selección humana actual ya expresa 32 aplicaciones normales en `[aplicaciones].instaladas`. `git`, `just`, `tree` y `wget` permanecen en la base y no se duplican. `android-tools` se deriva al elegir `scrcpy`.
+
+Polyglot dejó de necesitar Flatpak en esta reimplementación porque `polyglot` se resuelve directamente en Nixpkgs estable e inestable. Flathub puede seguir aportando su ficha AppStream sin decidir la fuente de instalación.
+
+LocalSend deriva su módulo y firewall. OBS deriva plugins, `v4l2loopback` y cámara virtual. Steam vive una sola vez en `[steam]` y deriva GameMode, Remote Play y servidor dedicado.
+
+Durante este bloque se completaron también dos consecuencias que la implementación anterior ya tenía comprobadas: Sunshine añade `input`/`uinput` y virtualización añade `libvirtd`/`kvm`.
+
+La decisión visual para la futura GUI queda fijada: AppStream es la fuente preferida de fichas; Flathub puede enriquecer aplicaciones instaladas desde Nixpkgs; el resultado se cachea localmente y una ficha ausente nunca limita lo instalable.
+
+La generación candidata sigue sin activarse. Quedan cinco selecciones humanas con integración propia antes de volver a auditar el preview: `cohesion`, `figma-linux-next`, `genshin-impact`, `honkai-star-rail` y `spotify`.
 
 ## 22. Regla final
 
