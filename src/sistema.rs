@@ -13,6 +13,7 @@ pub struct Plan {
     pub nombre: String,
     pub canal: String,
     pub escritorio: String,
+    pub escritorios: Vec<String>,
     pub personas: Vec<PersonaPlan>,
     pub revision: String,
     pub aplicaciones: Vec<Aplicacion>,
@@ -22,6 +23,10 @@ pub struct Plan {
     pub teclado: TecladoPlan,
     pub monitor: MonitorPlan,
     pub entrada: EntradaPlan,
+    pub almacenamiento: Vec<UnidadPlan>,
+    pub sunshine: SunshinePlan,
+    pub impresion: ImpresionPlan,
+    pub virtualizacion: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,6 +55,24 @@ pub struct MonitorPlan {
 pub struct EntradaPlan {
     pub backend: String,
     pub wayland: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UnidadPlan {
+    pub nombre: String,
+    pub ruta: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SunshinePlan {
+    pub activo: bool,
+    pub autoinicio: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ImpresionPlan {
+    pub activa: bool,
+    pub controlador: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,10 +130,19 @@ fn comprobar_plan(configuracion: &Configuracion, plan: &Plan) -> Result<(), Stri
         );
     }
 
-    let noctalia_esperado = matches!(
-        configuracion.escritorio.principal.as_str(),
-        "niri" | "hyprland"
-    );
+    let escritorios_esperados = configuracion.escritorio.instalados_efectivos();
+    let escritorios_resueltos: Vec<&str> = plan.escritorios.iter().map(String::as_str).collect();
+
+    if escritorios_resueltos != escritorios_esperados {
+        return Err(
+            "Los escritorios instalados que resolvió Nix no coinciden con configuracion.toml."
+                .to_string(),
+        );
+    }
+
+    let noctalia_esperado = escritorios_esperados
+        .iter()
+        .any(|escritorio| matches!(*escritorio, "niri" | "hyprland"));
 
     if plan.noctalia != noctalia_esperado {
         return Err(
@@ -147,6 +179,42 @@ fn comprobar_plan(configuracion: &Configuracion, plan: &Plan) -> Result<(), Stri
 
     if plan.entrada.backend != "ibus" || !plan.entrada.wayland {
         return Err("El método de entrada no conserva IBus con su frontend Wayland.".to_string());
+    }
+
+    let unidades: Vec<&str> = plan
+        .almacenamiento
+        .iter()
+        .map(|unidad| unidad.nombre.as_str())
+        .collect();
+
+    let unidades_esperadas: Vec<&str> = configuracion
+        .almacenamiento
+        .disponibles
+        .iter()
+        .map(String::as_str)
+        .collect();
+
+    if unidades != unidades_esperadas {
+        return Err(
+            "Las unidades disponibles que resolvió Nix no coinciden con configuracion.toml."
+                .to_string(),
+        );
+    }
+
+    if plan.sunshine.activo != configuracion.sunshine.activo
+        || plan.sunshine.autoinicio != configuracion.sunshine.autoinicio
+    {
+        return Err("Sunshine no coincide con configuracion.toml.".to_string());
+    }
+
+    if plan.impresion.activa != configuracion.impresion.activa
+        || plan.impresion.controlador != configuracion.impresion.controlador
+    {
+        return Err("La impresión no coincide con configuracion.toml.".to_string());
+    }
+
+    if plan.virtualizacion != configuracion.virtualizacion.activa {
+        return Err("La virtualización no coincide con configuracion.toml.".to_string());
     }
 
     let personas: Vec<(&str, bool)> = plan
@@ -434,7 +502,10 @@ pub fn preparar_sesion() -> Result<SesionPreparada, String> {
 #[cfg(test)]
 mod pruebas {
     use super::*;
-    use crate::configuracion::{Aplicaciones, Escritorio, Idioma, Monitor, Persona, Teclado};
+    use crate::configuracion::{
+        Almacenamiento, Aplicaciones, Escritorio, Idioma, Impresion, Monitor, Persona, Sunshine,
+        Teclado, Virtualizacion,
+    };
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn configuracion() -> Configuracion {
@@ -448,10 +519,28 @@ mod pruebas {
             }],
             escritorio: Escritorio {
                 principal: "niri".to_string(),
+                instalados: vec![
+                    "niri".to_string(),
+                    "hyprland".to_string(),
+                    "plasma".to_string(),
+                    "cinnamon".to_string(),
+                ],
             },
             idioma: Idioma::default(),
             teclado: Teclado::default(),
             monitor: Monitor::default(),
+            almacenamiento: Almacenamiento {
+                disponibles: vec!["datos".to_string()],
+            },
+            sunshine: Sunshine {
+                activo: true,
+                autoinicio: true,
+            },
+            impresion: Impresion {
+                activa: true,
+                controlador: Some("epson-201207w".to_string()),
+            },
+            virtualizacion: Virtualizacion { activa: true },
             aplicaciones: Aplicaciones {
                 instaladas: vec!["firefox".to_string(), "karere".to_string()],
             },
@@ -463,6 +552,12 @@ mod pruebas {
             nombre: "korunix".to_string(),
             canal: "inestable".to_string(),
             escritorio: "niri".to_string(),
+            escritorios: vec![
+                "niri".to_string(),
+                "hyprland".to_string(),
+                "plasma".to_string(),
+                "cinnamon".to_string(),
+            ],
             personas: vec![PersonaPlan {
                 cuenta: "koru".to_string(),
                 administrador: true,
@@ -502,6 +597,19 @@ mod pruebas {
                 backend: "ibus".to_string(),
                 wayland: true,
             },
+            almacenamiento: vec![UnidadPlan {
+                nombre: "datos".to_string(),
+                ruta: "/mnt/datos".to_string(),
+            }],
+            sunshine: SunshinePlan {
+                activo: true,
+                autoinicio: true,
+            },
+            impresion: ImpresionPlan {
+                activa: true,
+                controlador: Some("epson-201207w".to_string()),
+            },
+            virtualizacion: true,
         }
     }
 
@@ -520,6 +628,7 @@ mod pruebas {
           "nombre": "korunix",
           "canal": "inestable",
           "escritorio": "niri",
+          "escritorios": ["niri", "hyprland", "plasma", "cinnamon"],
           "personas": [{"cuenta": "koru", "administrador": true}],
           "revision": "abc123",
           "aplicaciones": [
@@ -546,7 +655,19 @@ mod pruebas {
           "entrada": {
             "backend": "ibus",
             "wayland": true
-          }
+          },
+          "almacenamiento": [
+            {"nombre": "datos", "ruta": "/mnt/datos"}
+          ],
+          "sunshine": {
+            "activo": true,
+            "autoinicio": true
+          },
+          "impresion": {
+            "activa": true,
+            "controlador": "epson-201207w"
+          },
+          "virtualizacion": true
         }"#;
 
         let plan = leer_plan(texto.as_bytes()).expect("el plan debería entenderse");
@@ -605,6 +726,42 @@ mod pruebas {
 
         assert!(error.contains("IBus"));
         assert!(error.contains("Wayland"));
+    }
+
+    #[test]
+    fn rechaza_un_plan_con_otros_escritorios_instalados() {
+        let configuracion = configuracion();
+        let mut plan = plan();
+        plan.escritorios.pop();
+
+        let error = comprobar_plan(&configuracion, &plan)
+            .expect_err("una lista distinta debería rechazarse");
+
+        assert!(error.contains("escritorios instalados"));
+    }
+
+    #[test]
+    fn rechaza_un_plan_con_otras_unidades() {
+        let configuracion = configuracion();
+        let mut plan = plan();
+        plan.almacenamiento.clear();
+
+        let error = comprobar_plan(&configuracion, &plan)
+            .expect_err("una unidad perdida debería rechazarse");
+
+        assert!(error.contains("unidades disponibles"));
+    }
+
+    #[test]
+    fn rechaza_un_plan_con_otro_sunshine() {
+        let configuracion = configuracion();
+        let mut plan = plan();
+        plan.sunshine.autoinicio = false;
+
+        let error = comprobar_plan(&configuracion, &plan)
+            .expect_err("Sunshine distinto debería rechazarse");
+
+        assert!(error.contains("Sunshine"));
     }
 
     #[test]

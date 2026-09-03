@@ -12,6 +12,17 @@
   # La resolución y los Hz se eligen en configuracion.toml.
   _module.args.salidaMonitor = "DP-1";
 
+  # Estos datos describen la unidad que Korunix conoce como «datos».
+  # La persona solo decide en configuracion.toml si quiere tenerla disponible.
+  _module.args.unidadesDetectadas = {
+    datos = {
+      uuid = "036F8E656FF00FB2";
+      sistemaArchivos = "ntfs";
+      uid = 1000;
+      gid = 100;
+    };
+  };
+
   boot.initrd.availableKernelModules = ["xhci_pci" "ahci" "nvme" "usbhid" "usb_storage" "sd_mod"];
   boot.initrd.kernelModules = [];
   boot.kernelModules = [];

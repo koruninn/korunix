@@ -1,8 +1,11 @@
 {
+  almacenamiento,
   aplicaciones,
   config,
   escritorio,
+  escritorios,
   idioma,
+  impresion,
   lib,
   monitor,
   noctaliaPackage,
@@ -11,9 +14,25 @@
   pkgs,
   programa,
   salidaMonitor,
+  sunshine,
   teclado,
+  unidadesDetectadas,
+  virtualizacion,
   ...
 }: let
+  escritoriosValidos =
+    if !(builtins.elem escritorio escritorios)
+    then throw "El escritorio principal también tiene que estar en «instalados»."
+    else if builtins.length escritorios != builtins.length (lib.unique escritorios)
+    then throw "Hay un escritorio repetido en «instalados»."
+    else escritorios;
+
+  niriActivo = builtins.elem "niri" escritoriosValidos;
+  hyprlandActivo = builtins.elem "hyprland" escritoriosValidos;
+  cinnamonActivo = builtins.elem "cinnamon" escritoriosValidos;
+  plasmaActivo = builtins.elem "plasma" escritoriosValidos;
+  noctaliaActivo = niriActivo || hyprlandActivo;
+
   cuentas = map (persona: persona.cuenta) personas;
 
   personasValidas =
@@ -29,9 +48,12 @@
         isNormalUser = true;
         description = persona.nombre;
         shell = pkgs.fish;
+
         extraGroups =
           ["networkmanager"]
-          ++ lib.optionals (persona.administrador or false) ["wheel"];
+          ++ lib.optionals (persona.administrador or false) ["wheel"]
+          ++ lib.optionals (virtualizacion.activa or false) ["libvirtd"]
+          ++ lib.optionals (impresion.activa or false) ["lp" "scanner"];
       };
     })
     personasValidas);
@@ -46,8 +68,6 @@
     else if escritorio == "plasma"
     then "plasma"
     else throw "No conozco el escritorio «${escritorio}».";
-
-  noctaliaActivo = escritorio == "niri" || escritorio == "hyprland";
 
   idiomaCodigo =
     if idioma.sistema == "español"
@@ -100,6 +120,103 @@
   ibusPackage = pkgs.ibus-with-plugins.override {
     plugins = config.i18n.inputMethod.ibus.engines;
   };
+
+  unidadesSolicitadas = almacenamiento.disponibles or [];
+
+  resolverUnidad = unidad:
+    if builtins.hasAttr unidad unidadesDetectadas
+    then
+      {nombre = unidad;}
+      // builtins.getAttr unidad unidadesDetectadas
+    else throw "No conozco la unidad «${unidad}» en este equipo.";
+
+  unidades = map resolverUnidad unidadesSolicitadas;
+
+  opcionesUnidad = unidad:
+    [
+      "nofail"
+      "x-systemd.automount"
+      "x-systemd.device-timeout=5s"
+      "x-gvfs-show"
+    ]
+    ++ lib.optionals
+    (builtins.elem unidad.sistemaArchivos ["ntfs" "exfat" "vfat"])
+    [
+      "uid=${toString unidad.uid}"
+      "gid=${toString unidad.gid}"
+      "umask=0077"
+    ]
+    ++ lib.optionals (unidad.sistemaArchivos == "ntfs") [
+      "windows_names"
+    ];
+
+  sistemasDeArchivos = builtins.listToAttrs (map (unidad: {
+      name = "/mnt/${unidad.nombre}";
+      value = {
+        device = "/dev/disk/by-uuid/${unidad.uuid}";
+        fsType =
+          if unidad.sistemaArchivos == "ntfs"
+          then "ntfs3"
+          else unidad.sistemaArchivos;
+        options = opcionesUnidad unidad;
+      };
+    })
+    unidades);
+
+  sesionNoctalia = pkgs.writeShellScript "korunix-es-sesion-noctalia" ''
+    escritorio="''${XDG_CURRENT_DESKTOP:-}"
+
+    # Si la sesión actual está identificada, esa señal manda. Una variable vieja
+    # de una sesión anterior no puede convertir Plasma o Cinnamon en Niri.
+    if [ -n "$escritorio" ]; then
+      case ":$escritorio:" in
+        *:niri:*|*:Hyprland:*|*:hyprland:*)
+          exit 0
+          ;;
+        *)
+          exit 1
+          ;;
+      esac
+    fi
+
+    escritorio="''${XDG_SESSION_DESKTOP:-}"
+
+    if [ -n "$escritorio" ]; then
+      case ":$escritorio:" in
+        *:niri:*|*:Hyprland:*|*:hyprland:*|*:hyprland-uwsm:*)
+          exit 0
+          ;;
+        *)
+          exit 1
+          ;;
+      esac
+    fi
+
+    escritorio="''${DESKTOP_SESSION:-}"
+
+    if [ -n "$escritorio" ]; then
+      case "$escritorio" in
+        niri|hyprland|hyprland-uwsm)
+          exit 0
+          ;;
+        *)
+          exit 1
+          ;;
+      esac
+    fi
+
+    # Solo si la sesión no publicó ninguna de esas variables se usa el socket
+    # del compositor como respaldo.
+    if compgen -G "''${XDG_RUNTIME_DIR:-/run/user/$UID}/niri*.sock" >/dev/null; then
+      exit 0
+    fi
+
+    if [ -d "''${XDG_RUNTIME_DIR:-/run/user/$UID}/hypr" ]; then
+      exit 0
+    fi
+
+    exit 1
+  '';
 in {
   imports = [./hardware.nix];
 
@@ -109,7 +226,6 @@ in {
   nix.settings.experimental-features = ["nix-command" "flakes"];
   nixpkgs.config.allowUnfree = true;
 
-  # Estas capacidades forman parte de la base de Korunix.
   hardware.enableRedistributableFirmware = true;
 
   hardware.graphics = {
@@ -124,28 +240,23 @@ in {
 
   services.flatpak.enable = true;
 
-  # SSH siempre está disponible. El firewall abre únicamente su regla.
   services.openssh = {
     enable = true;
     openFirewall = true;
   };
 
-  # El descubrimiento local también forma parte de la base.
   services.avahi = {
     enable = true;
     openFirewall = true;
   };
 
-  # Nautilus y otras aplicaciones pueden descubrir y usar unidades extraíbles.
   services.udisks2.enable = true;
   services.gvfs.enable = true;
 
-  # Korunix decide cuándo consultar actualizaciones de firmware.
   services.fwupd.enable = true;
   systemd.services.fwupd-refresh.enable = false;
   systemd.timers.fwupd-refresh.enable = false;
 
-  # El agente normal de OpenSSH administra las claves de terminal.
   services.gnome.gcr-ssh-agent.enable = false;
   programs.ssh.startAgent = true;
 
@@ -153,6 +264,8 @@ in {
 
   users.mutableUsers = true;
   users.users = usuarios;
+
+  fileSystems = sistemasDeArchivos;
 
   i18n.defaultLocale = locale;
 
@@ -170,7 +283,6 @@ in {
 
   time.timeZone = region.zonaHoraria;
 
-  # XKB sigue siendo dueño de las distribuciones normales.
   services.xserver.xkb = {
     layout = lib.concatStringsSep "," xkbLayouts;
     variant = lib.concatStringsSep "," xkbVariantes;
@@ -179,16 +291,14 @@ in {
 
   console.keyMap = tecladoPrincipal.consola;
 
-  # IBus aporta composición y diacríticos sin reemplazar XKB.
   i18n.inputMethod = {
     enable = true;
     type = "ibus";
     ibus.waylandFrontend = true;
   };
 
-  # Niri y Hyprland usan el frontend Wayland de IBus.
   environment.etc."xdg/autostart/ibus-daemon.desktop" =
-    lib.mkIf (escritorio == "niri" || escritorio == "hyprland")
+    lib.mkIf (niriActivo || hyprlandActivo)
     {
       text = ''
         [Desktop Entry]
@@ -200,31 +310,32 @@ in {
     };
 
   services.xserver.enable = true;
+
   services.displayManager = {
     gdm.enable = true;
     defaultSession = sesion;
   };
 
-  programs.niri.enable = escritorio == "niri";
+  programs.niri.enable = niriActivo;
 
-  programs.hyprland = lib.mkIf (escritorio == "hyprland") {
+  programs.hyprland = lib.mkIf hyprlandActivo {
     enable = true;
     withUWSM = true;
     xwayland.enable = true;
   };
 
-  services.xserver.desktopManager.cinnamon.enable = escritorio == "cinnamon";
-  services.desktopManager.plasma6.enable = escritorio == "plasma";
+  services.xserver.desktopManager.cinnamon.enable = cinnamonActivo;
+  services.desktopManager.plasma6.enable = plasmaActivo;
 
-  environment.sessionVariables = lib.mkIf (escritorio == "niri") {
+  environment.sessionVariables = lib.mkIf niriActivo {
     NIRI_CONFIG = "/etc/niri/config.kdl";
   };
 
-  environment.etc."niri/config.kdl" = lib.mkIf (escritorio == "niri") {
+  environment.etc."niri/config.kdl" = lib.mkIf niriActivo {
     source = ./niri.kdl;
   };
 
-  environment.etc."korunix/niri-input.kdl" = lib.mkIf (escritorio == "niri") {
+  environment.etc."korunix/niri-input.kdl" = lib.mkIf niriActivo {
     text = ''
       // El teclado viene de configuracion.toml.
       input {
@@ -241,7 +352,7 @@ in {
     '';
   };
 
-  environment.etc."korunix/niri-output.kdl" = lib.mkIf (escritorio == "niri") {
+  environment.etc."korunix/niri-output.kdl" = lib.mkIf niriActivo {
     text = ''
       // La salida es un hecho detectado; resolución y Hz vienen de configuracion.toml.
       output ${builtins.toJSON salidaMonitor} {
@@ -271,49 +382,74 @@ in {
     pulse.enable = true;
   };
 
-  systemd.user.services.korunix-sesion = lib.mkIf noctaliaActivo {
-    description = "Prepara la sesión de Korunix";
-    wantedBy = ["graphical-session.target"];
-    before = ["noctalia.service"];
-
-    environment.KORUNIX_NOCTALIA_BASE = "/etc/korunix/noctalia.toml";
-
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${programa}/bin/korunix sesion preparar";
-    };
-  };
-
+  # Este servicio existe si hay Niri o Hyprland, pero no arranca en Plasma o Cinnamon.
   systemd.user.services.noctalia = lib.mkIf noctaliaActivo {
     description = "Noctalia";
     partOf = ["graphical-session.target"];
     wantedBy = ["graphical-session.target"];
-    after = [
-      "graphical-session.target"
-      "korunix-sesion.service"
-    ];
-    requires = ["korunix-sesion.service"];
+    after = ["graphical-session.target"];
     enableDefaultPath = false;
 
+    environment.KORUNIX_NOCTALIA_BASE = "/etc/korunix/noctalia.toml";
+
     serviceConfig = {
+      ExecCondition = sesionNoctalia;
+      ExecStartPre = "${programa}/bin/korunix sesion preparar";
       ExecStart = lib.getExe noctaliaPackage;
       Restart = "on-failure";
     };
+  };
+
+  # Este puerto solo se abre cuando Sunshine está encendido.
+  services.sunshine = {
+    enable = sunshine.activo or false;
+    openFirewall = sunshine.activo or false;
+    autoStart = sunshine.autoinicio or false;
+    capSysAdmin = sunshine.activo or false;
+  };
+
+  services.printing = {
+    enable = impresion.activa or false;
+
+    drivers =
+      lib.optionals
+      ((impresion.activa or false)
+        && (impresion.controlador or null) == "epson-201207w")
+      [pkgs.epson_201207w];
+  };
+
+  hardware.sane.enable = impresion.activa or false;
+
+  programs.virt-manager.enable = virtualizacion.activa or false;
+  virtualisation.libvirtd.enable = virtualizacion.activa or false;
+
+  systemd.services.libvirt-default-network = lib.mkIf (virtualizacion.activa or false) {
+    description = "Activa la red predeterminada de las máquinas virtuales";
+    wantedBy = ["multi-user.target"];
+    after = ["libvirtd.service"];
+
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+
+    script = ''
+      ${pkgs.libvirt}/bin/virsh net-autostart default
+
+      if ! ${pkgs.libvirt}/bin/virsh net-info default | grep -q "Active:.*yes"; then
+        ${pkgs.libvirt}/bin/virsh net-start default
+      fi
+    '';
   };
 
   environment.systemPackages =
     aplicaciones
     ++ [
       programa
-
-      # Herramientas pequeñas que forman parte de la experiencia inicial.
       pkgs.git
       pkgs.just
       pkgs.tree
       pkgs.wget
-
-      # Las interfaces gráficas usan estos servicios, pero los comandos también
-      # quedan disponibles cuando hace falta revisar una unidad o el firmware.
       pkgs.udisks2
       pkgs.fwupd
     ]
@@ -322,7 +458,7 @@ in {
       pkgs.alacritty
       pkgs.nautilus
     ]
-    ++ lib.optionals (escritorio == "niri") [
+    ++ lib.optionals niriActivo [
       pkgs.xwayland-satellite
     ];
 

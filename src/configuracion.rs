@@ -31,6 +31,18 @@ pub struct Configuracion {
     pub monitor: Monitor,
 
     #[serde(default)]
+    pub almacenamiento: Almacenamiento,
+
+    #[serde(default)]
+    pub sunshine: Sunshine,
+
+    #[serde(default)]
+    pub impresion: Impresion,
+
+    #[serde(default)]
+    pub virtualizacion: Virtualizacion,
+
+    #[serde(default)]
     pub aplicaciones: Aplicaciones,
 }
 
@@ -56,12 +68,26 @@ pub struct Persona {
 pub struct Escritorio {
     #[serde(default = "escritorio_por_defecto")]
     pub principal: String,
+
+    #[serde(default)]
+    pub instalados: Vec<String>,
+}
+
+impl Escritorio {
+    pub fn instalados_efectivos(&self) -> Vec<&str> {
+        if self.instalados.is_empty() {
+            vec![self.principal.as_str()]
+        } else {
+            self.instalados.iter().map(String::as_str).collect()
+        }
+    }
 }
 
 impl Default for Escritorio {
     fn default() -> Self {
         Self {
             principal: escritorio_por_defecto(),
+            instalados: Vec::new(),
         }
     }
 }
@@ -118,6 +144,38 @@ impl Default for Monitor {
             hz: hz_por_defecto(),
         }
     }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Almacenamiento {
+    #[serde(default)]
+    pub disponibles: Vec<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Sunshine {
+    #[serde(default)]
+    pub activo: bool,
+    #[serde(default)]
+    pub autoinicio: bool,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Impresion {
+    #[serde(default)]
+    pub activa: bool,
+    #[serde(default)]
+    pub controlador: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Virtualizacion {
+    #[serde(default)]
+    pub activa: bool,
 }
 
 fn idioma_por_defecto() -> String {
@@ -268,6 +326,62 @@ fn revisar_escritorio(escritorio: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn revisar_escritorios(escritorio: &Escritorio) -> Result<(), String> {
+    revisar_escritorio(&escritorio.principal)?;
+
+    let instalados = escritorio.instalados_efectivos();
+    let mut vistos = HashSet::new();
+
+    for instalado in &instalados {
+        revisar_escritorio(instalado)?;
+
+        if !vistos.insert(*instalado) {
+            return Err(format!(
+                "El escritorio «{instalado}» aparece más de una vez en «instalados»."
+            ));
+        }
+    }
+
+    if !instalados.contains(&escritorio.principal.as_str()) {
+        return Err(format!(
+            "El escritorio principal «{}» también tiene que aparecer en «instalados».",
+            escritorio.principal
+        ));
+    }
+
+    Ok(())
+}
+
+fn revisar_almacenamiento(almacenamiento: &Almacenamiento) -> Result<(), String> {
+    let mut vistas = HashSet::new();
+
+    for unidad in &almacenamiento.disponibles {
+        if unidad != "datos" {
+            return Err(format!(
+                "Todavía no conozco la unidad «{unidad}» en este equipo."
+            ));
+        }
+
+        if !vistas.insert(unidad.as_str()) {
+            return Err(format!("La unidad «{unidad}» aparece más de una vez."));
+        }
+    }
+
+    Ok(())
+}
+
+fn revisar_impresion(impresion: &Impresion) -> Result<(), String> {
+    if let Some(controlador) = impresion.controlador.as_deref() {
+        if controlador != "epson-201207w" {
+            return Err(format!(
+                "Todavía no conozco el controlador de impresión «{controlador}»."
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 fn revisar_idioma(idioma: &Idioma) -> Result<(), String> {
     if idioma.sistema != "español" {
         return Err(format!(
@@ -360,10 +474,12 @@ fn revisar_nombre_aplicacion(nombre: &str) -> Result<(), String> {
 pub fn revisar(configuracion: &Configuracion) -> Result<(), String> {
     revisar_nombre(&configuracion.nombre)?;
     revisar_canal(&configuracion.canal)?;
-    revisar_escritorio(&configuracion.escritorio.principal)?;
+    revisar_escritorios(&configuracion.escritorio)?;
     revisar_idioma(&configuracion.idioma)?;
     revisar_teclado(&configuracion.teclado)?;
     revisar_monitor(&configuracion.monitor)?;
+    revisar_almacenamiento(&configuracion.almacenamiento)?;
+    revisar_impresion(&configuracion.impresion)?;
 
     let mut cuentas = HashSet::new();
 
@@ -1139,5 +1255,111 @@ cambio = "alt+shift"
         .expect("la configuración debería ser válida");
 
         assert_eq!(configuracion.teclado.cambio, "alt+shift");
+    }
+    #[test]
+    fn varios_escritorios_se_expresan_una_sola_vez() {
+        let configuracion = leer_texto(
+            r#"
+[escritorio]
+principal = "niri"
+instalados = ["niri", "hyprland", "plasma", "cinnamon"]
+"#,
+        )
+        .expect("los cuatro escritorios deberían ser válidos");
+
+        assert_eq!(configuracion.escritorio.instalados.len(), 4);
+    }
+
+    #[test]
+    fn el_principal_tiene_que_estar_instalado() {
+        let error = leer_texto(
+            r#"
+[escritorio]
+principal = "niri"
+instalados = ["plasma"]
+"#,
+        )
+        .expect_err("el principal no puede quedar fuera");
+
+        assert!(error.contains("principal"));
+        assert!(error.contains("instalados"));
+    }
+
+    #[test]
+    fn un_escritorio_instalado_no_se_repite() {
+        let error = leer_texto(
+            r#"
+[escritorio]
+principal = "niri"
+instalados = ["niri", "niri"]
+"#,
+        )
+        .expect_err("un escritorio repetido debería rechazarse");
+
+        assert!(error.contains("más de una vez"));
+    }
+
+    #[test]
+    fn la_unidad_datos_se_elige_sin_escribir_uuid() {
+        let configuracion = leer_texto(
+            r#"
+[almacenamiento]
+disponibles = ["datos"]
+"#,
+        )
+        .expect("la unidad conocida debería ser válida");
+
+        assert_eq!(configuracion.almacenamiento.disponibles, vec!["datos"]);
+    }
+
+    #[test]
+    fn una_unidad_inventada_se_rechaza() {
+        let error = leer_texto(
+            r#"
+[almacenamiento]
+disponibles = ["disco-magico"]
+"#,
+        )
+        .expect_err("una unidad desconocida debería rechazarse");
+
+        assert!(error.contains("no conozco"));
+        assert!(error.contains("disco-magico"));
+    }
+
+    #[test]
+    fn apagar_sunshine_conserva_su_autoinicio() {
+        let configuracion = leer_texto(
+            r#"
+[sunshine]
+activo = false
+autoinicio = true
+"#,
+        )
+        .expect("la preferencia interna debería conservarse");
+
+        assert!(!configuracion.sunshine.activo);
+        assert!(configuracion.sunshine.autoinicio);
+    }
+
+    #[test]
+    fn impresion_y_virtualizacion_son_decisiones_humanas() {
+        let configuracion = leer_texto(
+            r#"
+[impresion]
+activa = true
+controlador = "epson-201207w"
+
+[virtualizacion]
+activa = true
+"#,
+        )
+        .expect("las decisiones deberían ser válidas");
+
+        assert!(configuracion.impresion.activa);
+        assert_eq!(
+            configuracion.impresion.controlador.as_deref(),
+            Some("epson-201207w")
+        );
+        assert!(configuracion.virtualizacion.activa);
     }
 }

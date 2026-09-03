@@ -79,6 +79,10 @@ fn validar(raiz: &Path) {
             println!("Canal: {}", configuracion.canal);
             println!("Escritorio: {}", configuracion.escritorio.principal);
             println!(
+                "Escritorios instalados: {}",
+                configuracion.escritorio.instalados_efectivos().join(", ")
+            );
+            println!(
                 "Idioma: {} — {}",
                 configuracion.idioma.sistema, configuracion.idioma.region
             );
@@ -91,6 +95,43 @@ fn validar(raiz: &Path) {
                 configuracion.monitor.resolucion, configuracion.monitor.hz
             );
             println!("Personas: {}", configuracion.personas.len());
+            println!(
+                "Unidades disponibles: {}",
+                if configuracion.almacenamiento.disponibles.is_empty() {
+                    "ninguna".to_string()
+                } else {
+                    configuracion.almacenamiento.disponibles.join(", ")
+                }
+            );
+            println!(
+                "Sunshine: {} · autoinicio {}",
+                if configuracion.sunshine.activo {
+                    "activo"
+                } else {
+                    "apagado"
+                },
+                if configuracion.sunshine.autoinicio {
+                    "sí"
+                } else {
+                    "no"
+                }
+            );
+            println!(
+                "Impresión: {}",
+                if configuracion.impresion.activa {
+                    "activa"
+                } else {
+                    "apagada"
+                }
+            );
+            println!(
+                "Virtualización: {}",
+                if configuracion.virtualizacion.activa {
+                    "activa"
+                } else {
+                    "apagada"
+                }
+            );
             println!(
                 "Aplicaciones elegidas: {}",
                 configuracion.aplicaciones.instaladas.len()
@@ -114,7 +155,8 @@ fn mostrar_plan(raiz: &Path) {
     println!("Plan");
     println!("Equipo: {}", plan.nombre);
     println!("Canal: {}", plan.canal);
-    println!("Escritorio: {}", plan.escritorio);
+    println!("Escritorio principal: {}", plan.escritorio);
+    println!("Escritorios instalados: {}", plan.escritorios.join(", "));
     println!(
         "Idioma: {} — {} ({})",
         plan.idioma.sistema, plan.idioma.region, plan.idioma.locale
@@ -176,6 +218,53 @@ fn mostrar_plan(raiz: &Path) {
             }
         }
     }
+
+    if plan.almacenamiento.is_empty() {
+        println!("Unidades disponibles: ninguna");
+    } else {
+        println!("Unidades disponibles:");
+
+        for unidad in &plan.almacenamiento {
+            println!("  - {} → {}", unidad.nombre, unidad.ruta);
+        }
+    }
+
+    println!(
+        "Sunshine: {} · autoinicio {}",
+        if plan.sunshine.activo {
+            "activo"
+        } else {
+            "apagado"
+        },
+        if plan.sunshine.autoinicio {
+            "sí"
+        } else {
+            "no"
+        }
+    );
+
+    println!(
+        "Impresión: {}{}",
+        if plan.impresion.activa {
+            "activa"
+        } else {
+            "apagada"
+        },
+        plan.impresion
+            .controlador
+            .as_deref()
+            .map(|controlador| format!(" · {controlador}"))
+            .unwrap_or_default()
+    );
+
+    println!(
+        "Virtualización: {}",
+        if plan.virtualizacion {
+            "activa"
+        } else {
+            "apagada"
+        }
+    );
 
     if !plan.revision.is_empty() {
         println!("Nixpkgs: {}", plan.revision);
@@ -244,7 +333,13 @@ fn mostrar_personas(raiz: &Path) {
 
 fn mostrar_escritorio(raiz: &Path) {
     match configuracion::leer(&raiz.join("configuracion.toml")) {
-        Ok(configuracion) => println!("Escritorio: {}", configuracion.escritorio.principal),
+        Ok(configuracion) => {
+            println!("Principal: {}", configuracion.escritorio.principal);
+            println!(
+                "Instalados: {}",
+                configuracion.escritorio.instalados_efectivos().join(", ")
+            );
+        }
         Err(error) => salir_con_error(&error),
     }
 }

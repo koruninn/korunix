@@ -15,24 +15,59 @@
     nombre = configuracion.nombre or "nixos";
     canal = configuracion.canal or "estable";
     personas = configuracion.personas or [];
-    escritorio = (configuracion.escritorio or {}).principal or "niri";
+
+    escritorioConfiguracion = configuracion.escritorio or {};
+    escritorio = escritorioConfiguracion.principal or "niri";
+    escritoriosDeclarados = escritorioConfiguracion.instalados or [];
+    escritorios =
+      if escritoriosDeclarados == []
+      then [escritorio]
+      else escritoriosDeclarados;
+
     idioma =
       configuracion.idioma or {
         sistema = "español";
         region = "Perú";
       };
+
     teclado =
       configuracion.teclado or {
         distribuciones = ["españa" "latinoamérica"];
         cambio = "alt+shift";
       };
+
     monitor =
       configuracion.monitor or {
         resolucion = "1920x1080";
         hz = 120;
       };
 
-    noctaliaActivo = escritorio == "niri" || escritorio == "hyprland";
+    almacenamiento =
+      configuracion.almacenamiento or {
+        disponibles = [];
+      };
+
+    sunshine =
+      configuracion.sunshine or {
+        activo = false;
+        autoinicio = false;
+      };
+
+    impresion =
+      configuracion.impresion or {
+        activa = false;
+        controlador = null;
+      };
+
+    virtualizacion =
+      configuracion.virtualizacion or {
+        activa = false;
+      };
+
+    noctaliaActivo =
+      builtins.any
+      (nombreEscritorio: nombreEscritorio == "niri" || nombreEscritorio == "hyprland")
+      escritorios;
 
     nixpkgs =
       if canal == "estable"
@@ -131,7 +166,7 @@
       cargoLock.lockFile = ./Cargo.lock;
 
       passthru.plan = {
-        inherit nombre canal escritorio;
+        inherit nombre canal escritorio escritorios;
         personas = planPersonas;
         revision = nixpkgs.rev or "";
         aplicaciones = planAplicaciones;
@@ -164,12 +199,33 @@
           backend = "ibus";
           wayland = true;
         };
+
+        almacenamiento =
+          map
+          (unidad: {
+            nombre = unidad;
+            ruta = "/mnt/${unidad}";
+          })
+          almacenamiento.disponibles;
+
+        sunshine = {
+          activo = sunshine.activo or false;
+          autoinicio = sunshine.autoinicio or false;
+        };
+
+        impresion = {
+          activa = impresion.activa or false;
+          controlador = impresion.controlador or null;
+        };
+
+        virtualizacion = virtualizacion.activa or false;
       };
     };
   in {
     packages.${sistema} = {
       default = programa;
       korunix = programa;
+
       aplicaciones = pkgs.buildEnv {
         name = "korunix-aplicaciones";
         paths = aplicaciones;
@@ -181,15 +237,20 @@
 
       specialArgs = {
         inherit
+          almacenamiento
           aplicaciones
           escritorio
+          escritorios
           idioma
+          impresion
           monitor
           noctaliaPackage
           nombre
           personas
           programa
+          sunshine
           teclado
+          virtualizacion
           ;
       };
 
