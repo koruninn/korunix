@@ -326,6 +326,8 @@ Las dependencias internas que la persona no eligió no deben convertirse automá
 
 Los escritorios soportados son Niri, Hyprland, Cinnamon y KDE Plasma. GNOME puede aportar aplicaciones o integraciones, pero no es un escritorio soportado de Korunix.
 
+`[escritorio].principal` elige la sesión que se abre por defecto. GDM puede servir como pantalla común de inicio de sesión sin convertir GNOME en un escritorio soportado.
+
 Estas ideas son distintas y no se acoplan:
 
 - escritorio instalado;
@@ -388,6 +390,8 @@ Los nombres visibles son humanos. Los identificadores técnicos quedan debajo.
 Se conserva como referencia el trabajo comprobado con IBus y composición Wayland para Niri/Hyprland, pero la nueva implementación debe buscar la forma más simple de cumplir el comportamiento.
 
 Personas debe permitir gestionar usuarios y preferencias sin pedir rutas o identificadores técnicos cuando una selección gráfica pueda resolverlo.
+
+Las cuentas locales se expresan como bloques `[[personas]]`. Cada bloque puede indicar el nombre de la cuenta, el nombre visible y si es administradora. Las contraseñas y sus hashes no se guardan en TOML ni en Git. Mientras se adopta una cuenta que ya existe, NixOS mantiene `users.mutableUsers = true` y Korunix no declara una contraseña.
 
 ## 16. Almacenamiento, copias e historial
 
@@ -523,32 +527,41 @@ Primera generación completa construida sin activar:
 840e294748903a5d67c7a4b0464eaf6476f74ea6
 ```
 
-Ahora existe este camino:
+Cuenta local y escritorio principal:
 
 ```text
-configuracion.toml
-→ Rust valida
-→ Nix resuelve las decisiones
-→ sistema.nix arma NixOS
-→ hardware.nix aporta los hechos comprobados del equipo
-→ korunix construir crea una generación en /nix/store
-→ no la activa
+1604fcd80db7d892e57d2505ab3206708eae7936
 ```
 
-El nombre del equipo ya vive en TOML y puede leerse o cambiarse con:
+La configuración humana ya incluye:
+
+```toml
+[[personas]]
+cuenta = "koru"
+nombre = "André"
+administrador = true
+
+[escritorio]
+principal = "niri"
+```
+
+Nix deriva la cuenta normal, Fish, acceso a NetworkManager y `wheel` cuando la cuenta es administradora. Korunix no guarda ni declara la contraseña de la cuenta existente.
+
+El escritorio principal acepta `niri`, `hyprland`, `cinnamon` y `plasma`. Los cuatro caminos llegan a una configuración NixOS evaluable; la generación construida en este corte usa Niri, que es la elección actual.
+
+Comandos nuevos:
 
 ```text
-korunix nombre
-korunix nombre <nuevo>
+korunix personas
+korunix escritorio
+korunix escritorio <niri|hyprland|cinnamon|plasma>
 ```
 
-La primera base de `hardware.nix` conserva los UUID y módulos que ya arrancan esta computadora, usa x86_64, AMD y UEFI con systemd-boot.
+Cambiar el escritorio toca solamente esa propiedad en TOML y todavía no activa NixOS.
 
-`korunix construir` produce un `system.build.toplevel` real con `activate` y `switch-to-configuration`, pero no ejecuta ninguno de los dos. Tampoco cambia `configuracion.toml`, `/run/current-system` ni el perfil persistente.
+La generación sigue sin activarse. Tener una cuenta y poder arrancar Niri no significa todavía que la sesión nueva reproduzca toda la experiencia actual: faltan la configuración de Niri/Noctalia y otras decisiones del sistema que se irán llevando al mismo TOML.
 
-Esta generación ya es una generación completa en términos de NixOS, pero **todavía no está lista para apply**. Aún faltan decisiones esenciales del sistema que la implementación nueva no representa, especialmente la cuenta de usuario y el escritorio. No se activa una generación que podría dejar a la persona sin su sesión normal.
-
-El siguiente bloque debe llevar a TOML las decisiones mínimas necesarias para conservar acceso al equipo —primero la cuenta local y el escritorio principal— antes de convertir esta generación en un preview aplicable.
+El siguiente bloque debe hacer que la sesión Niri sea realmente utilizable sin Home Manager, empezando por su configuración básica y las piezas de Noctalia que pertenecen al escritorio.
 
 ## 22. Regla final
 
