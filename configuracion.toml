@@ -1,0 +1,13 @@
+# Esta es la parte que una persona debería poder cambiar sin aprender Nix.
+# Korunix usa estas decisiones para armar la parte técnica.
+
+# Puedes usar "estable" o "inestable".
+canal = "inestable"
+
+[aplicaciones]
+# Escribe nombres normales. Si Nixpkgs conoce la aplicación, Korunix la usa.
+instaladas = [
+  "firefox",
+  "karere",
+  "blender",
+]
