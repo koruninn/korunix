@@ -487,40 +487,48 @@ Primera validación en Rust:
 cc062f9a8d4f8b68350f1053f4749e94a55bc381
 ```
 
-Primera edición de aplicaciones desde la CLI:
+Edición de aplicaciones desde la CLI:
 
 ```text
 a8dc1c7de221ef8bf10555a5b40bab798a6df3fc
 ```
 
-Ahora funciona así:
+Edición del canal desde la misma CLI:
 
 ```text
-configuracion.toml
-→ Rust lo lee y revisa
-→ la CLI puede añadir o quitar una aplicación
-→ se conserva el resto del archivo
-→ Nix sigue sacando de ahí los paquetes
+63685719b5b2067a5348abc0f9c17c7f008f544d
+```
+
+Ahora hay dos tipos de propiedades que siguen el mismo camino:
+
+```text
+aplicaciones
+→ Rust las lee o cambia
+→ Nix saca los paquetes
+
+canal
+→ Rust lo lee o cambia
+→ Nix elige estable o inestable
 ```
 
 Comandos disponibles:
 
 ```text
 korunix validar
+korunix canal
+korunix canal <estable|inestable>
 korunix aplicaciones
 korunix aplicaciones agregar <nombre>
 korunix aplicaciones quitar <nombre>
 ```
 
-Agregar o quitar una aplicación solo cambia `configuracion.toml`. NixOS no cambia hasta que exista y se use el flujo de preview/apply.
+Cambiar el canal conserva las aplicaciones y los comentarios del TOML. Poner el canal que ya estaba elegido no reescribe el archivo.
 
-Repetir `agregar` con algo que ya está en la lista no lo duplica. Repetir `quitar` con algo que ya no está tampoco rompe nada.
+Estos comandos todavía solo cambian `configuracion.toml`. NixOS no cambia hasta que exista y se use el flujo de preview/apply.
 
-En este corte también se limpiaron los comentarios viejos de `desde-cero` para usar el tono humano definido en esta guía.
+El árbol sigue igual. No hizo falta crear otro archivo para añadir esta propiedad.
 
-La edición sigue dentro de `configuracion.rs`. Todavía no hace falta inventar otro archivo solo para mover unas cuantas funciones.
-
-El siguiente bloque debe añadir otra propiedad humana sencilla, validarla en Rust y hacer que Nix saque de ella el cambio correspondiente.
+El siguiente bloque ya puede empezar a preparar el plan o preview: tomar las decisiones válidas y mostrar qué cambiaría NixOS sin aplicar nada.
 
 ## 22. Regla final
 
