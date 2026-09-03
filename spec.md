@@ -340,6 +340,24 @@ El catálogo curado queda para lo que Korunix realmente necesita corregir o aña
 
 Las dependencias internas que la persona no eligió no deben convertirse automáticamente en aplicaciones visibles.
 
+Las aplicaciones con una fuente especial tampoco obligan a escribir esa fuente en TOML. La elección humana sigue siendo el nombre de la aplicación y Korunix deriva la integración:
+
+```text
+cohesion          → Flatpak
+figma-linux-next  → Figma Linux Next
+genshin-impact    → AAGL
+honkai-star-rail  → AAGL
+spotify           → Spicetify
+```
+
+AAGL sigue el canal del sistema: estable usa su revisión para NixOS estable e inestable usa la correspondiente al canal inestable. Su caché y su clave firmada se derivan únicamente cuando se elige uno de esos juegos.
+
+Cohesion se declara desde Flathub, pero no se actualiza semanalmente por su cuenta. Las actualizaciones de Flatpak forman parte del flujo de actualizaciones de Korunix, igual que las demás.
+
+Figma Linux Next se conserva mientras siga siendo la elección comprobada porque aporta la integración `figma://` y comportamiento específico que no se sustituye automáticamente solo porque exista otro paquete llamado Figma en Nixpkgs.
+
+Elegir Spotify deriva Spotify con Spicetify y su funcionamiento Wayland. Los temas ligados a la apariencia global se resuelven en el frente de apariencia; no se convierten en otra decisión duplicada dentro de Aplicaciones.
+
 ## 12. Escritorios y apariencia
 
 Los escritorios soportados son Niri, Hyprland, Cinnamon y KDE Plasma. GNOME puede aportar aplicaciones o integraciones, pero no es un escritorio soportado de Korunix.
@@ -714,7 +732,35 @@ Durante este bloque se completaron también dos consecuencias que la implementac
 
 La decisión visual para la futura GUI queda fijada: AppStream es la fuente preferida de fichas; Flathub puede enriquecer aplicaciones instaladas desde Nixpkgs; el resultado se cachea localmente y una ficha ausente nunca limita lo instalable.
 
-La generación candidata sigue sin activarse. Quedan cinco selecciones humanas con integración propia antes de volver a auditar el preview: `cohesion`, `figma-linux-next`, `genshin-impact`, `honkai-star-rail` y `spotify`.
+Integraciones especiales migradas:
+
+```text
+2e8f905d5bbd38d677bc6dbc4c072d10fbe277f5
+```
+
+La selección humana del equipo contiene ahora 37 aplicaciones en `[aplicaciones].instaladas`, más Steam como función granular independiente. Las cinco elecciones que faltaban ya conservan sus consecuencias sin exponer detalles técnicos en TOML:
+
+```text
+Cohesion          → Flathub
+Figma             → Figma Linux Next 0.17.0
+Genshin Impact    → AAGL
+Honkai: Star Rail → AAGL
+Spotify           → Spicetify + Wayland
+```
+
+Cohesion queda declarada para instalarse al aplicar la generación, pero la actualización automática de `nix-flatpak` permanece apagada para no saltarse el gestor de actualizaciones de Korunix.
+
+AAGL usa la familia correspondiente al canal y añade su caché firmada únicamente cuando alguno de sus juegos está elegido. Figma conserva el handler `figma://`. Spotify conserva las extensiones funcionales actuales; la sincronización de tema con Noctalia pertenece al frente de apariencia.
+
+La candidata completa de este bloque se construyó sin activarse:
+
+```text
+/nix/store/isk94y8bp0z0zpw3xvd64zcwy82qzj0p-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+El sistema activo y el perfil persistente permanecieron intactos. El canal estable también produjo una derivación válida con las cinco integraciones.
+
+Ya no quedan decisiones de aplicaciones del equipo actual pendientes de migrar desde `pruebas`. El siguiente paso es una **auditoría integral de la candidata completa** contra la intención humana vigente y el sistema activo para detectar regresiones reales antes de llamar `preview` a una generación aplicable.
 
 ## 22. Regla final
 
