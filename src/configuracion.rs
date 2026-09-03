@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
-use toml_edit::{Array, DocumentMut, Item, Table, Value};
+use toml_edit::{value, Array, DocumentMut, Item, Table, Value};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -25,6 +25,16 @@ pub struct Aplicaciones {
 
 fn canal_por_defecto() -> String {
     "estable".to_string()
+}
+
+fn revisar_canal(canal: &str) -> Result<(), String> {
+    if canal != "estable" && canal != "inestable" {
+        return Err(format!(
+            "No conozco el canal «{canal}».\nPon «estable» o «inestable»."
+        ));
+    }
+
+    Ok(())
 }
 
 fn entender(texto: &str, origen: &str) -> Result<Configuracion, String> {
@@ -62,12 +72,7 @@ fn revisar_nombre_aplicacion(nombre: &str) -> Result<(), String> {
 }
 
 pub fn revisar(configuracion: &Configuracion) -> Result<(), String> {
-    if configuracion.canal != "estable" && configuracion.canal != "inestable" {
-        return Err(format!(
-            "No conozco el canal «{}».\nPon «estable» o «inestable».",
-            configuracion.canal
-        ));
-    }
+    revisar_canal(&configuracion.canal)?;
 
     let mut vistas = HashSet::new();
 
@@ -152,6 +157,26 @@ fn quitar_en_texto(texto: &str, nombre: &str) -> Result<Option<String>, String> 
     Ok(Some(nuevo))
 }
 
+fn cambiar_canal_en_texto(texto: &str, canal: &str) -> Result<Option<String>, String> {
+    revisar_canal(canal)?;
+    let actual = entender(texto, "la configuración")?;
+
+    if actual.canal == canal {
+        return Ok(None);
+    }
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+
+    documento["canal"] = value(canal);
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
 fn guardar(ruta: &Path, texto: &str) -> Result<(), String> {
     let carpeta = ruta.parent().unwrap_or_else(|| Path::new("."));
     let nombre = ruta
@@ -206,6 +231,19 @@ pub fn quitar_aplicacion(ruta: &Path, nombre: &str) -> Result<bool, String> {
         .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
 
     let Some(nuevo) = quitar_en_texto(&texto, nombre)? else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
+}
+
+pub fn cambiar_canal(ruta: &Path, canal: &str) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    let Some(nuevo) = cambiar_canal_en_texto(&texto, canal)? else {
         return Ok(false);
     };
 
@@ -418,5 +456,51 @@ instaladas = ["firefox"]
             configuracion.aplicaciones.instaladas,
             vec!["firefox".to_string()]
         );
+    }
+
+    #[test]
+    fn cambiar_canal_conserva_el_resto() {
+        let original = r#"# Este comentario tiene que quedarse.
+canal = "inestable"
+
+[aplicaciones]
+# Este también.
+instaladas = ["firefox", "karere"]
+"#;
+
+        let nuevo = cambiar_canal_en_texto(original, "estable")
+            .expect("debería poder cambiar el canal")
+            .expect("debería existir un cambio");
+
+        assert!(nuevo.contains("# Este comentario tiene que quedarse."));
+        assert!(nuevo.contains("# Este también."));
+        assert!(nuevo.contains("canal = \"estable\""));
+        assert!(nuevo.contains("\"firefox\""));
+        assert!(nuevo.contains("\"karere\""));
+    }
+
+    #[test]
+    fn poner_el_mismo_canal_no_cambia_nada() {
+        let original = r#"canal = "estable"
+
+[aplicaciones]
+instaladas = ["firefox"]
+"#;
+
+        let nuevo =
+            cambiar_canal_en_texto(original, "estable").expect("la operación debería ser válida");
+
+        assert!(nuevo.is_none());
+    }
+
+    #[test]
+    fn un_canal_inventado_no_se_guarda() {
+        let original = r#"canal = "estable"
+"#;
+
+        let error = cambiar_canal_en_texto(original, "rapidito")
+            .expect_err("un canal inventado debería rechazarse");
+
+        assert!(error.contains("No conozco el canal «rapidito»"));
     }
 }
