@@ -354,6 +354,16 @@ AAGL sigue el canal del sistema: estable usa su revisión para NixOS estable e i
 
 Cohesion se declara desde Flathub, pero no se actualiza semanalmente por su cuenta. Las actualizaciones de Flatpak forman parte del flujo de actualizaciones de Korunix, igual que las demás.
 
+Un `preview` aplicable también tiene que fijar los artefactos que NixOS instalará fuera del store cuando eso pueda cambiar el resultado entre preview y apply. Para Cohesion, Korunix conserva un commit concreto de Flatpak como detalle técnico; la persona sigue escribiendo solamente `"cohesion"`.
+
+En el equipo actual se adoptó el mismo commit que ya estaba instalado y que Flathub ofrecía en ese momento:
+
+```text
+a476d7d1dbee231266f9e904d878ec931bcafe6e37b14191430b5feb1d3da21e
+```
+
+`nix-flatpak` queda con actualización durante activación apagada, temporizador apagado y sin borrar Flatpaks que Korunix no administra.
+
 Figma Linux Next se conserva mientras siga siendo la elección comprobada porque aporta la integración `figma://` y comportamiento específico que no se sustituye automáticamente solo porque exista otro paquete llamado Figma en Nixpkgs.
 
 Elegir Spotify deriva Spotify con Spicetify y su funcionamiento Wayland. Los temas ligados a la apariencia global se resuelven en el frente de apariencia; no se convierten en otra decisión duplicada dentro de Aplicaciones.
@@ -821,7 +831,29 @@ Bluetooth ya no depende de que Niri o Hyprland estén instalados. El avatar prep
 
 El sistema activo y el perfil persistente permanecieron intactos.
 
-El siguiente paso vuelve a ser la **auditoría integral de la candidata completa**, ahora con las decisiones humanas conocidas ya migradas, antes de llamarla `preview` aplicable.
+Antes de ejecutar esa auditoría se encontró una última diferencia entre "generación construida" y "preview reproducible": Cohesion estaba declarada por AppID pero no por commit de Flatpak.
+
+Se comprobó que la instalación activa y Flathub coincidían exactamente en:
+
+```text
+a476d7d1dbee231266f9e904d878ec931bcafe6e37b14191430b5feb1d3da21e
+```
+
+Ese commit quedó fijado en:
+
+```text
+f284723b0009d80eb026b66dd60ab5e10285a656
+```
+
+La nueva candidata, todavía sin activar, es:
+
+```text
+/nix/store/rcy231mrvzz1ri6wbasqbyk45ig798ib-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+El TOML humano no cambió. Cohesion sigue siendo una sola elección humana y el pin queda como detalle técnico derivado. El sistema activo y el perfil persistente permanecieron intactos.
+
+El siguiente paso vuelve a ser la **auditoría integral de la candidata completa**. Si esa puerta no encuentra otra regresión real, la generación ya puede convertirse en el primer `preview` aplicable.
 
 ## 22. Regla final
 
