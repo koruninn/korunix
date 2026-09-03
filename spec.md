@@ -187,15 +187,27 @@ Si muestra la ventana: `interfaz`.
 
 Si guarda lo elegido: `configuracion`.
 
-Mal:
+Los comentarios no tienen que sonar a manual ni a texto de IA. Si algo merece una explicación, se explica como si se lo estuvieras contando a alguien al costado: natural, directo y con el contexto necesario.
 
-> Materializa el contrato declarativo del subsistema.
+No usar un “nosotros” de cortesía cuando la acción la hace Korunix. El usuario no tiene por qué quedar metido en una responsabilidad que no tiene.
+
+Raro:
+
+> Primero revisamos el archivo. Si está mal, no guardamos nada.
+
+Mejor:
+
+> Si el archivo está mal, no se guarda el cambio.
+
+Un comentario también tiene que dejar claro qué está explicando. Una frase natural pero sin contexto tampoco ayuda.
 
 Bien:
 
-> Esto guarda lo que elegiste.
+> Este puerto solo se abre cuando Sunshine está encendido.
 
-No comentar lo obvio. Un comentario explica qué hace algo, por qué existe o qué pasa si se cambia.
+No comentar lo obvio. Si el nombre o la línea ya dejan claro qué pasa, no hace falta narrarlo otra vez.
+
+Un comentario sirve cuando aclara qué hace algo, por qué está ahí o qué pasa si se cambia.
 
 ## 7. El árbol también es UX
 
