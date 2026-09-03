@@ -40,6 +40,218 @@
   plasmaActivo = builtins.elem "plasma" escritoriosValidos;
   noctaliaActivo = niriActivo || hyprlandActivo;
 
+  # Los escritorios traen sus herramientas normales sin convertir cada pieza
+  # en otra pregunta de configuracion.toml.
+  valentActivo = niriActivo || hyprlandActivo || cinnamonActivo;
+  kdeConnectActivo = plasmaActivo;
+  dispositivosActivos = valentActivo || kdeConnectActivo;
+
+  aplicacionesNoctalia = with pkgs; [
+    nautilus
+    baobab
+    gnome-characters
+    gnome-clocks
+    gnome-font-viewer
+    gnome-maps
+    gnome-text-editor
+    gnome-weather
+    loupe
+    papers
+    simple-scan
+    snapshot
+  ];
+
+  aplicacionesNoctaliaCinnamon = with pkgs; [
+    gnome-calculator
+    gnome-calendar
+    gnome-disk-utility
+  ];
+
+  aplicacionesCinnamon = with pkgs; [
+    bulky
+    warpinator
+    xviewer
+    xreader
+    xed-editor
+    pix
+    celluloid
+    gnome-screenshot
+    file-roller
+    gucharmap
+    nemo-with-extensions
+    cinnamon-control-center
+    cinnamon-screensaver
+    gnome-online-accounts-gtk
+    onboard
+  ];
+
+  aplicacionesPlasma =
+    (with pkgs.kdePackages; [
+      ark
+      dolphin
+      elisa
+      gwenview
+      khelpcenter
+      kinfocenter
+      kmenuedit
+      krdp
+      kwalletmanager
+      okular
+      plasma-systemmonitor
+      spectacle
+      systemsettings
+      qrca
+      discover
+    ])
+    ++ lib.optionals (impresion.activa or false) [
+      pkgs.kdePackages.print-manager
+      pkgs.kdePackages.skanpage
+    ];
+
+  # Los paquetes pueden estar instalados a la vez, pero cada menú enseña solo
+  # lo que pertenece a esa familia de escritorio.
+  visibilidadEscritorios = pkgs.runCommand "korunix-visibilidad-escritorios" {} ''
+        set -eu
+
+        mkdir -p "$out/share/applications" "$out/etc/xdg/autostart"
+
+        limitar_archivo() {
+          origen="$1"
+          destino="$2"
+          escritorios="$3"
+
+          [ -f "$origen" ] || return 0
+
+          ${pkgs.gawk}/bin/awk \
+            -v escritorios="$escritorios" \
+            '
+              /^\[Desktop Entry\]$/ {
+                print
+                print "OnlyShowIn=" escritorios ";"
+                dentro = 1
+                next
+              }
+
+              dentro && /^(OnlyShowIn|NotShowIn)=/ {
+                next
+              }
+
+              /^\[/ {
+                dentro = 0
+              }
+
+              {
+                print
+              }
+            ' \
+            "$origen" > "$destino"
+        }
+
+        limitar_paquete() {
+          paquete="$1"
+          escritorios="$2"
+          directorio="$paquete/share/applications"
+
+          [ -d "$directorio" ] || return 0
+
+          for origen in "$directorio"/*.desktop; do
+            [ -f "$origen" ] || continue
+            limitar_archivo \
+              "$origen" \
+              "$out/share/applications/$(basename "$origen")" \
+              "$escritorios"
+          done
+        }
+
+        limitar_autostart() {
+          paquete="$1"
+          escritorios="$2"
+          directorio="$paquete/etc/xdg/autostart"
+
+          [ -d "$directorio" ] || return 0
+
+          for origen in "$directorio"/*.desktop; do
+            [ -f "$origen" ] || continue
+            limitar_archivo \
+              "$origen" \
+              "$out/etc/xdg/autostart/$(basename "$origen")" \
+              "$escritorios"
+          done
+        }
+
+        for paquete in ${lib.escapeShellArgs (
+      map toString (lib.optionals noctaliaActivo aplicacionesNoctalia)
+    )}; do
+          limitar_paquete "$paquete" "niri;Hyprland"
+        done
+
+        for paquete in ${lib.escapeShellArgs (
+      map toString (
+        lib.optionals
+        (noctaliaActivo || cinnamonActivo)
+        aplicacionesNoctaliaCinnamon
+      )
+    )}; do
+          limitar_paquete "$paquete" "niri;Hyprland;X-Cinnamon"
+        done
+
+        for paquete in ${lib.escapeShellArgs (
+      map toString (lib.optionals cinnamonActivo aplicacionesCinnamon)
+    )}; do
+          limitar_paquete "$paquete" "X-Cinnamon"
+        done
+
+        for paquete in ${lib.escapeShellArgs (
+      map toString (lib.optionals plasmaActivo aplicacionesPlasma)
+    )}; do
+          limitar_paquete "$paquete" "KDE"
+        done
+
+        for paquete in ${lib.escapeShellArgs (
+      map toString (
+        lib.optionals cinnamonActivo [
+          pkgs.blueman
+          pkgs.networkmanagerapplet
+        ]
+      )
+    )}; do
+          limitar_autostart "$paquete" "X-Cinnamon"
+        done
+
+        for paquete in ${lib.escapeShellArgs (
+      map toString (lib.optionals valentActivo [pkgs.valent])
+    )}; do
+          limitar_paquete "$paquete" "niri;Hyprland;X-Cinnamon"
+          limitar_autostart "$paquete" "niri;Hyprland;X-Cinnamon"
+        done
+
+        for paquete in ${lib.escapeShellArgs (
+      map toString (
+        lib.optionals kdeConnectActivo [
+          pkgs.kdePackages.kdeconnect-kde
+        ]
+      )
+    )}; do
+          limitar_paquete "$paquete" "KDE"
+          limitar_autostart "$paquete" "KDE"
+        done
+
+        # El indicador pensado para escritorios no Plasma no se usa: fuera de KDE
+        # la misma función la cubre Valent.
+        indicador="$out/share/applications/org.kde.kdeconnect.nonplasma.desktop"
+
+        if [ -f "$indicador" ]; then
+          cat > "$indicador" <<'EOF'
+    [Desktop Entry]
+    Type=Application
+    Name=KDE Connect Indicator
+    Exec=/run/current-system/sw/bin/false
+    Hidden=true
+    NoDisplay=true
+    EOF
+        fi
+  '';
+
   cohesionActivo = builtins.elem "cohesion" aplicacionesElegidas;
   figmaActivo = builtins.elem "figma-linux-next" aplicacionesElegidas;
   genshinActivo = builtins.elem "genshin-impact" aplicacionesElegidas;
@@ -316,6 +528,17 @@ in {
 
   hardware.enableRedistributableFirmware = true;
 
+  # El arranque comprobado usa el kernel más reciente de la rama elegida,
+  # una pantalla limpia y cinco segundos para entrar a recuperación.
+  boot.kernelPackages = pkgs.linuxPackages_latest;
+  boot.kernelParams = [
+    "quiet"
+    "splash"
+    "boot.shell_on_fail"
+  ];
+  boot.plymouth.enable = true;
+  boot.loader.timeout = 5;
+
   hardware.graphics = {
     enable = true;
     enable32Bit = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
@@ -485,6 +708,10 @@ in {
     powerOnBoot = bluetooth.activo or false;
   };
 
+  # Si Bluetooth está encendido, un mando Xbox compatible queda preparado sin
+  # pedir otra opción técnica.
+  hardware.xpadneo.enable = bluetooth.activo or false;
+
   services.upower.enable = lib.mkIf noctaliaActivo true;
   services.power-profiles-daemon.enable = lib.mkIf noctaliaActivo true;
   security.polkit.enable = true;
@@ -544,6 +771,20 @@ in {
   programs.localsend = lib.mkIf localsendActivo {
     enable = true;
     openFirewall = true;
+  };
+
+  # Plasma usa KDE Connect. Niri, Hyprland y Cinnamon usan Valent.
+  # Ambos implementan la misma función y Korunix abre sus puertos una sola vez.
+  programs.kdeconnect = lib.mkIf dispositivosActivos {
+    enable = true;
+
+    # Plasma ya fija su propio paquete. Korunix solo aporta un valor
+    # predeterminado para los demás escritorios.
+    package = lib.mkDefault (
+      if kdeConnectActivo
+      then pkgs.kdePackages.kdeconnect-kde
+      else pkgs.valent
+    );
   };
 
   programs.obs-studio = lib.mkIf obsActivo {
@@ -638,15 +879,30 @@ in {
       pkgs.wget
       pkgs.udisks2
       pkgs.fwupd
+
+      # Esta capa solo decide qué aparece en cada menú; no duplica decisiones.
+      (lib.hiPrio visibilidadEscritorios)
     ]
     ++ lib.optionals scrcpyActivo [
       # scrcpy necesita adb, pero la persona no tiene que elegirlo dos veces.
       pkgs.android-tools
     ]
-    ++ lib.optionals noctaliaActivo [
-      noctaliaPackage
-      pkgs.alacritty
-      pkgs.nautilus
+    ++ lib.optionals noctaliaActivo (
+      [
+        noctaliaPackage
+        pkgs.alacritty
+      ]
+      ++ aplicacionesNoctalia
+    )
+    ++ lib.optionals
+    (noctaliaActivo || cinnamonActivo)
+    aplicacionesNoctaliaCinnamon
+    ++ lib.optionals cinnamonActivo aplicacionesCinnamon
+    ++ lib.optionals plasmaActivo aplicacionesPlasma
+    ++ lib.optionals (kdeConnectActivo && valentActivo) [
+      # programs.kdeconnect instala KDE Connect para Plasma; Valent queda
+      # disponible aparte para las otras sesiones instaladas.
+      pkgs.valent
     ]
     ++ lib.optionals niriActivo [
       pkgs.xwayland-satellite
