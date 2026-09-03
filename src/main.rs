@@ -1,4 +1,5 @@
 mod configuracion;
+mod preview;
 mod sistema;
 
 use std::env;
@@ -51,7 +52,7 @@ fn ayuda() {
     eprintln!("Por ahora puedes usar:");
     eprintln!("  korunix validar");
     eprintln!("  korunix plan");
-    eprintln!("  korunix construir");
+    eprintln!("  korunix preview");
     eprintln!("  korunix nombre");
     eprintln!("  korunix nombre <nuevo>");
     eprintln!("  korunix personas");
@@ -341,19 +342,26 @@ fn mostrar_plan(raiz: &Path) {
     println!("NixOS no cambió.");
 }
 
-fn construir(raiz: &Path) {
-    if let Err(error) = configuracion::leer(&raiz.join("configuracion.toml")) {
+fn preparar_preview(raiz: &Path) {
+    let configuracion = match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => configuracion,
+        Err(error) => salir_con_error(&error),
+    };
+
+    if let Err(error) = sistema::preparar_plan(raiz, &configuracion) {
         salir_con_error(&error);
     }
 
-    println!("Construyendo una generación de NixOS...");
+    println!("Construyendo el preview de NixOS...");
     let _ = io::stdout().flush();
 
-    match sistema::construir_generacion(raiz) {
-        Ok(ruta) => {
-            println!("✓ La generación quedó construida.");
-            println!("Ruta: {}", ruta.display());
-            println!("No se activó.");
+    match preview::crear(raiz) {
+        Ok(preview) => {
+            println!("✓ El preview quedó listo.");
+            println!("Generación: {}", preview.generacion.display());
+            println!("Guardado en: {}", preview.enlace.display());
+            println!("NixOS no cambió.");
+            println!("Al aplicar, Korunix tendrá que activar exactamente esta generación.");
         }
         Err(error) => salir_con_error(&error),
     }
@@ -534,7 +542,7 @@ fn main() {
         [] => validar(&raiz),
         [comando] if comando == "validar" => validar(&raiz),
         [comando] if comando == "plan" => mostrar_plan(&raiz),
-        [comando] if comando == "construir" => construir(&raiz),
+        [comando] if comando == "preview" => preparar_preview(&raiz),
         [comando] if comando == "nombre" => mostrar_nombre(&raiz),
         [comando, nombre] if comando == "nombre" => cambiar_nombre(&raiz, nombre),
         [comando] if comando == "personas" => mostrar_personas(&raiz),
