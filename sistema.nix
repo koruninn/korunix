@@ -436,9 +436,14 @@ in {
   services.xserver.desktopManager.cinnamon.enable = cinnamonActivo;
   services.desktopManager.plasma6.enable = plasmaActivo;
 
-  environment.sessionVariables = lib.mkIf niriActivo {
-    NIRI_CONFIG = "/etc/niri/config.kdl";
-  };
+  environment.sessionVariables =
+    {
+      # IBus mantiene la compatibilidad XIM sin forzar módulos de GTK ni Qt.
+      XMODIFIERS = "@im=ibus";
+    }
+    // lib.optionalAttrs niriActivo {
+      NIRI_CONFIG = "/etc/niri/config.kdl";
+    };
 
   environment.etc."niri/config.kdl" = lib.mkIf niriActivo {
     source = ./niri.kdl;
