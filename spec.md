@@ -406,6 +406,20 @@ Korunix traduce eso para Noctalia como `source = "wallpaper"` y `mode = "auto"`.
 
 Las plantillas visuales de Noctalia no deben contaminar Plasma o Cinnamon.
 
+Instalar varios escritorios tampoco significa mezclar sus aplicaciones visualmente. Korunix conserva las herramientas propias de cada familia y limita sus lanzadores al escritorio que corresponde:
+
+```text
+Niri / Hyprland → Nautilus, Loupe, Papers, editor GNOME y utilidades Noctalia
+Cinnamon        → Nemo, Xviewer, Xreader, Xed y su suite nativa
+Plasma          → Dolphin, Gwenview, Okular y su suite nativa
+```
+
+Una aplicación que la persona eligió explícitamente, como Kate, sigue siendo una aplicación general y no se oculta por pertenecer también a un escritorio.
+
+Blueman y el applet de NetworkManager pueden estar instalados porque Cinnamon los necesita, pero su autoinicio visual se limita a Cinnamon. Niri y Hyprland usan Noctalia para esas funciones.
+
+La integración con teléfonos también se deriva del escritorio: Niri, Hyprland y Cinnamon usan Valent; Plasma usa KDE Connect. Si están instaladas ambas familias, ambas implementaciones pueden coexistir, pero cada una aparece y arranca únicamente en sus sesiones.
+
 Elegir Niri o Hyprland deriva Noctalia como parte de esa familia de escritorio. Cinnamon y Plasma no reciben su servicio ni su configuración. En el primer corte de `desde-cero`, Niri usa una configuración KDL pequeña y explícita con launcher, controles, bloqueo, capturas, terminal, archivos y navegación básica.
 
 Noctalia conserva sus valores predeterminados y las preferencias cambiadas desde su interfaz. Korunix no reemplaza un `~/.config/noctalia/config.toml` existente: fusiona únicamente la política que administra. La misma política se aplica a `~/.local/state/noctalia/settings.toml` cuando ese archivo existe.
@@ -428,6 +442,8 @@ Bluetooth no depende del escritorio instalado. Si la persona lo mantiene activo,
 [bluetooth]
 activo = true
 ```
+
+Cuando Bluetooth está activo, Korunix prepara también xpadneo para mandos Xbox compatibles. No se convierte en otra pregunta: es una consecuencia técnica de haber activado Bluetooth.
 
 Flatpak y AppImage son capacidades del sistema aunque en ese momento no haya ninguna aplicación elegida desde esas fuentes. Nautilus dispone de UDisks2 y GVfs para el uso cotidiano de unidades extraíbles.
 
@@ -467,6 +483,8 @@ Los UUID de discos, módulos de arranque, arquitectura y otros hechos que NixOS 
 No se crea una carpeta como `generado/equipos/` mientras un solo `hardware.nix` sea suficiente para entender el sistema.
 
 La base habilita firmware redistribuible, fwupd y gráficos de 32 bits cuando la arquitectura es x86_64. Korunix controla cuándo consulta actualizaciones de firmware; el refresco automático de fwupd no se usa como sustituto del flujo de actualizaciones de Korunix.
+
+El arranque comprobado del equipo actual usa `linuxPackages_latest`, Plymouth, los parámetros `quiet`, `splash` y `boot.shell_on_fail`, y mantiene el menú del cargador visible durante 5 segundos. Ese tiempo es una vía normal de recuperación y no se elimina para acelerar unos segundos el arranque.
 
 ## 15. Idioma, teclado y personas
 
@@ -869,7 +887,25 @@ La candidata corregida, todavía sin activar, es:
 
 `XMODIFIERS=@im=ibus` permanece disponible también con Plasma/Cinnamon, mientras `NIRI_CONFIG` y Noctalia continúan aislados a los escritorios que les corresponden. El sistema activo y el perfil persistente permanecieron intactos.
 
-El siguiente paso vuelve a ser la **auditoría integral de la candidata completa**. No se avanza a `preview` aplicable hasta que esa puerta llegue al final sin otra regresión real.
+La auditoría integral llegó al final funcionalmente, pero su comparación con el sistema activo reveló consecuencias de escritorio que todavía no estaban migradas: roles visuales de Noctalia, Valent/KDE Connect, aislamiento de Blueman/NetworkManager, xpadneo y parte del comportamiento de arranque.
+
+También se detectó que la candidata había dejado de usar `linuxPackages_latest`, lo que explicaba la bajada de kernel visible en `diff-closures`.
+
+El bloque se recuperó de forma plana en `sistema.nix`, sin traer de vuelta la arquitectura de roles anterior:
+
+```text
+442d6d1ae5ad6fd050ba9adfb7dadc9b5c33c327
+```
+
+La candidata corregida, todavía sin activar, es:
+
+```text
+/nix/store/a2idnnbx04xqbkidjbbxy6wahx6l5zc4-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+El TOML humano no ganó nuevas preguntas. Los escritorios vuelven a derivar sus herramientas y su visibilidad, Bluetooth deriva xpadneo y el arranque recupera kernel latest + Plymouth + la vía de recuperación de 5 segundos.
+
+El siguiente paso vuelve a ser la **auditoría integral de la candidata completa**. No se avanza a `preview` aplicable hasta que esa nueva candidata llegue al final y la comparación final no muestre otra omisión real.
 
 ## 22. Regla final
 
