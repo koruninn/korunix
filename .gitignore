@@ -1,2 +1,2 @@
-# Cargo guarda aquí lo que compila. No forma parte del proyecto.
+# Cargo deja aquí lo que genera al compilar.
 target/

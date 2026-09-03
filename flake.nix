@@ -11,7 +11,6 @@
     nixpkgs-inestable,
     ...
   }: let
-    # La persona cambia una sola palabra en configuracion.toml.
     configuracion = builtins.fromTOML (builtins.readFile ./configuracion.toml);
     canal = configuracion.canal or "estable";
 
@@ -22,35 +21,33 @@
       then nixpkgs-inestable
       else
         throw ''
-          Korunix no conoce el canal «${canal}».
-          Usa "estable" o "inestable" en configuracion.toml.
+          No conozco el canal «${canal}».
+          Pon "estable" o "inestable" en configuracion.toml.
         '';
 
     sistema = "x86_64-linux";
 
     pkgs = import nixpkgs {
       system = sistema;
+
+      # Algunas aplicaciones necesitan esto para poder instalarse.
       config.allowUnfree = true;
     };
 
     resultado = import ./sistema.nix {inherit pkgs;};
 
-    # Rust revisa las decisiones humanas. Nix empaqueta el mismo programa.
     programa = pkgs.rustPlatform.buildRustPackage {
       pname = "korunix";
       version = "0.1.0";
       src = ./.;
 
-      cargoLock = {
-        lockFile = ./Cargo.lock;
-      };
+      cargoLock.lockFile = ./Cargo.lock;
     };
   in {
     packages.${sistema} = {
       default = programa;
       korunix = programa;
 
-      # Esto sigue demostrando que los nombres humanos se convierten en paquetes.
       aplicaciones = pkgs.buildEnv {
         name = "korunix-aplicaciones";
         paths = resultado.aplicaciones;

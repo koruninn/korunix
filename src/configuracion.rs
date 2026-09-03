@@ -2,6 +2,9 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
+use std::process;
+use std::time::{SystemTime, UNIX_EPOCH};
+use toml_edit::{Array, DocumentMut, Item, Table, Value};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -24,14 +27,10 @@ fn canal_por_defecto() -> String {
     "estable".to_string()
 }
 
-pub fn leer(ruta: &Path) -> Result<Configuracion, String> {
-    let texto = fs::read_to_string(ruta)
-        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
-
-    let configuracion: Configuracion = toml::from_str(&texto).map_err(|error| {
+fn entender(texto: &str, origen: &str) -> Result<Configuracion, String> {
+    let configuracion: Configuracion = toml::from_str(texto).map_err(|error| {
         format!(
-            "No pude entender {}.\nHay una opción que no conozco o un problema de formato.\nDetalle: {error}",
-            ruta.display()
+            "No pude entender {origen}.\nHay una opción que no conozco o un problema de formato.\nDetalle: {error}"
         )
     })?;
 
@@ -40,10 +39,32 @@ pub fn leer(ruta: &Path) -> Result<Configuracion, String> {
     Ok(configuracion)
 }
 
+pub fn leer(ruta: &Path) -> Result<Configuracion, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    entender(&texto, &ruta.display().to_string())
+}
+
+fn revisar_nombre_aplicacion(nombre: &str) -> Result<(), String> {
+    if nombre.trim().is_empty() {
+        return Err("La aplicación necesita un nombre.".to_string());
+    }
+
+    if nombre.trim() != nombre {
+        return Err(format!(
+            "«{nombre}» tiene espacios de más al comienzo o al final.\nPon «{}».",
+            nombre.trim()
+        ));
+    }
+
+    Ok(())
+}
+
 pub fn revisar(configuracion: &Configuracion) -> Result<(), String> {
     if configuracion.canal != "estable" && configuracion.canal != "inestable" {
         return Err(format!(
-            "No conozco el canal «{}».\nUsa «estable» o «inestable».",
+            "No conozco el canal «{}».\nPon «estable» o «inestable».",
             configuracion.canal
         ));
     }
@@ -51,23 +72,11 @@ pub fn revisar(configuracion: &Configuracion) -> Result<(), String> {
     let mut vistas = HashSet::new();
 
     for aplicacion in &configuracion.aplicaciones.instaladas {
-        if aplicacion.trim().is_empty() {
-            return Err(
-                "Hay una aplicación sin nombre en [aplicaciones].\nBorra esa línea vacía o escribe un nombre."
-                    .to_string(),
-            );
-        }
-
-        if aplicacion.trim() != aplicacion {
-            return Err(format!(
-                "La aplicación «{aplicacion}» tiene espacios de más al comienzo o al final.\nEscríbela como «{}».",
-                aplicacion.trim()
-            ));
-        }
+        revisar_nombre_aplicacion(aplicacion)?;
 
         if !vistas.insert(aplicacion.as_str()) {
             return Err(format!(
-                "La aplicación «{aplicacion}» aparece más de una vez.\nDéjala una sola vez."
+                "«{aplicacion}» aparece más de una vez.\nDéjala una sola vez."
             ));
         }
     }
@@ -75,17 +84,142 @@ pub fn revisar(configuracion: &Configuracion) -> Result<(), String> {
     Ok(())
 }
 
+fn lista_aplicaciones(documento: &mut DocumentMut) -> Result<&mut Array, String> {
+    let aplicaciones = documento
+        .as_table_mut()
+        .entry("aplicaciones")
+        .or_insert(Item::Table(Table::new()))
+        .as_table_mut()
+        .ok_or_else(|| {
+            "No pude usar [aplicaciones].\nEsa parte de configuracion.toml tiene que ser una sección."
+                .to_string()
+        })?;
+
+    aplicaciones
+        .entry("instaladas")
+        .or_insert(Item::Value(Value::Array(Array::new())))
+        .as_array_mut()
+        .ok_or_else(|| {
+            "No pude editar la lista de aplicaciones.\nEn configuracion.toml, «instaladas» tiene que ser una lista."
+                .to_string()
+        })
+}
+
+fn agregar_en_texto(texto: &str, nombre: &str) -> Result<Option<String>, String> {
+    revisar_nombre_aplicacion(nombre)?;
+    entender(texto, "la configuración")?;
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+
+    let lista = lista_aplicaciones(&mut documento)?;
+
+    if lista.iter().any(|valor| valor.as_str() == Some(nombre)) {
+        return Ok(None);
+    }
+
+    lista.push(nombre);
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
+fn quitar_en_texto(texto: &str, nombre: &str) -> Result<Option<String>, String> {
+    revisar_nombre_aplicacion(nombre)?;
+    entender(texto, "la configuración")?;
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+
+    let lista = lista_aplicaciones(&mut documento)?;
+
+    let Some(posicion) = lista
+        .iter()
+        .position(|valor| valor.as_str() == Some(nombre))
+    else {
+        return Ok(None);
+    };
+
+    lista.remove(posicion);
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
+fn guardar(ruta: &Path, texto: &str) -> Result<(), String> {
+    let carpeta = ruta.parent().unwrap_or_else(|| Path::new("."));
+    let nombre = ruta
+        .file_name()
+        .and_then(|nombre| nombre.to_str())
+        .unwrap_or("configuracion.toml");
+
+    let momento = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("No pude preparar el guardado.\nDetalle: {error}"))?
+        .as_nanos();
+
+    let temporal = carpeta.join(format!(".{nombre}.korunix-{}-{momento}.tmp", process::id()));
+
+    let resultado = (|| {
+        fs::write(&temporal, texto)
+            .map_err(|error| format!("No pude guardar el cambio.\nDetalle: {error}"))?;
+
+        if let Ok(datos) = fs::metadata(ruta) {
+            fs::set_permissions(&temporal, datos.permissions())
+                .map_err(|error| format!("No pude conservar los permisos.\nDetalle: {error}"))?;
+        }
+
+        fs::rename(&temporal, ruta)
+            .map_err(|error| format!("No pude terminar de guardar el cambio.\nDetalle: {error}"))?;
+
+        Ok::<(), String>(())
+    })();
+
+    if resultado.is_err() {
+        let _ = fs::remove_file(&temporal);
+    }
+
+    resultado
+}
+
+pub fn agregar_aplicacion(ruta: &Path, nombre: &str) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    let Some(nuevo) = agregar_en_texto(&texto, nombre)? else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
+}
+
+pub fn quitar_aplicacion(ruta: &Path, nombre: &str) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    let Some(nuevo) = quitar_en_texto(&texto, nombre)? else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;
 
     fn leer_texto(texto: &str) -> Result<Configuracion, String> {
-        let configuracion: Configuracion = toml::from_str(texto)
-            .map_err(|error| format!("No pude entender la configuración.\nDetalle: {error}"))?;
-
-        revisar(&configuracion)?;
-
-        Ok(configuracion)
+        entender(texto, "la configuración de prueba")
     }
 
     #[test]
@@ -154,7 +288,7 @@ instaladas = ["firefox", ""]
         )
         .expect_err("un nombre vacío debería rechazarse");
 
-        assert!(error.contains("aplicación sin nombre"));
+        assert!(error.contains("necesita un nombre"));
     }
 
     #[test]
@@ -182,5 +316,107 @@ instaladas = [" firefox"]
 
         assert!(error.contains("espacios de más"));
         assert!(error.contains("«firefox»"));
+    }
+
+    #[test]
+    fn agregar_conserva_los_comentarios() {
+        let original = r#"# Este comentario tiene que quedarse.
+canal = "estable"
+
+[aplicaciones]
+# Este también.
+instaladas = [
+  "firefox",
+]
+"#;
+
+        let nuevo = agregar_en_texto(original, "karere")
+            .expect("debería poder agregar Karere")
+            .expect("debería existir un cambio");
+
+        assert!(nuevo.contains("# Este comentario tiene que quedarse."));
+        assert!(nuevo.contains("# Este también."));
+        assert!(nuevo.contains("\"firefox\""));
+        assert!(nuevo.contains("\"karere\""));
+    }
+
+    #[test]
+    fn agregar_lo_que_ya_existe_no_duplica() {
+        let original = r#"
+[aplicaciones]
+instaladas = ["firefox", "karere"]
+"#;
+
+        let nuevo = agregar_en_texto(original, "karere").expect("la operación debería ser válida");
+
+        assert!(nuevo.is_none());
+    }
+
+    #[test]
+    fn quitar_conserva_lo_demas() {
+        let original = r#"# Este comentario tiene que quedarse.
+canal = "inestable"
+
+[aplicaciones]
+instaladas = ["firefox", "karere", "blender"]
+"#;
+
+        let nuevo = quitar_en_texto(original, "karere")
+            .expect("debería poder quitar Karere")
+            .expect("debería existir un cambio");
+
+        assert!(nuevo.contains("# Este comentario tiene que quedarse."));
+        assert!(nuevo.contains("\"firefox\""));
+        assert!(!nuevo.contains("\"karere\""));
+        assert!(nuevo.contains("\"blender\""));
+        assert!(nuevo.contains("canal = \"inestable\""));
+    }
+
+    #[test]
+    fn quitar_lo_que_no_existe_no_cambia_nada() {
+        let original = r#"
+[aplicaciones]
+instaladas = ["firefox"]
+"#;
+
+        let nuevo = quitar_en_texto(original, "karere").expect("la operación debería ser válida");
+
+        assert!(nuevo.is_none());
+    }
+
+    #[test]
+    fn agregar_funciona_si_no_hay_lista() {
+        let original = r#"canal = "estable"
+"#;
+
+        let nuevo = agregar_en_texto(original, "firefox")
+            .expect("debería poder crear la lista")
+            .expect("debería existir un cambio");
+
+        let configuracion = leer_texto(&nuevo).expect("el resultado debería seguir siendo válido");
+
+        assert_eq!(
+            configuracion.aplicaciones.instaladas,
+            vec!["firefox".to_string()]
+        );
+    }
+
+    #[test]
+    fn agregar_funciona_si_existe_la_seccion_pero_no_la_lista() {
+        let original = r#"canal = "estable"
+
+[aplicaciones]
+"#;
+
+        let nuevo = agregar_en_texto(original, "firefox")
+            .expect("debería poder crear la lista")
+            .expect("debería existir un cambio");
+
+        let configuracion = leer_texto(&nuevo).expect("el resultado debería seguir siendo válido");
+
+        assert_eq!(
+            configuracion.aplicaciones.instaladas,
+            vec!["firefox".to_string()]
+        );
     }
 }
