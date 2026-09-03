@@ -348,6 +348,14 @@ Claro / Oscuro / Automático
 
 Las plantillas visuales de Noctalia no deben contaminar Plasma o Cinnamon.
 
+Elegir Niri o Hyprland deriva Noctalia como parte de esa familia de escritorio. Cinnamon y Plasma no reciben su servicio ni su configuración. En el primer corte de `desde-cero`, Niri usa una configuración KDL pequeña y explícita con launcher, controles, bloqueo, capturas, terminal, archivos y navegación básica.
+
+Noctalia conserva sus valores predeterminados y las preferencias cambiadas desde su interfaz. Korunix no reemplaza un `~/.config/noctalia/config.toml` existente: fusiona únicamente la política que administra. La misma política se aplica a `~/.local/state/noctalia/settings.toml` cuando ese archivo existe.
+
+Las capturas usan el directorio XDG de imágenes más `Capturas de pantalla` y el patrón `Captura de pantalla del %Y-%m-%d %H-%M-%S`.
+
+NixOS 26.05 todavía no trae Noctalia. Mientras siga así, el canal estable toma solo el paquete Noctalia del input `nixpkgs-inestable` que el flake ya tiene; el resto del sistema continúa usando el canal estable. No se añade un tercer input para resolver esta excepción.
+
 ## 13. Servicios y funciones granulares
 
 Funciones como Steam y Sunshine permiten opciones internas sin convertir cada detalle técnico en una pregunta.
@@ -533,35 +541,27 @@ Cuenta local y escritorio principal:
 1604fcd80db7d892e57d2505ab3206708eae7936
 ```
 
-La configuración humana ya incluye:
-
-```toml
-[[personas]]
-cuenta = "koru"
-nombre = "André"
-administrador = true
-
-[escritorio]
-principal = "niri"
-```
-
-Nix deriva la cuenta normal, Fish, acceso a NetworkManager y `wheel` cuando la cuenta es administradora. Korunix no guarda ni declara la contraseña de la cuenta existente.
-
-El escritorio principal acepta `niri`, `hyprland`, `cinnamon` y `plasma`. Los cuatro caminos llegan a una configuración NixOS evaluable; la generación construida en este corte usa Niri, que es la elección actual.
-
-Comandos nuevos:
+Sesión Niri básica con Noctalia:
 
 ```text
-korunix personas
-korunix escritorio
-korunix escritorio <niri|hyprland|cinnamon|plasma>
+3791dc183ff838097089e282626d83a69a0b8f7a
 ```
 
-Cambiar el escritorio toca solamente esa propiedad en TOML y todavía no activa NixOS.
+Niri ya recibe un `niri.kdl` pequeño del propio sistema. Tiene atajos para Noctalia, Alacritty, Nautilus, capturas y navegación básica. `xwayland-satellite` queda disponible para aplicaciones X11.
 
-La generación sigue sin activarse. Tener una cuenta y poder arrancar Niri no significa todavía que la sesión nueva reproduzca toda la experiencia actual: faltan la configuración de Niri/Noctalia y otras decisiones del sistema que se irán llevando al mismo TOML.
+Noctalia se deriva automáticamente cuando el escritorio es Niri o Hyprland. Cinnamon y Plasma no reciben su servicio. El plan muestra esta consecuencia y la versión resuelta de Noctalia.
 
-El siguiente bloque debe hacer que la sesión Niri sea realmente utilizable sin Home Manager, empezando por su configuración básica y las piezas de Noctalia que pertenecen al escritorio.
+Antes de Noctalia, `korunix sesion preparar` crea la configuración inicial solo cuando no existe y fusiona la política de capturas sin borrar preferencias personales. También actualiza esa misma política en `settings.toml` si Noctalia ya tiene preferencias guardadas allí.
+
+Las capturas quedan en el directorio XDG de imágenes, dentro de `Capturas de pantalla`, con nombre localizado:
+
+```text
+Captura de pantalla del %Y-%m-%d %H-%M-%S
+```
+
+La generación candidata se valida con el propio `niri validate` y `noctalia config validate`. Sigue sin activarse ni volverse persistente durante las pruebas.
+
+La sesión todavía no está lista para apply. Faltan decisiones que afectan directamente el uso diario, empezando por idioma, teclado/métodos de entrada y la configuración del monitor. Esas decisiones deben llegar al mismo TOML antes de revisar una generación aplicable.
 
 ## 22. Regla final
 
