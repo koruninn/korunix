@@ -42,6 +42,12 @@
       src = ./.;
 
       cargoLock.lockFile = ./Cargo.lock;
+
+      passthru.plan = {
+        inherit canal;
+        revision = nixpkgs.rev or "";
+        aplicaciones = resultado.plan;
+      };
     };
   in {
     packages.${sistema} = {

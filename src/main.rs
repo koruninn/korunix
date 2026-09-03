@@ -1,14 +1,54 @@
 mod configuracion;
+mod sistema;
 
 use std::env;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process;
 
-const RUTA_CONFIGURACION: &str = "configuracion.toml";
+fn es_raiz(ruta: &Path) -> bool {
+    ruta.join("configuracion.toml").is_file()
+        && ruta.join("flake.nix").is_file()
+        && ruta.join("sistema.nix").is_file()
+}
+
+fn raiz_korunix() -> Result<PathBuf, String> {
+    if let Some(valor) = env::var_os("KORUNIX_ROOT") {
+        let ruta = PathBuf::from(valor);
+
+        if es_raiz(&ruta) {
+            return Ok(ruta);
+        }
+
+        return Err(format!(
+            "KORUNIX_ROOT no apunta a una carpeta de Korunix: {}",
+            ruta.display()
+        ));
+    }
+
+    let actual = env::current_dir()
+        .map_err(|error| format!("No pude leer la carpeta actual.\nDetalle: {error}"))?;
+
+    for ruta in actual.ancestors() {
+        if es_raiz(ruta) {
+            return Ok(ruta.to_path_buf());
+        }
+    }
+
+    if let Some(home) = env::var_os("HOME") {
+        let ruta = PathBuf::from(home).join(".korunix");
+
+        if es_raiz(&ruta) {
+            return Ok(ruta);
+        }
+    }
+
+    Err("No encontré la carpeta de Korunix.".to_string())
+}
 
 fn ayuda() {
     eprintln!("Por ahora puedes usar:");
     eprintln!("  korunix validar");
+    eprintln!("  korunix plan");
     eprintln!("  korunix canal");
     eprintln!("  korunix canal <estable|inestable>");
     eprintln!("  korunix aplicaciones");
@@ -23,8 +63,8 @@ fn salir_con_error(error: &str) -> ! {
     process::exit(1);
 }
 
-fn validar() {
-    match configuracion::leer(Path::new(RUTA_CONFIGURACION)) {
+fn validar(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
         Ok(configuracion) => {
             println!("✓ La configuración está bien.");
             println!("Canal: {}", configuracion.canal);
@@ -37,15 +77,54 @@ fn validar() {
     }
 }
 
-fn mostrar_canal() {
-    match configuracion::leer(Path::new(RUTA_CONFIGURACION)) {
+fn mostrar_plan(raiz: &Path) {
+    let configuracion = match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => configuracion,
+        Err(error) => salir_con_error(&error),
+    };
+
+    let plan = match sistema::preparar_plan(raiz, &configuracion) {
+        Ok(plan) => plan,
+        Err(error) => salir_con_error(&error),
+    };
+
+    println!("Plan");
+    println!("Canal: {}", plan.canal);
+
+    if plan.aplicaciones.is_empty() {
+        println!("Aplicaciones: ninguna");
+    } else {
+        println!("Aplicaciones:");
+
+        for aplicacion in plan.aplicaciones {
+            if aplicacion.version.is_empty() {
+                println!("  - {} → {}", aplicacion.elegida, aplicacion.nombre);
+            } else {
+                println!(
+                    "  - {} → {} {}",
+                    aplicacion.elegida, aplicacion.nombre, aplicacion.version
+                );
+            }
+        }
+    }
+
+    if !plan.revision.is_empty() {
+        println!("Nixpkgs: {}", plan.revision);
+    }
+
+    println!();
+    println!("NixOS no cambió.");
+}
+
+fn mostrar_canal(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
         Ok(configuracion) => println!("Canal: {}", configuracion.canal),
         Err(error) => salir_con_error(&error),
     }
 }
 
-fn cambiar_canal(canal: &str) {
-    match configuracion::cambiar_canal(Path::new(RUTA_CONFIGURACION), canal) {
+fn cambiar_canal(raiz: &Path, canal: &str) {
+    match configuracion::cambiar_canal(&raiz.join("configuracion.toml"), canal) {
         Ok(true) => {
             println!("✓ El canal ahora es «{canal}» en configuracion.toml.");
             println!("NixOS todavía no cambió.");
@@ -58,8 +137,8 @@ fn cambiar_canal(canal: &str) {
     }
 }
 
-fn listar_aplicaciones() {
-    match configuracion::leer(Path::new(RUTA_CONFIGURACION)) {
+fn listar_aplicaciones(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
         Ok(configuracion) => {
             if configuracion.aplicaciones.instaladas.is_empty() {
                 println!("No hay aplicaciones en la lista.");
@@ -76,8 +155,8 @@ fn listar_aplicaciones() {
     }
 }
 
-fn agregar_aplicacion(nombre: &str) {
-    match configuracion::agregar_aplicacion(Path::new(RUTA_CONFIGURACION), nombre) {
+fn agregar_aplicacion(raiz: &Path, nombre: &str) {
+    match configuracion::agregar_aplicacion(&raiz.join("configuracion.toml"), nombre) {
         Ok(true) => {
             println!("✓ Agregué «{nombre}» a configuracion.toml.");
             println!("NixOS todavía no cambió.");
@@ -90,8 +169,8 @@ fn agregar_aplicacion(nombre: &str) {
     }
 }
 
-fn quitar_aplicacion(nombre: &str) {
-    match configuracion::quitar_aplicacion(Path::new(RUTA_CONFIGURACION), nombre) {
+fn quitar_aplicacion(raiz: &Path, nombre: &str) {
+    match configuracion::quitar_aplicacion(&raiz.join("configuracion.toml"), nombre) {
         Ok(true) => {
             println!("✓ Quité «{nombre}» de configuracion.toml.");
             println!("NixOS todavía no cambió.");
@@ -105,19 +184,25 @@ fn quitar_aplicacion(nombre: &str) {
 }
 
 fn main() {
+    let raiz = match raiz_korunix() {
+        Ok(raiz) => raiz,
+        Err(error) => salir_con_error(&error),
+    };
+
     let argumentos: Vec<String> = env::args().skip(1).collect();
 
     match argumentos.as_slice() {
-        [] => validar(),
-        [comando] if comando == "validar" => validar(),
-        [comando] if comando == "canal" => mostrar_canal(),
-        [comando, canal] if comando == "canal" => cambiar_canal(canal),
-        [comando] if comando == "aplicaciones" => listar_aplicaciones(),
+        [] => validar(&raiz),
+        [comando] if comando == "validar" => validar(&raiz),
+        [comando] if comando == "plan" => mostrar_plan(&raiz),
+        [comando] if comando == "canal" => mostrar_canal(&raiz),
+        [comando, canal] if comando == "canal" => cambiar_canal(&raiz, canal),
+        [comando] if comando == "aplicaciones" => listar_aplicaciones(&raiz),
         [grupo, accion, nombre] if grupo == "aplicaciones" && accion == "agregar" => {
-            agregar_aplicacion(nombre)
+            agregar_aplicacion(&raiz, nombre)
         }
         [grupo, accion, nombre] if grupo == "aplicaciones" && accion == "quitar" => {
-            quitar_aplicacion(nombre)
+            quitar_aplicacion(&raiz, nombre)
         }
         _ => {
             eprintln!("No entendí esa orden.");
