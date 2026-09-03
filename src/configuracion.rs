@@ -16,6 +16,12 @@ pub struct Configuracion {
     pub canal: String,
 
     #[serde(default)]
+    pub personas: Vec<Persona>,
+
+    #[serde(default)]
+    pub escritorio: Escritorio,
+
+    #[serde(default)]
     pub aplicaciones: Aplicaciones,
 }
 
@@ -24,6 +30,35 @@ pub struct Configuracion {
 pub struct Aplicaciones {
     #[serde(default)]
     pub instaladas: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Persona {
+    pub cuenta: String,
+    pub nombre: String,
+
+    #[serde(default)]
+    pub administrador: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Escritorio {
+    #[serde(default = "escritorio_por_defecto")]
+    pub principal: String,
+}
+
+impl Default for Escritorio {
+    fn default() -> Self {
+        Self {
+            principal: escritorio_por_defecto(),
+        }
+    }
+}
+
+fn escritorio_por_defecto() -> String {
+    "niri".to_string()
 }
 
 fn nombre_por_defecto() -> String {
@@ -72,11 +107,78 @@ fn entender(texto: &str, origen: &str) -> Result<Configuracion, String> {
     Ok(configuracion)
 }
 
+fn entender_completa(texto: &str, origen: &str) -> Result<Configuracion, String> {
+    let configuracion = entender(texto, origen)?;
+
+    if configuracion.personas.is_empty() {
+        return Err(
+            "No hay ninguna cuenta local en configuracion.toml.\nAñade al menos un bloque [[personas]]."
+                .to_string(),
+        );
+    }
+
+    Ok(configuracion)
+}
+
 pub fn leer(ruta: &Path) -> Result<Configuracion, String> {
     let texto = fs::read_to_string(ruta)
         .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
 
-    entender(&texto, &ruta.display().to_string())
+    entender_completa(&texto, &ruta.display().to_string())
+}
+
+fn revisar_cuenta(cuenta: &str) -> Result<(), String> {
+    let mut caracteres = cuenta.bytes();
+    let primero_valido = caracteres
+        .next()
+        .is_some_and(|byte| byte.is_ascii_lowercase() || byte == b'_');
+    let resto_valido = caracteres.all(|byte| {
+        byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-' || byte == b'_'
+    });
+
+    if cuenta == "root" || cuenta.len() > 31 || !primero_valido || !resto_valido {
+        return Err(format!(
+            "La cuenta «{cuenta}» no sirve como usuario local.\nUsa minúsculas, números, guiones o _, y empieza con una letra o _."
+        ));
+    }
+
+    Ok(())
+}
+
+fn revisar_persona(persona: &Persona) -> Result<(), String> {
+    revisar_cuenta(&persona.cuenta)?;
+
+    if persona.nombre.trim().is_empty() {
+        return Err(format!(
+            "La cuenta «{}» necesita un nombre visible.",
+            persona.cuenta
+        ));
+    }
+
+    if persona.nombre.trim() != persona.nombre {
+        return Err(format!(
+            "El nombre visible de «{}» tiene espacios de más al comienzo o al final.",
+            persona.cuenta
+        ));
+    }
+
+    Ok(())
+}
+
+fn revisar_escritorio(escritorio: &str) -> Result<(), String> {
+    if !matches!(escritorio, "niri" | "hyprland" | "cinnamon" | "plasma") {
+        let sugerencia = if escritorio == "niry" {
+            "\n¿Querías decir «niri»?"
+        } else {
+            ""
+        };
+
+        return Err(format!(
+            "No conozco el escritorio «{escritorio}».\nPon «niri», «hyprland», «cinnamon» o «plasma».{sugerencia}"
+        ));
+    }
+
+    Ok(())
 }
 
 fn revisar_nombre_aplicacion(nombre: &str) -> Result<(), String> {
@@ -97,6 +199,20 @@ fn revisar_nombre_aplicacion(nombre: &str) -> Result<(), String> {
 pub fn revisar(configuracion: &Configuracion) -> Result<(), String> {
     revisar_nombre(&configuracion.nombre)?;
     revisar_canal(&configuracion.canal)?;
+    revisar_escritorio(&configuracion.escritorio.principal)?;
+
+    let mut cuentas = HashSet::new();
+
+    for persona in &configuracion.personas {
+        revisar_persona(persona)?;
+
+        if !cuentas.insert(persona.cuenta.as_str()) {
+            return Err(format!(
+                "La cuenta «{}» aparece más de una vez.\nDéjala una sola vez.",
+                persona.cuenta
+            ));
+        }
+    }
 
     let mut vistas = HashSet::new();
 
@@ -221,6 +337,36 @@ fn cambiar_canal_en_texto(texto: &str, canal: &str) -> Result<Option<String>, St
     Ok(Some(nuevo))
 }
 
+fn cambiar_escritorio_en_texto(texto: &str, escritorio: &str) -> Result<Option<String>, String> {
+    revisar_escritorio(escritorio)?;
+    let actual = entender(texto, "la configuración")?;
+
+    if actual.escritorio.principal == escritorio {
+        return Ok(None);
+    }
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+
+    let tabla = documento
+        .as_table_mut()
+        .entry("escritorio")
+        .or_insert(Item::Table(Table::new()))
+        .as_table_mut()
+        .ok_or_else(|| {
+            "No pude usar [escritorio].\nEsa parte de configuracion.toml tiene que ser una sección."
+                .to_string()
+        })?;
+
+    tabla["principal"] = value(escritorio);
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
 fn guardar(ruta: &Path, texto: &str) -> Result<(), String> {
     let carpeta = ruta.parent().unwrap_or_else(|| Path::new("."));
     let nombre = ruta
@@ -261,6 +407,8 @@ pub fn agregar_aplicacion(ruta: &Path, nombre: &str) -> Result<bool, String> {
     let texto = fs::read_to_string(ruta)
         .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
 
+    entender_completa(&texto, &ruta.display().to_string())?;
+
     let Some(nuevo) = agregar_en_texto(&texto, nombre)? else {
         return Ok(false);
     };
@@ -273,6 +421,8 @@ pub fn agregar_aplicacion(ruta: &Path, nombre: &str) -> Result<bool, String> {
 pub fn quitar_aplicacion(ruta: &Path, nombre: &str) -> Result<bool, String> {
     let texto = fs::read_to_string(ruta)
         .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    entender_completa(&texto, &ruta.display().to_string())?;
 
     let Some(nuevo) = quitar_en_texto(&texto, nombre)? else {
         return Ok(false);
@@ -287,7 +437,24 @@ pub fn cambiar_nombre(ruta: &Path, nombre: &str) -> Result<bool, String> {
     let texto = fs::read_to_string(ruta)
         .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
 
+    entender_completa(&texto, &ruta.display().to_string())?;
+
     let Some(nuevo) = cambiar_nombre_en_texto(&texto, nombre)? else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
+}
+
+pub fn cambiar_escritorio(ruta: &Path, escritorio: &str) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    entender_completa(&texto, &ruta.display().to_string())?;
+
+    let Some(nuevo) = cambiar_escritorio_en_texto(&texto, escritorio)? else {
         return Ok(false);
     };
 
@@ -299,6 +466,8 @@ pub fn cambiar_nombre(ruta: &Path, nombre: &str) -> Result<bool, String> {
 pub fn cambiar_canal(ruta: &Path, canal: &str) -> Result<bool, String> {
     let texto = fs::read_to_string(ruta)
         .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    entender_completa(&texto, &ruta.display().to_string())?;
 
     let Some(nuevo) = cambiar_canal_en_texto(&texto, canal)? else {
         return Ok(false);
@@ -618,6 +787,136 @@ canal = "estable"
 
         let nuevo =
             cambiar_nombre_en_texto(original, "korunix").expect("la operación debería ser válida");
+
+        assert!(nuevo.is_none());
+    }
+    #[test]
+    fn una_configuracion_completa_necesita_una_persona() {
+        let temporal = std::env::temp_dir().join(format!(
+            "korunix-sin-persona-{}-{}.toml",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("el reloj debería funcionar")
+                .as_nanos()
+        ));
+
+        fs::write(
+            &temporal,
+            r#"nombre = "korunix"
+canal = "estable"
+"#,
+        )
+        .expect("debería poder preparar la prueba");
+
+        let error = leer(&temporal).expect_err("una configuración completa necesita una persona");
+        let _ = fs::remove_file(&temporal);
+
+        assert!(error.contains("[[personas]]"));
+    }
+
+    #[test]
+    fn una_edicion_real_no_guarda_si_falta_la_persona() {
+        let temporal = std::env::temp_dir().join(format!(
+            "korunix-edicion-sin-persona-{}-{}.toml",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("el reloj debería funcionar")
+                .as_nanos()
+        ));
+
+        let original = r#"nombre = "korunix"
+canal = "estable"
+"#;
+
+        fs::write(&temporal, original).expect("debería poder preparar la prueba");
+
+        let error = cambiar_canal(&temporal, "inestable")
+            .expect_err("no debería guardar sobre una configuración incompleta");
+
+        let despues = fs::read_to_string(&temporal).expect("debería poder releer la prueba");
+        let _ = fs::remove_file(&temporal);
+
+        assert!(error.contains("[[personas]]"));
+        assert_eq!(despues, original);
+    }
+
+    #[test]
+    fn una_cuenta_repetida_se_rechaza() {
+        let error = leer_texto(
+            r#"
+[[personas]]
+cuenta = "koru"
+nombre = "André"
+
+[[personas]]
+cuenta = "koru"
+nombre = "Otra persona"
+"#,
+        )
+        .expect_err("una cuenta repetida debería rechazarse");
+
+        assert!(error.contains("aparece más de una vez"));
+    }
+
+    #[test]
+    fn niry_sugiere_niri() {
+        let error = leer_texto(
+            r#"
+canal = "estable"
+
+[escritorio]
+principal = "niry"
+"#,
+        )
+        .expect_err("un escritorio inventado debería rechazarse");
+
+        assert!(error.contains("¿Querías decir «niri»?"));
+    }
+
+    #[test]
+    fn cambiar_escritorio_conserva_lo_demas() {
+        let original = r#"# El nombre tiene que quedarse.
+nombre = "korunix"
+canal = "inestable"
+
+[[personas]]
+cuenta = "koru"
+nombre = "André"
+administrador = true
+
+[escritorio]
+# Este comentario también.
+principal = "niri"
+
+[aplicaciones]
+instaladas = ["firefox", "karere"]
+"#;
+
+        let nuevo = cambiar_escritorio_en_texto(original, "plasma")
+            .expect("debería poder cambiar el escritorio")
+            .expect("debería existir un cambio");
+
+        assert!(nuevo.contains("# El nombre tiene que quedarse."));
+        assert!(nuevo.contains("# Este comentario también."));
+        assert!(nuevo.contains("principal = \"plasma\""));
+        assert!(nuevo.contains("cuenta = \"koru\""));
+        assert!(nuevo.contains("\"karere\""));
+    }
+
+    #[test]
+    fn poner_el_mismo_escritorio_no_cambia_nada() {
+        let original = r#"[[personas]]
+cuenta = "koru"
+nombre = "André"
+
+[escritorio]
+principal = "niri"
+"#;
+
+        let nuevo =
+            cambiar_escritorio_en_texto(original, "niri").expect("la operación debería ser válida");
 
         assert!(nuevo.is_none());
     }

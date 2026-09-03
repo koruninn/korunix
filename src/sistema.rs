@@ -9,8 +9,16 @@ use std::process::{self, Command};
 pub struct Plan {
     pub nombre: String,
     pub canal: String,
+    pub escritorio: String,
+    pub personas: Vec<PersonaPlan>,
     pub revision: String,
     pub aplicaciones: Vec<Aplicacion>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PersonaPlan {
+    pub cuenta: String,
+    pub administrador: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,6 +54,32 @@ fn comprobar_plan(configuracion: &Configuracion, plan: &Plan) -> Result<(), Stri
     if plan.canal != configuracion.canal {
         return Err(
             "El canal que resolvió Nix no coincide con configuracion.toml. No voy a usar ese plan."
+                .to_string(),
+        );
+    }
+
+    if plan.escritorio != configuracion.escritorio.principal {
+        return Err(
+            "El escritorio que resolvió Nix no coincide con configuracion.toml. No voy a usar ese plan."
+                .to_string(),
+        );
+    }
+
+    let personas: Vec<(&str, bool)> = plan
+        .personas
+        .iter()
+        .map(|persona| (persona.cuenta.as_str(), persona.administrador))
+        .collect();
+
+    let esperadas: Vec<(&str, bool)> = configuracion
+        .personas
+        .iter()
+        .map(|persona| (persona.cuenta.as_str(), persona.administrador))
+        .collect();
+
+    if personas != esperadas {
+        return Err(
+            "Las cuentas que resolvió Nix no coinciden con configuracion.toml. No voy a usar ese plan."
                 .to_string(),
         );
     }
@@ -151,12 +185,20 @@ pub fn construir_generacion(raiz: &Path) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod pruebas {
     use super::*;
-    use crate::configuracion::Aplicaciones;
+    use crate::configuracion::{Aplicaciones, Escritorio, Persona};
 
     fn configuracion() -> Configuracion {
         Configuracion {
             nombre: "korunix".to_string(),
             canal: "inestable".to_string(),
+            personas: vec![Persona {
+                cuenta: "koru".to_string(),
+                nombre: "André".to_string(),
+                administrador: true,
+            }],
+            escritorio: Escritorio {
+                principal: "niri".to_string(),
+            },
             aplicaciones: Aplicaciones {
                 instaladas: vec!["firefox".to_string(), "karere".to_string()],
             },
@@ -167,6 +209,11 @@ mod pruebas {
         Plan {
             nombre: "korunix".to_string(),
             canal: "inestable".to_string(),
+            escritorio: "niri".to_string(),
+            personas: vec![PersonaPlan {
+                cuenta: "koru".to_string(),
+                administrador: true,
+            }],
             revision: "abc123".to_string(),
             aplicaciones: vec![
                 Aplicacion {
@@ -188,6 +235,8 @@ mod pruebas {
         let texto = br#"{
           "nombre": "korunix",
           "canal": "inestable",
+          "escritorio": "niri",
+          "personas": [{"cuenta": "koru", "administrador": true}],
           "revision": "abc123",
           "aplicaciones": [
             {"elegida": "firefox", "nombre": "firefox", "version": "1"}
@@ -197,8 +246,8 @@ mod pruebas {
         let plan = leer_plan(texto).expect("el plan debería entenderse");
 
         assert_eq!(plan.nombre, "korunix");
-        assert_eq!(plan.canal, "inestable");
-        assert_eq!(plan.aplicaciones[0].elegida, "firefox");
+        assert_eq!(plan.escritorio, "niri");
+        assert_eq!(plan.personas[0].cuenta, "koru");
     }
 
     #[test]
@@ -224,6 +273,32 @@ mod pruebas {
             .expect_err("un canal distinto debería rechazarse");
 
         assert!(error.contains("no coincide"));
+    }
+
+    #[test]
+    fn rechaza_un_plan_con_otro_escritorio() {
+        let configuracion = configuracion();
+        let mut plan = plan();
+        plan.escritorio = "plasma".to_string();
+
+        let error = comprobar_plan(&configuracion, &plan)
+            .expect_err("un escritorio distinto debería rechazarse");
+
+        assert!(error.contains("escritorio"));
+        assert!(error.contains("no coincide"));
+    }
+
+    #[test]
+    fn rechaza_un_plan_con_otras_personas() {
+        let configuracion = configuracion();
+        let mut plan = plan();
+        plan.personas[0].administrador = false;
+
+        let error = comprobar_plan(&configuracion, &plan)
+            .expect_err("una cuenta distinta debería rechazarse");
+
+        assert!(error.contains("cuentas"));
+        assert!(error.contains("no coinciden"));
     }
 
     #[test]

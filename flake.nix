@@ -14,6 +14,8 @@
     configuracion = builtins.fromTOML (builtins.readFile ./configuracion.toml);
     nombre = configuracion.nombre or "nixos";
     canal = configuracion.canal or "estable";
+    personas = configuracion.personas or [];
+    escritorio = (configuracion.escritorio or {}).principal or "niri";
 
     nixpkgs =
       if canal == "estable"
@@ -64,6 +66,13 @@
       (aplicacion: builtins.removeAttrs aplicacion ["paquete"])
       resueltas;
 
+    planPersonas =
+      map (persona: {
+        inherit (persona) cuenta;
+        administrador = persona.administrador or false;
+      })
+      personas;
+
     programa = pkgs.rustPlatform.buildRustPackage {
       pname = "korunix";
       version = "0.1.0";
@@ -72,7 +81,8 @@
       cargoLock.lockFile = ./Cargo.lock;
 
       passthru.plan = {
-        inherit nombre canal;
+        inherit nombre canal escritorio;
+        personas = planPersonas;
         revision = nixpkgs.rev or "";
         aplicaciones = planAplicaciones;
       };
@@ -92,7 +102,7 @@
       system = sistema;
 
       specialArgs = {
-        inherit aplicaciones nombre programa;
+        inherit aplicaciones escritorio nombre personas programa;
       };
 
       modules = [./sistema.nix];

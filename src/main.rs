@@ -54,6 +54,9 @@ fn ayuda() {
     eprintln!("  korunix construir");
     eprintln!("  korunix nombre");
     eprintln!("  korunix nombre <nuevo>");
+    eprintln!("  korunix personas");
+    eprintln!("  korunix escritorio");
+    eprintln!("  korunix escritorio <niri|hyprland|cinnamon|plasma>");
     eprintln!("  korunix canal");
     eprintln!("  korunix canal <estable|inestable>");
     eprintln!("  korunix aplicaciones");
@@ -74,6 +77,8 @@ fn validar(raiz: &Path) {
             println!("✓ La configuración está bien.");
             println!("Equipo: {}", configuracion.nombre);
             println!("Canal: {}", configuracion.canal);
+            println!("Escritorio: {}", configuracion.escritorio.principal);
+            println!("Personas: {}", configuracion.personas.len());
             println!(
                 "Aplicaciones elegidas: {}",
                 configuracion.aplicaciones.instaladas.len()
@@ -97,6 +102,17 @@ fn mostrar_plan(raiz: &Path) {
     println!("Plan");
     println!("Equipo: {}", plan.nombre);
     println!("Canal: {}", plan.canal);
+    println!("Escritorio: {}", plan.escritorio);
+    println!("Personas:");
+
+    for persona in plan.personas {
+        let tipo = if persona.administrador {
+            "administrador"
+        } else {
+            "usuario"
+        };
+        println!("  - {} ({tipo})", persona.cuenta);
+    }
 
     if plan.aplicaciones.is_empty() {
         println!("Aplicaciones: ninguna");
@@ -156,6 +172,45 @@ fn cambiar_nombre(raiz: &Path, nombre: &str) {
         }
         Ok(false) => {
             println!("El nombre ya era «{nombre}».");
+            println!("No cambié nada.");
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn mostrar_personas(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => {
+            println!("Personas:");
+
+            for persona in configuracion.personas {
+                let tipo = if persona.administrador {
+                    "administrador"
+                } else {
+                    "usuario"
+                };
+                println!("  - {} — {} ({tipo})", persona.cuenta, persona.nombre);
+            }
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn mostrar_escritorio(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => println!("Escritorio: {}", configuracion.escritorio.principal),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn cambiar_escritorio(raiz: &Path, escritorio: &str) {
+    match configuracion::cambiar_escritorio(&raiz.join("configuracion.toml"), escritorio) {
+        Ok(true) => {
+            println!("✓ El escritorio principal ahora es «{escritorio}» en configuracion.toml.");
+            println!("NixOS todavía no cambió.");
+        }
+        Ok(false) => {
+            println!("El escritorio principal ya era «{escritorio}».");
             println!("No cambié nada.");
         }
         Err(error) => salir_con_error(&error),
@@ -244,6 +299,9 @@ fn main() {
         [comando] if comando == "construir" => construir(&raiz),
         [comando] if comando == "nombre" => mostrar_nombre(&raiz),
         [comando, nombre] if comando == "nombre" => cambiar_nombre(&raiz, nombre),
+        [comando] if comando == "personas" => mostrar_personas(&raiz),
+        [comando] if comando == "escritorio" => mostrar_escritorio(&raiz),
+        [comando, escritorio] if comando == "escritorio" => cambiar_escritorio(&raiz, escritorio),
         [comando] if comando == "canal" => mostrar_canal(&raiz),
         [comando, canal] if comando == "canal" => cambiar_canal(&raiz, canal),
         [comando] if comando == "aplicaciones" => listar_aplicaciones(&raiz),

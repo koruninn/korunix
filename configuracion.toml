@@ -4,6 +4,16 @@ nombre = "korunix"
 # "estable" cambia menos; "inestable" trae cosas más nuevas.
 canal = "inestable"
 
+# Cada bloque [[personas]] es una cuenta local.
+[[personas]]
+cuenta = "koru"
+nombre = "André"
+administrador = true
+
+[escritorio]
+# Este es el escritorio que se abre por defecto.
+principal = "niri"
+
 [aplicaciones]
 # Pon aquí las aplicaciones que quieres tener.
 instaladas = [
