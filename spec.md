@@ -923,13 +923,13 @@ ccb3ff02573e48f336478bd64c17668a16680055
 
 La vía temporal anterior `korunix construir` se retiró para no mantener dos caminos con significados distintos. Preview es el único paso que crea una generación revisable antes de apply.
 
-El preview corregido y todavía no aplicado es:
+El primer preview aplicable quedó en:
 
 ```text
 /nix/store/1cwvxaf0db189h3dq4r7r1p19ipi7a0a-nixos-system-korunix-26.11.20260831.34ab990
 ```
 
-y queda protegido por:
+y sigue protegido por:
 
 ```text
 ~/.local/state/korunix/preview
@@ -939,13 +939,27 @@ La validación del corte terminó con 65 tests de Rust aprobados, incluidos tres
 
 La comparación fuerte del closure contra la candidata integral V6 mostró 20 paths distintos por lado. Son las mismas 20 piezas reconstruidas con hashes nuevos —Korunix, `system-path`, `etc`, completados de Fish y las unidades derivadas de systemd— porque el binario de Korunix forma parte de la generación. No desapareció ningún paquete, servicio o capacidad funcional de la candidata auditada.
 
-El sistema activo y el perfil persistente continúan en:
+El primer apply real se hizo **sin reconstruir**: se conservó como regreso la generación anterior, se ejecutó `check` y `dry-activate`, se mostró el efecto y la necesidad de reinicio, y después de autorización se puso exactamente el preview revisado como perfil persistente y se activó esa misma generación.
+
+La generación anterior quedó protegida en:
 
 ```text
-/nix/store/5h1pm4w6ji6vz5bab5rbp0l5c51bmi1m-nixos-system-korunix-26.11.20260813.0e251e2
+~/.local/state/korunix/anterior
+→ /nix/store/5h1pm4w6ji6vz5bab5rbp0l5c51bmi1m-nixos-system-korunix-26.11.20260813.0e251e2
 ```
 
-El siguiente paso es implementar **apply** sobre el preview existente. Apply no vuelve a ejecutar `nix build`: toma exactamente la generación a la que apunta el preview revisado, muestra el efecto que va a tener, cruza la frontera de privilegios solo cuando corresponde, la activa y la deja como generación persistente. Después verifica `activa = persistente`. Rollback se implementa sobre ese contrato, no como una reconstrucción.
+El apply terminó con:
+
+```text
+activa      = /nix/store/1cwvxaf0db189h3dq4r7r1p19ipi7a0a-nixos-system-korunix-26.11.20260831.34ab990
+persistente = /nix/store/1cwvxaf0db189h3dq4r7r1p19ipi7a0a-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+No aparecieron unidades systemd fallidas nuevas. Como el cambio llevaba el kernel de `7.1.8` a `7.2.2`, se reinició para cerrar la prueba de persistencia. Tras arrancar de nuevo, `/run/booted-system`, `/run/current-system` y `/nix/var/nix/profiles/system` coincidieron con el mismo preview, `uname -r` mostró `7.2.2`, los servicios básicos revisados siguieron activos y la sesión Niri conservó Noctalia, Sunshine e IBus.
+
+El siguiente paso es incorporar **`korunix aplicar`** al Rust usando exactamente este contrato ya probado. El comando no ejecuta `nix build`: toma el enlace de preview existente, comprueba que sea una generación NixOS válida y distinta cuando corresponda, protege la generación actual como regreso, muestra el efecto con `check` + `dry-activate`, pide autorización, cruza privilegios una sola vez para el cambio y verifica al final `activa = persistente = preview`.
+
+Después se implementa rollback usando el punto de regreso protegido, sin reconstruir generaciones.
 
 ## 22. Regla final
 
