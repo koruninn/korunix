@@ -1,3 +1,4 @@
+mod aplicar;
 mod configuracion;
 mod preview;
 mod sistema;
@@ -53,6 +54,7 @@ fn ayuda() {
     eprintln!("  korunix validar");
     eprintln!("  korunix plan");
     eprintln!("  korunix preview");
+    eprintln!("  korunix aplicar");
     eprintln!("  korunix nombre");
     eprintln!("  korunix nombre <nuevo>");
     eprintln!("  korunix personas");
@@ -517,6 +519,13 @@ fn quitar_aplicacion(raiz: &Path, nombre: &str) {
 fn main() {
     let argumentos: Vec<String> = env::args().skip(1).collect();
 
+    if argumentos
+        .first()
+        .is_some_and(|comando| comando == "__aplicar-raiz")
+    {
+        process::exit(aplicar::ejecutar_como_root(&argumentos[1..]));
+    }
+
     if matches!(
         argumentos.as_slice(),
         [grupo, accion] if grupo == "sesion" && accion == "preparar"
@@ -543,6 +552,12 @@ fn main() {
         [comando] if comando == "validar" => validar(&raiz),
         [comando] if comando == "plan" => mostrar_plan(&raiz),
         [comando] if comando == "preview" => preparar_preview(&raiz),
+        [comando] if comando == "aplicar" => {
+            if let Err(error) = aplicar::ejecutar(&raiz) {
+                eprintln!("{error}");
+                process::exit(1);
+            }
+        }
         [comando] if comando == "nombre" => mostrar_nombre(&raiz),
         [comando, nombre] if comando == "nombre" => cambiar_nombre(&raiz, nombre),
         [comando] if comando == "personas" => mostrar_personas(&raiz),
