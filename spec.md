@@ -316,7 +316,11 @@ La versión actual de NixOS exige root incluso para `switch-to-configuration dry
 
 Si la activación falla después de empezar el cambio, Korunix intenta volver a la generación protegida como anterior y verifica que vuelva a quedar activa y persistente. Un estado dividido nunca se presenta como éxito.
 
-Rollback es una función normal del producto. Se implementa sobre ese punto de regreso protegido, sin reconstruir generaciones. Las operaciones largas muestran su fase y no dejan la interfaz muda.
+Rollback es una función normal del producto. `korunix rollback` usa el punto de regreso protegido en `XDG_STATE_HOME/korunix/anterior`, comprueba primero que activa y persistente no estén divididas y no ejecuta `nix build`.
+
+La generación anterior conserva también una copia de la `configuracion.toml` humana asociada. Antes de volver, Korunix ejecuta `check` y `dry-activate`, muestra qué generación quedará activa, si cambia el kernel, si puede requerir volver a iniciar sesión y que la configuración humana volverá con esa generación. Solo después de que la persona escriba `VOLVER` deja exactamente esa generación como persistente, la activa y restaura la copia humana asociada.
+
+Rollback termina correctamente solo si `activa = persistente = anterior` y `configuracion.toml` vuelve a la copia guardada. Si el sistema ya está en ese punto de regreso, el comando es inocuo y no pide privilegios. Las operaciones largas muestran su fase y no dejan la interfaz muda.
 
 ## 11. Aplicaciones
 
@@ -623,7 +627,9 @@ Ejemplos:
 - un segundo apply sobre la misma generación es inocuo;
 - un fallo de activación intenta recuperar la generación anterior;
 - activa y persistente coinciden;
-- rollback recupera;
+- rollback vuelve exactamente a la generación protegida sin reconstruir;
+- rollback restaura la `configuracion.toml` asociada;
+- rollback repetido sobre la misma generación es inocuo;
 - una lectura normal no reevalúa Nix sin necesidad;
 - la GUI no se congela;
 - una página lenta no bloquea las demás.
@@ -996,7 +1002,39 @@ anterior    = /nix/store/1cwvxaf0db189h3dq4r7r1p19ipi7a0a-nixos-system-korunix-2
 
 No aparecieron unidades systemd fallidas nuevas. El kernel siguió siendo `7.2.2`, por lo que este cambio no necesitó otro reinicio. Una segunda ejecución del `korunix aplicar` instalado en la generación nueva reconoció que el preview ya estaba activo y persistente, no pidió privilegios y no cambió nada.
 
-El siguiente bloque es implementar **rollback** sobre `~/.local/state/korunix/anterior`: debe revisar el efecto, volver exactamente a esa generación sin reconstruir, dejarla persistente y verificar el resultado con la misma disciplina de apply.
+Rollback quedó incorporado y probado de forma real en:
+
+```text
+9e8b9e467d89025419a60c7c0f475a63c1f24708
+```
+
+El preview que contenía rollback fue:
+
+```text
+/nix/store/4pyq6xbw7vhl6pbmqvk8c7rkddrz2qs5-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+y se probó contra la generación anterior protegida:
+
+```text
+/nix/store/yc3bwpvcsdlxsz6d6b5pjcr695ysxy15-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+La puerta de Rust llegó a 78 tests aprobados antes de la prueba viva. Después se aplicó exactamente el preview nuevo sin rebuild, se comprobó `activa = persistente = preview` y que la generación de origen quedara protegida junto con su copia humana de `configuracion.toml`.
+
+`korunix rollback` ejecutó `check` y `dry-activate`, mostró el efecto y esperó `VOLVER`. Volvió exactamente a la generación anterior sin reconstruir, dejó `activa = persistente = anterior` y restauró la `configuracion.toml` asociada. Una segunda ejecución reconoció que el sistema ya estaba en ese punto y no cambió nada.
+
+Para cerrar la prueba se reaplicó el mismo preview nuevo. El estado final quedó:
+
+```text
+activa      = /nix/store/4pyq6xbw7vhl6pbmqvk8c7rkddrz2qs5-nixos-system-korunix-26.11.20260831.34ab990
+persistente = /nix/store/4pyq6xbw7vhl6pbmqvk8c7rkddrz2qs5-nixos-system-korunix-26.11.20260831.34ab990
+preview     = /nix/store/4pyq6xbw7vhl6pbmqvk8c7rkddrz2qs5-nixos-system-korunix-26.11.20260831.34ab990
+anterior    = /nix/store/yc3bwpvcsdlxsz6d6b5pjcr695ysxy15-nixos-system-korunix-26.11.20260831.34ab990
+kernel      = 7.2.2
+```
+
+No aparecieron unidades systemd fallidas nuevas. Con `preview`, `aplicar` y `rollback` ya probados sobre generaciones reales, el siguiente frente de la reimplementación es llevar estos mismos flujos a GTK4/libadwaita sin duplicar la lógica: la interfaz muestra y pregunta; el mismo Rust sigue haciendo el trabajo.
 
 ## 22. Regla final
 
