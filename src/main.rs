@@ -1,6 +1,7 @@
 mod aplicar;
 mod configuracion;
 mod preview;
+mod rollback;
 mod sistema;
 
 use std::env;
@@ -55,6 +56,7 @@ fn ayuda() {
     eprintln!("  korunix plan");
     eprintln!("  korunix preview");
     eprintln!("  korunix aplicar");
+    eprintln!("  korunix rollback");
     eprintln!("  korunix nombre");
     eprintln!("  korunix nombre <nuevo>");
     eprintln!("  korunix personas");
@@ -354,6 +356,10 @@ fn preparar_preview(raiz: &Path) {
         salir_con_error(&error);
     }
 
+    if let Err(error) = aplicar::conservar_aplicada_actual(raiz) {
+        salir_con_error(&error);
+    }
+
     println!("Construyendo el preview de NixOS...");
     let _ = io::stdout().flush();
 
@@ -526,6 +532,13 @@ fn main() {
         process::exit(aplicar::ejecutar_como_root(&argumentos[1..]));
     }
 
+    if argumentos
+        .first()
+        .is_some_and(|comando| comando == "__rollback-raiz")
+    {
+        process::exit(rollback::ejecutar_como_root(&argumentos[1..]));
+    }
+
     if matches!(
         argumentos.as_slice(),
         [grupo, accion] if grupo == "sesion" && accion == "preparar"
@@ -554,6 +567,12 @@ fn main() {
         [comando] if comando == "preview" => preparar_preview(&raiz),
         [comando] if comando == "aplicar" => {
             if let Err(error) = aplicar::ejecutar(&raiz) {
+                eprintln!("{error}");
+                process::exit(1);
+            }
+        }
+        [comando] if comando == "rollback" => {
+            if let Err(error) = rollback::ejecutar(&raiz) {
                 eprintln!("{error}");
                 process::exit(1);
             }

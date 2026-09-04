@@ -223,6 +223,52 @@ fn crear_en(raiz: &Path, estado: &Path, nix: &OsStr, nix_store: &OsStr) -> Resul
     Ok(preview)
 }
 
+pub(crate) fn datos_guardados(estado: &Path) -> Result<Option<(PathBuf, Vec<u8>)>, String> {
+    let enlace = estado.join("preview");
+
+    let datos = match fs::symlink_metadata(&enlace) {
+        Ok(datos) => datos,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(format!(
+                "No pude revisar el preview anterior antes de crear el nuevo.\nDetalle: {error}"
+            ));
+        }
+    };
+
+    if !datos.file_type().is_symlink() {
+        return Err(format!(
+            "{} no es un enlace de preview válido.",
+            enlace.display()
+        ));
+    }
+
+    let generacion = fs::read_link(&enlace)
+        .map_err(|error| format!("No pude leer el preview anterior.\nDetalle: {error}"))?;
+
+    if !generacion.is_absolute() || !generacion.starts_with("/nix/store") {
+        return Err(format!(
+            "El preview anterior apunta fuera de /nix/store: {}",
+            generacion.display()
+        ));
+    }
+
+    let generacion_guardada =
+        fs::read_to_string(estado.join(ARCHIVO_GENERACION)).map_err(|_| {
+            "El preview anterior no tiene sus datos de generación completos.".to_string()
+        })?;
+
+    if generacion_guardada.trim() != generacion.to_string_lossy() {
+        return Err("El enlace y los datos del preview anterior no coinciden.".to_string());
+    }
+
+    let configuracion = fs::read(estado.join(ARCHIVO_CONFIGURACION)).map_err(|_| {
+        "El preview anterior no tiene guardada su configuración humana.".to_string()
+    })?;
+
+    Ok(Some((generacion, configuracion)))
+}
+
 pub(crate) fn leer_en(raiz: &Path, estado: &Path) -> Result<Preview, String> {
     let enlace = estado.join("preview");
     let datos = fs::symlink_metadata(&enlace).map_err(|error| {

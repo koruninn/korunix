@@ -10,6 +10,10 @@ use std::process::{self, Command};
 const SISTEMA_ACTIVO: &str = "/run/current-system";
 const PERFIL_SISTEMA: &str = "/nix/var/nix/profiles/system";
 const SUDO_NIXOS: &str = "/run/wrappers/bin/sudo";
+const ARCHIVO_APLICADA_GENERACION: &str = "aplicada-generacion";
+const ARCHIVO_APLICADA_CONFIGURACION: &str = "aplicada-configuracion.toml";
+const ARCHIVO_ANTERIOR_GENERACION: &str = "anterior-generacion";
+const ARCHIVO_ANTERIOR_CONFIGURACION: &str = "anterior-configuracion.toml";
 
 #[derive(Debug, PartialEq, Eq)]
 enum Situacion {
@@ -25,13 +29,210 @@ struct Preparado {
     situacion: Situacion,
 }
 
-fn destino(ruta: &Path) -> Result<PathBuf, String> {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ConfiguracionGeneracion {
+    pub generacion: PathBuf,
+    pub configuracion: Vec<u8>,
+}
+
+pub(crate) fn destino(ruta: &Path) -> Result<PathBuf, String> {
     fs::canonicalize(ruta).map_err(|error| {
         format!(
             "No pude saber a qué generación apunta {}.\nDetalle: {error}",
             ruta.display()
         )
     })
+}
+
+fn escribir_atomico(ruta: &Path, contenido: &[u8]) -> Result<(), String> {
+    let nombre = ruta
+        .file_name()
+        .ok_or_else(|| format!("No pude preparar {}.", ruta.display()))?
+        .to_string_lossy();
+    let temporal = ruta.with_file_name(format!(".{nombre}-{}", process::id()));
+
+    fs::write(&temporal, contenido)
+        .map_err(|error| format!("No pude guardar {}.\nDetalle: {error}", temporal.display()))?;
+
+    fs::rename(&temporal, ruta).map_err(|error| {
+        let _ = fs::remove_file(&temporal);
+        format!(
+            "No pude terminar de guardar {}.\nDetalle: {error}",
+            ruta.display()
+        )
+    })
+}
+
+fn rutas_registro(estado: &Path, tipo: &str) -> (PathBuf, PathBuf) {
+    let (archivo_generacion, archivo_configuracion) = match tipo {
+        "aplicada" => (ARCHIVO_APLICADA_GENERACION, ARCHIVO_APLICADA_CONFIGURACION),
+        "anterior" => (ARCHIVO_ANTERIOR_GENERACION, ARCHIVO_ANTERIOR_CONFIGURACION),
+        _ => unreachable!("tipo de registro interno"),
+    };
+
+    (
+        estado.join(archivo_generacion),
+        estado.join(archivo_configuracion),
+    )
+}
+
+fn leer_registro(estado: &Path, tipo: &str) -> Result<Option<ConfiguracionGeneracion>, String> {
+    let (ruta_generacion, ruta_configuracion) = rutas_registro(estado, tipo);
+    let existe_generacion = ruta_generacion.exists();
+    let existe_configuracion = ruta_configuracion.exists();
+
+    if !existe_generacion && !existe_configuracion {
+        return Ok(None);
+    }
+
+    if existe_generacion != existe_configuracion {
+        return Err(format!(
+            "El registro de configuración {tipo} está incompleto en {}.",
+            estado.display()
+        ));
+    }
+
+    let texto = fs::read_to_string(&ruta_generacion).map_err(|error| {
+        format!(
+            "No pude leer {}.\nDetalle: {error}",
+            ruta_generacion.display()
+        )
+    })?;
+    let generacion = PathBuf::from(texto.trim());
+
+    if !generacion.is_absolute() || !generacion.starts_with("/nix/store") {
+        return Err(format!(
+            "La generación {tipo} guardada no apunta a /nix/store: {}",
+            generacion.display()
+        ));
+    }
+
+    let configuracion = fs::read(&ruta_configuracion).map_err(|error| {
+        format!(
+            "No pude leer {}.\nDetalle: {error}",
+            ruta_configuracion.display()
+        )
+    })?;
+
+    Ok(Some(ConfiguracionGeneracion {
+        generacion,
+        configuracion,
+    }))
+}
+
+fn guardar_registro(
+    estado: &Path,
+    tipo: &str,
+    registro: &ConfiguracionGeneracion,
+) -> Result<(), String> {
+    fs::create_dir_all(estado)
+        .map_err(|error| format!("No pude preparar el estado de Korunix.\nDetalle: {error}"))?;
+
+    let (ruta_generacion, ruta_configuracion) = rutas_registro(estado, tipo);
+    let generacion = format!("{}\n", registro.generacion.display());
+
+    // La generación se escribe al final: confirma que el TOML correspondiente
+    // ya quedó guardado.
+    escribir_atomico(&ruta_configuracion, &registro.configuracion)?;
+    escribir_atomico(&ruta_generacion, generacion.as_bytes())
+}
+
+fn borrar_registro(estado: &Path, tipo: &str) {
+    let (ruta_generacion, ruta_configuracion) = rutas_registro(estado, tipo);
+    let _ = fs::remove_file(ruta_generacion);
+    let _ = fs::remove_file(ruta_configuracion);
+}
+
+pub(crate) fn leer_aplicada(estado: &Path) -> Result<Option<ConfiguracionGeneracion>, String> {
+    leer_registro(estado, "aplicada")
+}
+
+pub(crate) fn leer_anterior(estado: &Path) -> Result<Option<ConfiguracionGeneracion>, String> {
+    leer_registro(estado, "anterior")
+}
+
+pub(crate) fn guardar_aplicada(
+    estado: &Path,
+    registro: &ConfiguracionGeneracion,
+) -> Result<(), String> {
+    guardar_registro(estado, "aplicada", registro)
+}
+
+fn preparar_configuracion_anterior(
+    estado: &Path,
+    generacion_actual: &Path,
+) -> Result<bool, String> {
+    let Some(aplicada) = leer_aplicada(estado)? else {
+        borrar_registro(estado, "anterior");
+        return Ok(false);
+    };
+
+    if aplicada.generacion != generacion_actual {
+        return Err(format!(
+            "La configuración aplicada guardada corresponde a otra generación.\n\
+             Guardada: {}\nActiva:   {}\n\
+             No voy a crear un rollback con datos que no coinciden.",
+            aplicada.generacion.display(),
+            generacion_actual.display()
+        ));
+    }
+
+    guardar_registro(estado, "anterior", &aplicada)?;
+    Ok(true)
+}
+
+fn guardar_aplicada_desde_preview(estado: &Path, generacion: &Path) -> Result<(), String> {
+    let Some((generacion_preview, configuracion)) = preview::datos_guardados(estado)? else {
+        return Err(
+            "Apply terminó, pero ya no encuentro los datos del preview aplicado.".to_string(),
+        );
+    };
+
+    if generacion_preview != generacion {
+        return Err(format!(
+            "El preview guardado cambió durante apply.\n\
+             Aplicado: {}\nGuardado: {}",
+            generacion.display(),
+            generacion_preview.display()
+        ));
+    }
+
+    guardar_aplicada(
+        estado,
+        &ConfiguracionGeneracion {
+            generacion: generacion.to_path_buf(),
+            configuracion,
+        },
+    )
+}
+
+pub(crate) fn conservar_aplicada_actual(_raiz: &Path) -> Result<(), String> {
+    let estado = preview::carpeta_estado()?;
+
+    if leer_aplicada(&estado)?.is_some() {
+        return Ok(());
+    }
+
+    let Some((generacion, configuracion)) = preview::datos_guardados(&estado)? else {
+        return Ok(());
+    };
+
+    let activa = destino(Path::new(SISTEMA_ACTIVO))?;
+    let persistente = destino(Path::new(PERFIL_SISTEMA))?;
+
+    // Solo se recupera esta asociación cuando el preview anterior es exactamente
+    // el sistema activo y persistente. No se adivina desde un estado parcial.
+    if activa == generacion && persistente == generacion {
+        guardar_aplicada(
+            &estado,
+            &ConfiguracionGeneracion {
+                generacion,
+                configuracion,
+            },
+        )?;
+    }
+
+    Ok(())
 }
 
 fn clasificar_estado(
@@ -77,7 +278,7 @@ fn revisar_programa(ruta: PathBuf) -> Result<PathBuf, String> {
     }
 }
 
-fn programa_variable(nombre: &str, normal: &str) -> Result<PathBuf, String> {
+pub(crate) fn programa_variable(nombre: &str, normal: &str) -> Result<PathBuf, String> {
     let ruta = env::var_os(nombre)
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(normal));
@@ -87,7 +288,7 @@ fn programa_variable(nombre: &str, normal: &str) -> Result<PathBuf, String> {
     revisar_programa(ruta)
 }
 
-fn sudo_nixos() -> Result<PathBuf, String> {
+pub(crate) fn sudo_nixos() -> Result<PathBuf, String> {
     if let Some(ruta) = env::var_os("KORUNIX_SUDO_BIN") {
         return Ok(PathBuf::from(ruta));
     }
@@ -128,7 +329,11 @@ fn salida(programa: &Path, argumentos: &[&str]) -> Result<String, String> {
     })
 }
 
-fn esta_protegida(nix_store: &Path, generacion: &Path, enlace: &Path) -> Result<bool, String> {
+pub(crate) fn esta_protegida(
+    nix_store: &Path,
+    generacion: &Path,
+    enlace: &Path,
+) -> Result<bool, String> {
     let generacion_texto = generacion.to_string_lossy();
     let texto = salida(
         nix_store,
@@ -254,7 +459,7 @@ fn preparar(raiz: &Path) -> Result<Preparado, String> {
     })
 }
 
-fn unidades_fallidas(systemctl: &Path) -> Result<BTreeSet<String>, String> {
+pub(crate) fn unidades_fallidas(systemctl: &Path) -> Result<BTreeSet<String>, String> {
     let resultado = Command::new(systemctl)
         .args(["--failed", "--no-legend", "--plain", "--no-pager"])
         .output()
@@ -274,14 +479,14 @@ fn unidades_fallidas(systemctl: &Path) -> Result<BTreeSet<String>, String> {
         .collect())
 }
 
-fn kernel_actual() -> String {
+pub(crate) fn kernel_actual() -> String {
     fs::read_to_string("/proc/sys/kernel/osrelease")
         .unwrap_or_default()
         .trim()
         .to_string()
 }
 
-fn kernel_generacion(generacion: &Path) -> Option<String> {
+pub(crate) fn kernel_generacion(generacion: &Path) -> Option<String> {
     let carpeta = generacion.join("kernel-modules/lib/modules");
     let entradas = fs::read_dir(carpeta).ok()?;
 
@@ -314,7 +519,7 @@ fn es_root() -> bool {
         })
 }
 
-fn ejecutar_accion(generacion: &Path, accion: &str) -> Result<(), String> {
+pub(crate) fn ejecutar_accion(generacion: &Path, accion: &str) -> Result<(), String> {
     let programa = generacion.join("bin/switch-to-configuration");
     let resultado = Command::new(&programa)
         .arg(accion)
@@ -333,7 +538,7 @@ fn ejecutar_accion(generacion: &Path, accion: &str) -> Result<(), String> {
     }
 }
 
-fn fijar_perfil(nix_env: &Path, perfil: &Path, generacion: &Path) -> Result<(), String> {
+pub(crate) fn fijar_perfil(nix_env: &Path, perfil: &Path, generacion: &Path) -> Result<(), String> {
     let resultado = Command::new(nix_env)
         .arg("-p")
         .arg(perfil)
@@ -349,7 +554,7 @@ fn fijar_perfil(nix_env: &Path, perfil: &Path, generacion: &Path) -> Result<(), 
     }
 }
 
-fn recuperar(
+pub(crate) fn recuperar(
     anterior: &Path,
     nix_env: &Path,
     perfil: &Path,
@@ -657,6 +862,16 @@ pub fn ejecutar(raiz: &Path) -> Result<(), String> {
 
     let fallidas_antes = unidades_fallidas(&systemctl)?;
     let estado = preview::carpeta_estado()?;
+    let rollback_completo = preparar_configuracion_anterior(&estado, &preparado.anterior)?;
+
+    if rollback_completo {
+        println!("✓ La configuración humana anterior también quedó guardada para rollback.");
+    } else {
+        println!(
+            "Aviso: esta generación anterior es previa al registro de configuración humana;              rollback completo todavía no estará disponible para ella."
+        );
+    }
+
     let resultado = estado.join(format!(".aplicar-resultado-{}", process::id()));
     fs::write(&resultado, "iniciado\n")
         .map_err(|error| format!("No pude preparar el resultado de apply.\nDetalle: {error}"))?;
@@ -726,6 +941,13 @@ pub fn ejecutar(raiz: &Path) -> Result<(), String> {
         );
     }
 
+    guardar_aplicada_desde_preview(&estado, &preparado.preview).map_err(|error| {
+        format!(
+            "El preview quedó activo y persistente, pero no pude registrar qué              configuración humana le corresponde.
+{error}"
+        )
+    })?;
+
     let fallidas_despues = unidades_fallidas(&systemctl)?;
     let nuevas: Vec<_> = fallidas_despues
         .difference(&fallidas_antes)
@@ -782,6 +1004,58 @@ mod pruebas {
             .permissions();
         permisos.set_mode(0o755);
         fs::set_permissions(ruta, permisos).expect("debería hacerlo ejecutable");
+    }
+
+    #[test]
+    fn el_registro_aplicado_conserva_generacion_y_toml() {
+        let carpeta = temporal("registro-aplicado");
+        fs::create_dir_all(&carpeta).expect("debería crear la prueba");
+
+        let registro = ConfiguracionGeneracion {
+            generacion: PathBuf::from(
+                "/nix/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-nixos-system-korunix",
+            ),
+            configuracion: b"nombre = \"prueba\"\n".to_vec(),
+        };
+
+        guardar_aplicada(&carpeta, &registro).expect("debería guardar el registro");
+        let leido = leer_aplicada(&carpeta)
+            .expect("debería leerlo")
+            .expect("debería existir");
+
+        assert_eq!(leido, registro);
+        let _ = fs::remove_dir_all(carpeta);
+    }
+
+    #[test]
+    fn la_configuracion_aplicada_pasa_a_anterior_solo_si_coincide() {
+        let carpeta = temporal("registro-anterior");
+        fs::create_dir_all(&carpeta).expect("debería crear la prueba");
+
+        let generacion =
+            PathBuf::from("/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-nixos-system-korunix");
+        let registro = ConfiguracionGeneracion {
+            generacion: generacion.clone(),
+            configuracion: b"canal = \"estable\"\n".to_vec(),
+        };
+
+        guardar_aplicada(&carpeta, &registro).expect("debería guardar aplicada");
+        assert!(preparar_configuracion_anterior(&carpeta, &generacion)
+            .expect("debería preparar rollback"));
+
+        assert_eq!(
+            leer_anterior(&carpeta)
+                .expect("debería leer anterior")
+                .expect("debería existir"),
+            registro
+        );
+
+        let otra = Path::new("/nix/store/cccccccccccccccccccccccccccccccc-nixos-system-korunix");
+        let error = preparar_configuracion_anterior(&carpeta, otra)
+            .expect_err("no debería mezclar generaciones");
+
+        assert!(error.contains("otra generación"));
+        let _ = fs::remove_dir_all(carpeta);
     }
 
     #[test]
