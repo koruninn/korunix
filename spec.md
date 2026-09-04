@@ -300,9 +300,13 @@ Korunix no llama `preview` a una lista de intenciones. Mientras todavía no exis
 
 El plan puede pedirle a Nix que resuelva paquetes y otras consecuencias técnicas, pero no promete ser todavía la diferencia contra el sistema activo.
 
-Preview no modifica el sistema. Cuando exista, tiene que representar una generación completa y concreta.
+Preview no modifica el sistema. Representa una generación completa y concreta que puede aplicarse después sin volver a construirla.
 
-Apply activa exactamente la generación revisada, la deja persistente para el siguiente arranque y lo verifica. La generación activa y la persistente deben coincidir al terminar correctamente.
+Korunix conserva la generación revisada en el estado local de la persona, usando `XDG_STATE_HOME/korunix/preview` o, normalmente, `~/.local/state/korunix/preview`. Ese enlace también funciona como raíz de GC para que Nix no elimine la generación antes de aplicarla.
+
+Cuando ya existe un preview válido, el siguiente se construye aparte. El enlace estable solo se reemplaza cuando la generación nueva terminó bien. Si la construcción falla, el último preview válido se conserva. No existe un segundo comando `construir` que cree generaciones temporales por otro camino: `korunix preview` es el único flujo previo a apply.
+
+Apply activa exactamente la generación revisada a la que apunta ese preview, sin reconstruirla, la deja persistente para el siguiente arranque y lo verifica. La generación activa y la persistente deben coincidir al terminar correctamente.
 
 Rollback es una función normal del producto. Una operación lógica cruza la frontera de privilegios el menor número de veces posible. Las operaciones largas muestran su fase y no dejan la interfaz muda.
 
@@ -602,7 +606,9 @@ Ejemplos:
 - una aplicación no curada sigue visible;
 - opciones granulares funcionan;
 - preview no modifica;
-- apply activa lo revisado;
+- un preview fallido conserva el último preview válido;
+- el preview concreto queda protegido frente al recolector de basura;
+- apply activa exactamente lo revisado sin reconstruir;
 - activa y persistente coinciden;
 - rollback recupera;
 - una lectura normal no reevalúa Nix sin necesidad;
@@ -905,7 +911,41 @@ La candidata corregida, todavía sin activar, es:
 
 El TOML humano no ganó nuevas preguntas. Los escritorios vuelven a derivar sus herramientas y su visibilidad, Bluetooth deriva xpadneo y el arranque recupera kernel latest + Plymouth + la vía de recuperación de 5 segundos.
 
-El siguiente paso vuelve a ser la **auditoría integral de la candidata completa**. No se avanza a `preview` aplicable hasta que esa nueva candidata llegue al final y la comparación final no muestre otra omisión real.
+La auditoría integral V6 de esa candidata llegó al final sin encontrar otra omisión funcional. Reprodujo la misma generación, volvió a comprobar decisiones humanas, hardware, escritorios, aislamiento visual, servicios, permisos, puertos, las 37 aplicaciones más Steam y las integraciones especiales. El sistema activo y el perfil persistente permanecieron intactos.
+
+Con esa puerta cerrada se implementó el primer preview aplicable. El corte corregido es:
+
+```text
+ccb3ff02573e48f336478bd64c17668a16680055
+```
+
+`korunix preview` valida primero la configuración y el plan, construye una generación NixOS completa y conserva exactamente esa generación en un enlace estable dentro del estado local. Si ya existe un preview válido, el nuevo se construye en un enlace aparte y solo lo reemplaza cuando termina correctamente. Un fallo conserva el último preview válido.
+
+La vía temporal anterior `korunix construir` se retiró para no mantener dos caminos con significados distintos. Preview es el único paso que crea una generación revisable antes de apply.
+
+El preview corregido y todavía no aplicado es:
+
+```text
+/nix/store/1cwvxaf0db189h3dq4r7r1p19ipi7a0a-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+y queda protegido por:
+
+```text
+~/.local/state/korunix/preview
+```
+
+La validación del corte terminó con 65 tests de Rust aprobados, incluidos tres comportamientos propios de preview: crear la primera generación exacta, conservar la anterior ante un fallo y reemplazarla solo cuando la nueva construcción termina bien.
+
+La comparación fuerte del closure contra la candidata integral V6 mostró 20 paths distintos por lado. Son las mismas 20 piezas reconstruidas con hashes nuevos —Korunix, `system-path`, `etc`, completados de Fish y las unidades derivadas de systemd— porque el binario de Korunix forma parte de la generación. No desapareció ningún paquete, servicio o capacidad funcional de la candidata auditada.
+
+El sistema activo y el perfil persistente continúan en:
+
+```text
+/nix/store/5h1pm4w6ji6vz5bab5rbp0l5c51bmi1m-nixos-system-korunix-26.11.20260813.0e251e2
+```
+
+El siguiente paso es implementar **apply** sobre el preview existente. Apply no vuelve a ejecutar `nix build`: toma exactamente la generación a la que apunta el preview revisado, muestra el efecto que va a tener, cruza la frontera de privilegios solo cuando corresponde, la activa y la deja como generación persistente. Después verifica `activa = persistente`. Rollback se implementa sobre ese contrato, no como una reconstrucción.
 
 ## 22. Regla final
 
