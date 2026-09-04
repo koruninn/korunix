@@ -302,13 +302,21 @@ El plan puede pedirle a Nix que resuelva paquetes y otras consecuencias técnica
 
 Preview no modifica el sistema. Representa una generación completa y concreta que puede aplicarse después sin volver a construirla.
 
-Korunix conserva la generación revisada en el estado local de la persona, usando `XDG_STATE_HOME/korunix/preview` o, normalmente, `~/.local/state/korunix/preview`. Ese enlace también funciona como raíz de GC para que Nix no elimine la generación antes de aplicarla.
+Korunix conserva la generación revisada en el estado local de la persona, usando `XDG_STATE_HOME/korunix/preview` o, normalmente, `~/.local/state/korunix/preview`. Ese enlace es una raíz de GC registrada con Nix; un enlace normal por sí solo no cuenta como protección suficiente.
 
-Cuando ya existe un preview válido, el siguiente se construye aparte. El enlace estable solo se reemplaza cuando la generación nueva terminó bien. Si la construcción falla, el último preview válido se conserva. No existe un segundo comando `construir` que cree generaciones temporales por otro camino: `korunix preview` es el único flujo previo a apply.
+Cuando ya existe un preview válido, el siguiente se construye bajo un enlace temporal que mantiene viva la generación nueva. El enlace estable solo se reemplaza y registra como raíz de GC cuando la construcción terminó bien. Si la construcción o el registro de la raíz falla, el último preview válido se conserva. No existe un segundo comando `construir`: `korunix preview` es el único flujo previo a apply.
 
-Apply activa exactamente la generación revisada a la que apunta ese preview, sin reconstruirla, la deja persistente para el siguiente arranque y lo verifica. La generación activa y la persistente deben coincidir al terminar correctamente.
+Junto al enlace se guardan la ruta exacta de la generación y una copia exacta de `configuracion.toml`. Si la configuración humana cambia después, `korunix aplicar` rechaza ese preview y pide crear uno nuevo. Así un preview no se convierte silenciosamente en permiso para aplicar decisiones distintas.
 
-Rollback es una función normal del producto. Una operación lógica cruza la frontera de privilegios el menor número de veces posible. Las operaciones largas muestran su fase y no dejan la interfaz muda.
+Apply activa exactamente la generación revisada a la que apunta ese preview, **sin ejecutar `nix build`**, la deja persistente para el siguiente arranque y verifica `activa = persistente = preview`. Si esa generación ya está activa y persistente, el comando es inocuo y no pide privilegios.
+
+Antes de tocar NixOS, Korunix protege la generación activa como `XDG_STATE_HOME/korunix/anterior` mediante una raíz de GC real. Después cruza privilegios con el wrapper real de NixOS (`/run/wrappers/bin/sudo`) y una unidad temporal de systemd. Las rutas de programas críticos se conservan sin resolver sus enlaces simbólicos: herramientas de Nix como `nix-store` y `nix-env` pueden compartir un ejecutable multicall y el nombre con el que se invocan forma parte de su comportamiento.
+
+La versión actual de NixOS exige root incluso para `switch-to-configuration dry-activate`, así que la autorización puede aparecer antes de enseñar la simulación. Esa misma operación privilegiada ejecuta `check`, muestra `dry-activate`, explica kernel/reinicio/sesión/persistencia, espera que la persona escriba `APLICAR` y solo entonces cambia el perfil y activa el preview exacto.
+
+Si la activación falla después de empezar el cambio, Korunix intenta volver a la generación protegida como anterior y verifica que vuelva a quedar activa y persistente. Un estado dividido nunca se presenta como éxito.
+
+Rollback es una función normal del producto. Se implementa sobre ese punto de regreso protegido, sin reconstruir generaciones. Las operaciones largas muestran su fase y no dejan la interfaz muda.
 
 ## 11. Aplicaciones
 
@@ -608,7 +616,12 @@ Ejemplos:
 - preview no modifica;
 - un preview fallido conserva el último preview válido;
 - el preview concreto queda protegido frente al recolector de basura;
+- cambiar `configuracion.toml` después del preview lo invalida;
+- los ejecutables multicall conservan el nombre con el que deben invocarse;
+- apply rechaza un estado dividido entre activa y persistente;
 - apply activa exactamente lo revisado sin reconstruir;
+- un segundo apply sobre la misma generación es inocuo;
+- un fallo de activación intenta recuperar la generación anterior;
 - activa y persistente coinciden;
 - rollback recupera;
 - una lectura normal no reevalúa Nix sin necesidad;
@@ -957,9 +970,33 @@ persistente = /nix/store/1cwvxaf0db189h3dq4r7r1p19ipi7a0a-nixos-system-korunix-2
 
 No aparecieron unidades systemd fallidas nuevas. Como el cambio llevaba el kernel de `7.1.8` a `7.2.2`, se reinició para cerrar la prueba de persistencia. Tras arrancar de nuevo, `/run/booted-system`, `/run/current-system` y `/nix/var/nix/profiles/system` coincidieron con el mismo preview, `uname -r` mostró `7.2.2`, los servicios básicos revisados siguieron activos y la sesión Niri conservó Noctalia, Sunshine e IBus.
 
-El siguiente paso es incorporar **`korunix aplicar`** al Rust usando exactamente este contrato ya probado. El comando no ejecuta `nix build`: toma el enlace de preview existente, comprueba que sea una generación NixOS válida y distinta cuando corresponda, protege la generación actual como regreso, muestra el efecto con `check` + `dry-activate`, pide autorización, cruza privilegios una sola vez para el cambio y verifica al final `activa = persistente = preview`.
+El apply permanente quedó incorporado en Rust en:
 
-Después se implementa rollback usando el punto de regreso protegido, sin reconstruir generaciones.
+```text
+8aa08f9095bd3f3e443f73ee4e1f1b93b2888276
+```
+
+`korunix preview` guarda la generación exacta y la copia de `configuracion.toml` con la que se construyó. El preview nuevo se mantiene protegido durante la construcción con un enlace temporal y el enlace estable se registra explícitamente como raíz de GC.
+
+La primera prueba de desarrollo encontró antes de tocar NixOS un detalle importante: resolver con `canonicalize` el enlace `nix-store` lo convertía en el ejecutable multicall `nix`, cambiando el significado del comando. Se corrigió conservando el nombre del ejecutable y quedó cubierto por un test específico.
+
+La prueba válida del comando permanente pasó 72 tests de Rust y construyó un preview nuevo:
+
+```text
+/nix/store/yc3bwpvcsdlxsz6d6b5pjcr695ysxy15-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+`korunix aplicar` comprobó ese preview, protegió como `anterior` la generación activa previa, ejecutó `check` y `dry-activate`, esperó la autorización humana y activó exactamente la misma generación sin ejecutar `nix build`. El cierre en vivo quedó con:
+
+```text
+activa      = /nix/store/yc3bwpvcsdlxsz6d6b5pjcr695ysxy15-nixos-system-korunix-26.11.20260831.34ab990
+persistente = /nix/store/yc3bwpvcsdlxsz6d6b5pjcr695ysxy15-nixos-system-korunix-26.11.20260831.34ab990
+anterior    = /nix/store/1cwvxaf0db189h3dq4r7r1p19ipi7a0a-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+No aparecieron unidades systemd fallidas nuevas. El kernel siguió siendo `7.2.2`, por lo que este cambio no necesitó otro reinicio. Una segunda ejecución del `korunix aplicar` instalado en la generación nueva reconoció que el preview ya estaba activo y persistente, no pidió privilegios y no cambió nada.
+
+El siguiente bloque es implementar **rollback** sobre `~/.local/state/korunix/anterior`: debe revisar el efecto, volver exactamente a esa generación sin reconstruir, dejarla persistente y verificar el resultado con la misma disciplina de apply.
 
 ## 22. Regla final
 
