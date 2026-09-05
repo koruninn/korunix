@@ -380,10 +380,64 @@
         virtualizacion = virtualizacion.activa or false;
       };
     };
+
+    programaInterfaz = pkgs.rustPlatform.buildRustPackage {
+      pname = "korunix-interfaz";
+      version = "0.1.0";
+      src = ./.;
+      cargoLock.lockFile = ./Cargo.lock;
+
+      nativeBuildInputs = [
+        pkgs.pkg-config
+        pkgs.wrapGAppsHook4
+      ];
+
+      buildInputs = [
+        pkgs.gtk4
+        pkgs.libadwaita
+      ];
+
+      cargoBuildFlags = [
+        "--features"
+        "interfaz"
+        "--bin"
+        "korunix-interfaz"
+      ];
+
+      cargoInstallFlags = [
+        "--features"
+        "interfaz"
+        "--bin"
+        "korunix-interfaz"
+      ];
+
+      preFixup = ''
+        gappsWrapperArgs+=(
+          --set KORUNIX_MOTOR_BIN ${programa}/bin/korunix
+        )
+      '';
+
+      postInstall = ''
+        mkdir -p "$out/share/applications"
+
+        cat > "$out/share/applications/io.github.koruninn.Korunix.desktop" <<'EOF'
+        [Desktop Entry]
+        Type=Application
+        Name=Korunix
+        Comment=Configura y mantiene NixOS
+        Exec=korunix-interfaz
+        Icon=preferences-system
+        Terminal=false
+        Categories=Settings;System;
+        StartupNotify=true
+        EOF
+      '';
+    };
   in {
     packages.${sistema} = {
       default = programa;
       korunix = programa;
+      interfaz = programaInterfaz;
 
       aplicaciones = pkgs.buildEnv {
         name = "korunix-aplicaciones";
@@ -414,6 +468,7 @@
           paquetesSpicetify
           personas
           programa
+          programaInterfaz
           steam
           sunshine
           teclado

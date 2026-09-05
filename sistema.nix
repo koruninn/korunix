@@ -19,6 +19,7 @@
   personas,
   pkgs,
   programa,
+  programaInterfaz,
   salidaMonitor,
   sunshine,
   steam,
@@ -1200,6 +1201,7 @@ in {
     ]
     ++ [
       programa
+      programaInterfaz
       pkgs.git
       pkgs.just
       pkgs.tree
