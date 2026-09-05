@@ -319,6 +319,7 @@ fn cargar_almacenamiento(
     boton_aplicar: &gtk::Button,
     ocupado: &Rc<Cell<bool>>,
     actualizando: &Rc<Cell<bool>>,
+    controles: &[gtk::Widget],
 ) {
     estado.set_text("Comprobando los discos locales…");
 
@@ -336,6 +337,7 @@ fn cargar_almacenamiento(
     let boton_aplicar = boton_aplicar.clone();
     let ocupado = Rc::clone(ocupado);
     let actualizando = Rc::clone(actualizando);
+    let controles = controles.to_vec();
 
     glib::timeout_add_local(Duration::from_millis(50), move || {
         match recepcion.try_recv() {
@@ -356,8 +358,14 @@ fn cargar_almacenamiento(
                         let mut vistas = Vec::new();
 
                         for unidad in unidades {
-                            let conocida =
-                                configuracion::unidad_almacenamiento_conocida(&unidad.nombre);
+                            let conocida = match almacenamiento::administrada(&raiz, &unidad.nombre)
+                            {
+                                Ok(conocida) => conocida,
+                                Err(error) => {
+                                    estado.set_text(&error);
+                                    false
+                                }
+                            };
 
                             if conocida {
                                 let activa = configuracion
@@ -390,6 +398,15 @@ fn cargar_almacenamiento(
                                     &ocupado,
                                     &actualizando,
                                 );
+                            } else if let Some(problema) = unidad.problema_adopcion() {
+                                let detalle =
+                                    format!("{} · Detectado · {}", unidad.detalle, problema);
+                                let fila = adw::ActionRow::builder()
+                                    .title(unidad.nombre.as_str())
+                                    .subtitle(detalle.as_str())
+                                    .build();
+                                lista.append(&fila);
+                                vistas.push(unidad.nombre);
                             } else {
                                 let detalle = format!(
                                     "{} · Detectado · todavía no administrado por Korunix",
@@ -399,8 +416,137 @@ fn cargar_almacenamiento(
                                     .title(unidad.nombre.as_str())
                                     .subtitle(detalle.as_str())
                                     .build();
+                                let administrar = gtk::Button::with_label("Administrar");
+                                administrar.set_valign(gtk::Align::Center);
+                                fila.add_suffix(&administrar);
                                 lista.append(&fila);
-                                vistas.push(unidad.nombre);
+                                vistas.push(unidad.nombre.clone());
+
+                                let nombre = unidad.nombre;
+                                let raiz_adoptar = raiz.clone();
+                                let mensaje_adoptar = mensaje.clone();
+                                let aviso_adoptar = aviso.clone();
+                                let aplicar_adoptar = boton_aplicar.clone();
+                                let ocupado_adoptar = Rc::clone(&ocupado);
+                                let controles_adoptar = controles.clone();
+                                let fila_adoptar = fila.clone();
+                                let boton_adoptar = administrar.clone();
+
+                                administrar.connect_clicked(move |_| {
+                                    if ocupado_adoptar.get() {
+                                        return;
+                                    }
+
+                                    ocupado_adoptar.set(true);
+                                    sensibilidad(&controles_adoptar, false);
+                                    boton_adoptar.set_label("Comprobando…");
+                                    boton_adoptar.set_sensitive(false);
+                                    fila_adoptar.set_subtitle(
+                                        "Comprobando la unidad y preparando su identidad técnica…",
+                                    );
+                                    mensaje_adoptar.set_text(&format!(
+                                        "Comprobando «{}» y preparando su identidad técnica…",
+                                        nombre
+                                    ));
+
+                                    let (envio, recepcion) = mpsc::channel();
+                                    let raiz_trabajo = raiz_adoptar.clone();
+                                    let nombre_trabajo = nombre.clone();
+
+                                    thread::spawn(move || {
+                                        let _ = envio.send(almacenamiento::adoptar(
+                                            &raiz_trabajo,
+                                            &nombre_trabajo,
+                                        ));
+                                    });
+
+                                    let nombre_final = nombre.clone();
+                                    let raiz_final = raiz_adoptar.clone();
+                                    let mensaje_final = mensaje_adoptar.clone();
+                                    let aviso_final = aviso_adoptar.clone();
+                                    let aplicar_final = aplicar_adoptar.clone();
+                                    let ocupado_final = Rc::clone(&ocupado_adoptar);
+                                    let controles_final = controles_adoptar.clone();
+                                    let fila_final = fila_adoptar.clone();
+                                    let boton_final = boton_adoptar.clone();
+
+                                    glib::timeout_add_local(
+                                        Duration::from_millis(80),
+                                        move || match recepcion.try_recv() {
+                                            Ok(resultado) => {
+                                                sensibilidad(&controles_final, true);
+                                                ocupado_final.set(false);
+
+                                                match resultado {
+                                                    Ok(true) => {
+                                                        fila_final.set_subtitle(
+                                                            "Disponible en Korunix · crea un preview para aplicarlo",
+                                                        );
+                                                        boton_final.set_label("Administrada");
+                                                        boton_final.set_sensitive(false);
+                                                        mensaje_guardado(
+                                                            &mensaje_final,
+                                                            &raiz_final,
+                                                            &aviso_final,
+                                                            &aplicar_final,
+                                                            &ocupado_final,
+                                                            &format!(
+                                                                "✓ «{}» quedó administrada. Korunix guardó los datos técnicos por dentro. NixOS todavía no cambió.",
+                                                                nombre_final
+                                                            ),
+                                                        );
+                                                    }
+                                                    Ok(false) => {
+                                                        fila_final.set_subtitle(
+                                                            "Esta unidad ya estaba administrada por Korunix.",
+                                                        );
+                                                        boton_final.set_label("Administrada");
+                                                        boton_final.set_sensitive(false);
+                                                        mensaje_final.set_text(
+                                                            "La unidad ya estaba administrada. No cambié nada.",
+                                                        );
+                                                    }
+                                                    Err(error) => {
+                                                        let resumen = error
+                                                            .lines()
+                                                            .next()
+                                                            .unwrap_or("No pude administrar esta unidad.");
+                                                        fila_final.set_subtitle(&format!(
+                                                            "No pude administrarla · {resumen}"
+                                                        ));
+                                                        boton_final.set_label("Reintentar");
+                                                        boton_final.set_sensitive(true);
+                                                        mensaje_final.set_text(&error);
+                                                        actualizar_estado_preview(
+                                                            &raiz_final,
+                                                            &aviso_final,
+                                                            &aplicar_final,
+                                                            &ocupado_final,
+                                                        );
+                                                    }
+                                                }
+
+                                                glib::ControlFlow::Break
+                                            }
+                                            Err(TryRecvError::Empty) => {
+                                                glib::ControlFlow::Continue
+                                            }
+                                            Err(TryRecvError::Disconnected) => {
+                                                sensibilidad(&controles_final, true);
+                                                boton_final.set_label("Reintentar");
+                                                boton_final.set_sensitive(true);
+                                                fila_final.set_subtitle(
+                                                    "La comprobación terminó sin respuesta. No doy el cambio por hecho.",
+                                                );
+                                                ocupado_final.set(false);
+                                                mensaje_final.set_text(
+                                                    "La adopción terminó sin respuesta. No doy el cambio por hecho.",
+                                                );
+                                                glib::ControlFlow::Break
+                                            }
+                                        },
+                                    );
+                                });
                             }
                         }
 
@@ -2214,6 +2360,7 @@ fn construir_ventana(aplicacion: &Application) {
         &boton_aplicar,
         &ocupado,
         &actualizando,
+        &controles,
     );
 }
 

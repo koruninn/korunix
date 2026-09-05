@@ -70,6 +70,7 @@ fn ayuda() {
     eprintln!("  korunix monitor");
     eprintln!("  korunix monitor <resolucion> <hz>");
     eprintln!("  korunix almacenamiento");
+    eprintln!("  korunix almacenamiento adoptar <nombre>");
     eprintln!("  korunix almacenamiento <nombre> <activar|desactivar>");
     eprintln!("  korunix canal");
     eprintln!("  korunix canal <estable|inestable>");
@@ -100,6 +101,12 @@ fn salir_con_error(error: &str) -> ! {
 fn validar(raiz: &Path) {
     match configuracion::leer(&raiz.join("configuracion.toml")) {
         Ok(configuracion) => {
+            if let Err(error) =
+                almacenamiento::comprobar_elegidas(raiz, &configuracion.almacenamiento.disponibles)
+            {
+                salir_con_error(&error);
+            }
+
             println!("✓ La configuración está bien.");
             println!("Equipo: {}", configuracion.nombre);
             println!("Canal: {}", configuracion.canal);
@@ -202,6 +209,12 @@ fn mostrar_plan(raiz: &Path) {
         Ok(configuracion) => configuracion,
         Err(error) => salir_con_error(&error),
     };
+
+    if let Err(error) =
+        almacenamiento::comprobar_elegidas(raiz, &configuracion.almacenamiento.disponibles)
+    {
+        salir_con_error(&error);
+    }
 
     let plan = match sistema::preparar_plan(raiz, &configuracion) {
         Ok(plan) => plan,
@@ -372,6 +385,12 @@ fn preparar_preview(raiz: &Path) {
         Ok(configuracion) => configuracion,
         Err(error) => salir_con_error(&error),
     };
+
+    if let Err(error) =
+        almacenamiento::comprobar_elegidas(raiz, &configuracion.almacenamiento.disponibles)
+    {
+        salir_con_error(&error);
+    }
 
     if let Err(error) = sistema::preparar_plan(raiz, &configuracion) {
         salir_con_error(&error);
@@ -634,7 +653,8 @@ fn mostrar_almacenamiento(raiz: &Path) {
     let mut vistas = Vec::new();
 
     for unidad in unidades {
-        let conocida = configuracion::unidad_almacenamiento_conocida(&unidad.nombre);
+        let conocida = almacenamiento::administrada(raiz, &unidad.nombre)
+            .unwrap_or_else(|error| salir_con_error(&error));
         let elegida = configuracion
             .almacenamiento
             .disponibles
@@ -652,6 +672,11 @@ fn mostrar_almacenamiento(raiz: &Path) {
                 } else {
                     "no disponible en Korunix"
                 }
+            );
+        } else if let Some(problema) = unidad.problema_adopcion() {
+            println!(
+                "    {} · detectado · no puedo administrarlo automáticamente: {}",
+                unidad.detalle, problema
             );
         } else {
             println!(
@@ -672,9 +697,9 @@ fn mostrar_almacenamiento(raiz: &Path) {
 }
 
 fn cambiar_almacenamiento(raiz: &Path, nombre: &str, accion: &str) {
-    if !configuracion::unidad_almacenamiento_conocida(nombre) {
+    if !almacenamiento::administrada(raiz, nombre).unwrap_or_else(|error| salir_con_error(&error)) {
         salir_con_error(&format!(
-            "Puedo mostrar «{nombre}», pero todavía no puedo administrarlo de forma segura."
+            "Puedo mostrar «{nombre}», pero todavía no está adoptado. Usa «korunix almacenamiento adoptar {nombre}» primero."
         ));
     }
 
@@ -700,6 +725,24 @@ fn cambiar_almacenamiento(raiz: &Path, nombre: &str, accion: &str) {
             println!("NixOS todavía no cambió.");
         }
         Ok(false) => println!("No cambié nada."),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn adoptar_almacenamiento(raiz: &Path, nombre: &str) {
+    println!("Comprobando «{nombre}» y guardando su identidad técnica…");
+    let _ = io::stdout().flush();
+
+    match almacenamiento::adoptar(raiz, nombre) {
+        Ok(true) => {
+            println!("✓ «{nombre}» quedó adoptado y disponible en configuracion.toml.");
+            println!("Korunix guardó los datos técnicos necesarios sin pedirlos a la persona.");
+            println!("NixOS todavía no cambió. Crea un preview antes de aplicar.");
+        }
+        Ok(false) => {
+            println!("«{nombre}» ya estaba adoptado.");
+            println!("No cambié nada.");
+        }
         Err(error) => salir_con_error(&error),
     }
 }
@@ -1131,6 +1174,9 @@ fn main() {
         [comando] if comando == "monitor" => mostrar_monitor(&raiz),
         [comando, resolucion, hz] if comando == "monitor" => cambiar_monitor(&raiz, resolucion, hz),
         [comando] if comando == "almacenamiento" => mostrar_almacenamiento(&raiz),
+        [comando, accion, nombre] if comando == "almacenamiento" && accion == "adoptar" => {
+            adoptar_almacenamiento(&raiz, nombre)
+        }
         [comando, nombre, accion] if comando == "almacenamiento" => {
             cambiar_almacenamiento(&raiz, nombre, accion)
         }

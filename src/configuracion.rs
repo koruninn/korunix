@@ -463,17 +463,19 @@ fn revisar_escritorios(escritorio: &Escritorio) -> Result<(), String> {
     Ok(())
 }
 
-pub fn unidad_almacenamiento_conocida(nombre: &str) -> bool {
-    nombre == "ST3500413AS · 500 GB"
-}
-
 fn revisar_almacenamiento(almacenamiento: &Almacenamiento) -> Result<(), String> {
     let mut vistas = HashSet::new();
 
     for unidad in &almacenamiento.disponibles {
-        if !unidad_almacenamiento_conocida(unidad) {
+        if unidad.trim().is_empty() || unidad.trim() != unidad || unidad.len() > 160 {
             return Err(format!(
-                "Todavía no conozco la unidad «{unidad}» en este equipo."
+                "El nombre de almacenamiento «{unidad}» no es una identificación humana válida."
+            ));
+        }
+
+        if unidad.chars().any(char::is_control) {
+            return Err(format!(
+                "El nombre de almacenamiento «{unidad}» contiene caracteres que no puedo guardar con seguridad."
             ));
         }
 
@@ -1867,17 +1869,19 @@ disponibles = ["ST3500413AS · 500 GB"]
     }
 
     #[test]
-    fn una_unidad_inventada_se_rechaza() {
-        let error = leer_texto(
+    fn una_identidad_humana_no_necesita_estar_hardcodeada() {
+        let configuracion = leer_texto(
             r#"
 [almacenamiento]
-disponibles = ["disco-magico"]
+disponibles = ["Disco externo · 2 TB"]
 "#,
         )
-        .expect_err("una unidad desconocida debería rechazarse");
+        .expect("el TOML humano no debería depender de una lista de modelos en Rust");
 
-        assert!(error.contains("no conozco"));
-        assert!(error.contains("disco-magico"));
+        assert_eq!(
+            configuracion.almacenamiento.disponibles,
+            vec!["Disco externo · 2 TB"]
+        );
     }
 
     #[test]
