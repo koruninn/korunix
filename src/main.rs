@@ -1,3 +1,4 @@
+mod almacenamiento;
 mod aplicar;
 mod configuracion;
 mod preview;
@@ -68,6 +69,8 @@ fn ayuda() {
     eprintln!("  korunix teclado <españa|latinoamérica> <activar|desactivar>");
     eprintln!("  korunix monitor");
     eprintln!("  korunix monitor <resolucion> <hz>");
+    eprintln!("  korunix almacenamiento");
+    eprintln!("  korunix almacenamiento <nombre> <activar|desactivar>");
     eprintln!("  korunix canal");
     eprintln!("  korunix canal <estable|inestable>");
     eprintln!("  korunix apariencia");
@@ -616,6 +619,91 @@ fn cambiar_monitor(raiz: &Path, resolucion: &str, hz: &str) {
     }
 }
 
+fn mostrar_almacenamiento(raiz: &Path) {
+    let configuracion = configuracion::leer(&raiz.join("configuracion.toml"))
+        .unwrap_or_else(|error| salir_con_error(&error));
+    let unidades = almacenamiento::leer().unwrap_or_else(|error| salir_con_error(&error));
+
+    println!("Almacenamiento:");
+
+    if unidades.is_empty() && configuracion.almacenamiento.disponibles.is_empty() {
+        println!("  No encontré discos adicionales.");
+        return;
+    }
+
+    let mut vistas = Vec::new();
+
+    for unidad in unidades {
+        let conocida = configuracion::unidad_almacenamiento_conocida(&unidad.nombre);
+        let elegida = configuracion
+            .almacenamiento
+            .disponibles
+            .iter()
+            .any(|nombre| nombre == &unidad.nombre);
+
+        println!("  - {}", unidad.nombre);
+
+        if conocida {
+            println!(
+                "    {} · {}",
+                unidad.detalle,
+                if elegida {
+                    "disponible en Korunix · se monta al usarlo"
+                } else {
+                    "no disponible en Korunix"
+                }
+            );
+        } else {
+            println!(
+                "    {} · detectado · todavía no administrado por Korunix",
+                unidad.detalle
+            );
+        }
+
+        vistas.push(unidad.nombre);
+    }
+
+    for nombre in &configuracion.almacenamiento.disponibles {
+        if !vistas.iter().any(|vista| vista == nombre) {
+            println!("  - {nombre}");
+            println!("    no está conectado ahora · la elección se conserva");
+        }
+    }
+}
+
+fn cambiar_almacenamiento(raiz: &Path, nombre: &str, accion: &str) {
+    if !configuracion::unidad_almacenamiento_conocida(nombre) {
+        salir_con_error(&format!(
+            "Puedo mostrar «{nombre}», pero todavía no puedo administrarlo de forma segura."
+        ));
+    }
+
+    let activo = leer_interruptor(accion).unwrap_or_else(|error| salir_con_error(&error));
+    let actual = configuracion::leer(&raiz.join("configuracion.toml"))
+        .unwrap_or_else(|error| salir_con_error(&error));
+    let mut disponibles = actual.almacenamiento.disponibles;
+
+    if activo {
+        if !disponibles.iter().any(|unidad| unidad == nombre) {
+            disponibles.push(nombre.to_string());
+        }
+    } else {
+        disponibles.retain(|unidad| unidad != nombre);
+    }
+
+    match configuracion::cambiar_almacenamiento(&raiz.join("configuracion.toml"), &disponibles) {
+        Ok(true) => {
+            println!(
+                "✓ «{nombre}» quedó {} en la configuración.",
+                if activo { "disponible" } else { "apagado" }
+            );
+            println!("NixOS todavía no cambió.");
+        }
+        Ok(false) => println!("No cambié nada."),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
 fn mostrar_canal(raiz: &Path) {
     match configuracion::leer(&raiz.join("configuracion.toml")) {
         Ok(configuracion) => println!("Canal: {}", configuracion.canal),
@@ -1042,6 +1130,10 @@ fn main() {
         [comando, teclado, valor] if comando == "teclado" => cambiar_teclado(&raiz, teclado, valor),
         [comando] if comando == "monitor" => mostrar_monitor(&raiz),
         [comando, resolucion, hz] if comando == "monitor" => cambiar_monitor(&raiz, resolucion, hz),
+        [comando] if comando == "almacenamiento" => mostrar_almacenamiento(&raiz),
+        [comando, nombre, accion] if comando == "almacenamiento" => {
+            cambiar_almacenamiento(&raiz, nombre, accion)
+        }
         [comando] if comando == "canal" => mostrar_canal(&raiz),
         [comando, canal] if comando == "canal" => cambiar_canal(&raiz, canal),
         [comando] if comando == "apariencia" => mostrar_apariencia(&raiz),

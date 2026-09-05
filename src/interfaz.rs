@@ -1,10 +1,11 @@
+mod almacenamiento;
 #[allow(dead_code)]
 mod configuracion;
 
 use adw::prelude::*;
 use adw::{Application, ApplicationWindow, HeaderBar, ToolbarView};
 use gtk::glib;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader};
@@ -220,6 +221,247 @@ fn guardar_monitor(
     }
 }
 
+fn limpiar_lista_almacenamiento(lista: &gtk::ListBox) {
+    while let Some(hijo) = lista.first_child() {
+        lista.remove(&hijo);
+    }
+}
+
+fn agregar_fila_almacenamiento(
+    lista: &gtk::ListBox,
+    filas: &Rc<RefCell<Vec<(String, adw::SwitchRow)>>>,
+    nombre: String,
+    detalle: String,
+    activa: bool,
+    raiz: &Path,
+    mensaje: &gtk::Label,
+    aviso: &gtk::Revealer,
+    boton_aplicar: &gtk::Button,
+    ocupado: &Rc<Cell<bool>>,
+    actualizando: &Rc<Cell<bool>>,
+) {
+    let fila = adw::SwitchRow::builder()
+        .title(nombre.as_str())
+        .subtitle(detalle.as_str())
+        .build();
+    fila.set_active(activa);
+
+    let raiz = raiz.to_path_buf();
+    let mensaje = mensaje.clone();
+    let aviso = aviso.clone();
+    let boton_aplicar = boton_aplicar.clone();
+    let ocupado = Rc::clone(ocupado);
+    let actualizando = Rc::clone(actualizando);
+    let nombre_senal = nombre.clone();
+
+    fila.connect_active_notify(move |fila| {
+        if actualizando.get() {
+            return;
+        }
+
+        let actual = match configuracion::leer(&raiz.join("configuracion.toml")) {
+            Ok(configuracion) => configuracion,
+            Err(error) => {
+                mensaje.set_text(&error);
+                return;
+            }
+        };
+
+        let mut disponibles = actual.almacenamiento.disponibles;
+
+        if fila.is_active() {
+            if !disponibles.iter().any(|unidad| unidad == &nombre_senal) {
+                disponibles.push(nombre_senal.clone());
+            }
+        } else {
+            disponibles.retain(|unidad| unidad != &nombre_senal);
+        }
+
+        match configuracion::cambiar_almacenamiento(&raiz.join("configuracion.toml"), &disponibles)
+        {
+            Ok(true) => mensaje_guardado(
+                &mensaje,
+                &raiz,
+                &aviso,
+                &boton_aplicar,
+                &ocupado,
+                &format!(
+                    "✓ «{}» quedó {} en la configuración. NixOS todavía no cambió.",
+                    nombre_senal,
+                    if fila.is_active() {
+                        "disponible"
+                    } else {
+                        "apagado"
+                    }
+                ),
+            ),
+            Ok(false) => {}
+            Err(error) => {
+                mensaje.set_text(&error);
+                actualizando.set(true);
+                fila.set_active(!fila.is_active());
+                actualizando.set(false);
+            }
+        }
+    });
+
+    lista.append(&fila);
+    filas.borrow_mut().push((nombre, fila));
+}
+
+fn cargar_almacenamiento(
+    lista: &gtk::ListBox,
+    estado: &gtk::Label,
+    filas: &Rc<RefCell<Vec<(String, adw::SwitchRow)>>>,
+    raiz: &Path,
+    mensaje: &gtk::Label,
+    aviso: &gtk::Revealer,
+    boton_aplicar: &gtk::Button,
+    ocupado: &Rc<Cell<bool>>,
+    actualizando: &Rc<Cell<bool>>,
+) {
+    estado.set_text("Comprobando los discos locales…");
+
+    let (envio, recepcion) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = envio.send(almacenamiento::leer());
+    });
+
+    let lista = lista.clone();
+    let estado = estado.clone();
+    let filas = Rc::clone(filas);
+    let raiz = raiz.to_path_buf();
+    let mensaje = mensaje.clone();
+    let aviso = aviso.clone();
+    let boton_aplicar = boton_aplicar.clone();
+    let ocupado = Rc::clone(ocupado);
+    let actualizando = Rc::clone(actualizando);
+
+    glib::timeout_add_local(Duration::from_millis(50), move || {
+        match recepcion.try_recv() {
+            Ok(resultado) => {
+                limpiar_lista_almacenamiento(&lista);
+                filas.borrow_mut().clear();
+
+                let configuracion = match configuracion::leer(&raiz.join("configuracion.toml")) {
+                    Ok(configuracion) => configuracion,
+                    Err(error) => {
+                        estado.set_text(&error);
+                        return glib::ControlFlow::Break;
+                    }
+                };
+
+                match resultado {
+                    Ok(unidades) => {
+                        let mut vistas = Vec::new();
+
+                        for unidad in unidades {
+                            let conocida =
+                                configuracion::unidad_almacenamiento_conocida(&unidad.nombre);
+
+                            if conocida {
+                                let activa = configuracion
+                                    .almacenamiento
+                                    .disponibles
+                                    .iter()
+                                    .any(|nombre| nombre == &unidad.nombre);
+
+                                let detalle = format!(
+                                    "{} · {}",
+                                    unidad.detalle,
+                                    if activa {
+                                        "Disponible en Korunix · se monta al usarlo"
+                                    } else {
+                                        "No disponible en Korunix"
+                                    }
+                                );
+
+                                vistas.push(unidad.nombre.clone());
+                                agregar_fila_almacenamiento(
+                                    &lista,
+                                    &filas,
+                                    unidad.nombre,
+                                    detalle,
+                                    activa,
+                                    &raiz,
+                                    &mensaje,
+                                    &aviso,
+                                    &boton_aplicar,
+                                    &ocupado,
+                                    &actualizando,
+                                );
+                            } else {
+                                let detalle = format!(
+                                    "{} · Detectado · todavía no administrado por Korunix",
+                                    unidad.detalle
+                                );
+                                let fila = adw::ActionRow::builder()
+                                    .title(unidad.nombre.as_str())
+                                    .subtitle(detalle.as_str())
+                                    .build();
+                                lista.append(&fila);
+                                vistas.push(unidad.nombre);
+                            }
+                        }
+
+                        for nombre in &configuracion.almacenamiento.disponibles {
+                            if !vistas.iter().any(|vista| vista == nombre) {
+                                agregar_fila_almacenamiento(
+                                    &lista,
+                                    &filas,
+                                    nombre.clone(),
+                                    "No está conectado ahora. Tu elección se conserva.".to_string(),
+                                    true,
+                                    &raiz,
+                                    &mensaje,
+                                    &aviso,
+                                    &boton_aplicar,
+                                    &ocupado,
+                                    &actualizando,
+                                );
+                            }
+                        }
+
+                        if lista.first_child().is_none() {
+                            estado.set_text("No encontré discos adicionales.");
+                        } else {
+                            estado.set_text(
+                                "Estado local leído una vez. Nix no se ejecutó para mostrar esta sección.",
+                            );
+                        }
+                    }
+                    Err(error) => {
+                        for nombre in &configuracion.almacenamiento.disponibles {
+                            agregar_fila_almacenamiento(
+                                &lista,
+                                &filas,
+                                nombre.clone(),
+                                "No pude comprobar si está conectado ahora.".to_string(),
+                                true,
+                                &raiz,
+                                &mensaje,
+                                &aviso,
+                                &boton_aplicar,
+                                &ocupado,
+                                &actualizando,
+                            );
+                        }
+
+                        estado.set_text(&error);
+                    }
+                }
+
+                glib::ControlFlow::Break
+            }
+            Err(TryRecvError::Empty) => glib::ControlFlow::Continue,
+            Err(TryRecvError::Disconnected) => {
+                estado.set_text("La lectura local de discos terminó sin respuesta.");
+                glib::ControlFlow::Break
+            }
+        }
+    });
+}
+
 fn anexar_linea(vista: &gtk::TextView, linea: &str) {
     let buffer = vista.buffer();
     let mut final_texto = buffer.end_iter();
@@ -425,6 +667,7 @@ fn recargar_controles(
     teclado_latinoamerica: &adw::SwitchRow,
     entrada_resolucion: &gtk::Entry,
     entrada_hz: &gtk::SpinButton,
+    filas_almacenamiento: &Rc<RefCell<Vec<(String, adw::SwitchRow)>>>,
     selector_estilo: &gtk::DropDown,
     selector_modo: &gtk::DropDown,
     bluetooth: &adw::SwitchRow,
@@ -479,6 +722,16 @@ fn recargar_controles(
 
     entrada_resolucion.set_text(&configuracion.monitor.resolucion);
     entrada_hz.set_value(f64::from(configuracion.monitor.hz));
+
+    for (nombre, fila) in filas_almacenamiento.borrow().iter() {
+        fila.set_active(
+            configuracion
+                .almacenamiento
+                .disponibles
+                .iter()
+                .any(|unidad| unidad == nombre),
+        );
+    }
 
     selector_estilo.set_selected(indice_estilo(&configuracion.apariencia.estilo));
     selector_modo.set_selected(indice_modo(&configuracion.apariencia.modo));
@@ -814,6 +1067,32 @@ fn construir_ventana(aplicacion: &Application) {
     equipo_grupo.add(&monitor_bloque);
     contenido.append(&equipo_grupo);
 
+    let almacenamiento_grupo = adw::PreferencesGroup::builder()
+        .title("Almacenamiento")
+        .description(
+            "Korunix muestra los discos con un nombre reconocible. UUID, /dev y rutas de montaje quedan por dentro.",
+        )
+        .build();
+
+    let almacenamiento_lista = gtk::ListBox::new();
+    almacenamiento_lista.set_selection_mode(gtk::SelectionMode::None);
+    almacenamiento_lista.add_css_class("boxed-list");
+
+    let almacenamiento_estado =
+        gtk::Label::new(Some("La ventana abrirá antes de comprobar los discos."));
+    almacenamiento_estado.set_wrap(true);
+    almacenamiento_estado.set_halign(gtk::Align::Start);
+    almacenamiento_estado.add_css_class("dim-label");
+
+    let almacenamiento_caja = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    almacenamiento_caja.append(&almacenamiento_lista);
+    almacenamiento_caja.append(&almacenamiento_estado);
+    almacenamiento_grupo.add(&almacenamiento_caja);
+    contenido.append(&almacenamiento_grupo);
+
+    let filas_almacenamiento: Rc<RefCell<Vec<(String, adw::SwitchRow)>>> =
+        Rc::new(RefCell::new(Vec::new()));
+
     let apariencia_grupo = adw::PreferencesGroup::builder()
         .title("Apariencia")
         .description(
@@ -1013,6 +1292,7 @@ fn construir_ventana(aplicacion: &Application) {
         entrada_resolucion.clone().upcast(),
         entrada_hz.clone().upcast(),
         boton_monitor.clone().upcast(),
+        almacenamiento_lista.clone().upcast(),
         selector_estilo.clone().upcast(),
         selector_modo.clone().upcast(),
         bluetooth.clone().upcast(),
@@ -1753,6 +2033,7 @@ fn construir_ventana(aplicacion: &Application) {
         let teclado_latinoamerica = teclado_latinoamerica.clone();
         let entrada_resolucion = entrada_resolucion.clone();
         let entrada_hz = entrada_hz.clone();
+        let filas_almacenamiento = Rc::clone(&filas_almacenamiento);
         let selector_estilo = selector_estilo.clone();
         let selector_modo = selector_modo.clone();
         let bluetooth = bluetooth.clone();
@@ -1785,6 +2066,7 @@ fn construir_ventana(aplicacion: &Application) {
                 &teclado_latinoamerica,
                 &entrada_resolucion,
                 &entrada_hz,
+                &filas_almacenamiento,
                 &selector_estilo,
                 &selector_modo,
                 &bluetooth,
@@ -1900,6 +2182,7 @@ fn construir_ventana(aplicacion: &Application) {
         &teclado_latinoamerica,
         &entrada_resolucion,
         &entrada_hz,
+        &filas_almacenamiento,
         &selector_estilo,
         &selector_modo,
         &bluetooth,
@@ -1920,6 +2203,18 @@ fn construir_ventana(aplicacion: &Application) {
     );
 
     ventana.present();
+
+    cargar_almacenamiento(
+        &almacenamiento_lista,
+        &almacenamiento_estado,
+        &filas_almacenamiento,
+        &raiz,
+        &mensaje_configuracion,
+        &aviso,
+        &boton_aplicar,
+        &ocupado,
+        &actualizando,
+    );
 }
 
 fn main() -> glib::ExitCode {

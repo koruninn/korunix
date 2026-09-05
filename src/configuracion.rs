@@ -463,11 +463,15 @@ fn revisar_escritorios(escritorio: &Escritorio) -> Result<(), String> {
     Ok(())
 }
 
+pub fn unidad_almacenamiento_conocida(nombre: &str) -> bool {
+    nombre == "ST3500413AS · 500 GB"
+}
+
 fn revisar_almacenamiento(almacenamiento: &Almacenamiento) -> Result<(), String> {
     let mut vistas = HashSet::new();
 
     for unidad in &almacenamiento.disponibles {
-        if unidad != "ST3500413AS · 500 GB" {
+        if !unidad_almacenamiento_conocida(unidad) {
             return Err(format!(
                 "Todavía no conozco la unidad «{unidad}» en este equipo."
             ));
@@ -877,6 +881,31 @@ fn cambiar_monitor_en_texto(
     Ok(Some(nuevo))
 }
 
+fn cambiar_almacenamiento_en_texto(
+    texto: &str,
+    disponibles: &[String],
+) -> Result<Option<String>, String> {
+    let actual = entender(texto, "la configuración")?;
+    let nuevo_almacenamiento = Almacenamiento {
+        disponibles: disponibles.to_vec(),
+    };
+    revisar_almacenamiento(&nuevo_almacenamiento)?;
+
+    if actual.almacenamiento.disponibles == disponibles {
+        return Ok(None);
+    }
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+    seccion(&mut documento, "almacenamiento")?["disponibles"] = value(array_humano(disponibles));
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
 fn cambiar_apariencia_en_texto(
     texto: &str,
     estilo: &str,
@@ -1086,6 +1115,21 @@ pub fn cambiar_monitor(ruta: &Path, resolucion: &str, hz: u32) -> Result<bool, S
     entender_completa(&texto, &ruta.display().to_string())?;
 
     let Some(nuevo) = cambiar_monitor_en_texto(&texto, resolucion, hz)? else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
+}
+
+pub fn cambiar_almacenamiento(ruta: &Path, disponibles: &[String]) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    entender_completa(&texto, &ruta.display().to_string())?;
+
+    let Some(nuevo) = cambiar_almacenamiento_en_texto(&texto, disponibles)? else {
         return Ok(false);
     };
 
@@ -1986,6 +2030,27 @@ activo = true
         let configuracion = leer_texto(&nuevo).expect("el resultado debería ser válido");
         assert_eq!(configuracion.monitor.resolucion, "2560x1440");
         assert_eq!(configuracion.monitor.hz, 144);
+        assert!(configuracion.bluetooth.activo);
+    }
+
+    #[test]
+    fn cambiar_almacenamiento_conserva_el_resto() {
+        let original = r#"# Este comentario sigue.
+[almacenamiento]
+disponibles = ["ST3500413AS · 500 GB"]
+
+[bluetooth]
+activo = true
+"#;
+
+        let nuevo = cambiar_almacenamiento_en_texto(original, &[])
+            .expect("debería poder ocultar la unidad")
+            .expect("debería existir un cambio");
+
+        assert!(nuevo.contains("# Este comentario sigue."));
+
+        let configuracion = leer_texto(&nuevo).expect("el resultado debería ser válido");
+        assert!(configuracion.almacenamiento.disponibles.is_empty());
         assert!(configuracion.bluetooth.activo);
     }
 
