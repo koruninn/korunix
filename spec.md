@@ -577,14 +577,31 @@ Las contraseñas y sus hashes no se guardan en TOML ni en Git. Mientras se adopt
 
 ## 16. Almacenamiento, copias e historial
 
-La configuración humana elige unidades adoptadas por un nombre sencillo. Por ejemplo:
+La configuración humana puede elegir unidades detectadas, pero Korunix no inventa un alias y lo presenta como si la persona lo hubiera elegido.
+
+La interfaz usa una identidad reconocible. Si el volumen tiene una etiqueta humana útil, puede usarse. Si no la tiene, se muestran datos que permitan reconocer físicamente la unidad, por ejemplo modelo y capacidad. UUID, dispositivo, formato, UID/GID y ruta de montaje siguen siendo detalles técnicos.
+
+En el equipo actual se comprobó:
+
+```text
+ST3500413AS · 500 GB
+NTFS
+UUID interno: 036F8E656FF00FB2
+ruta técnica actual: /mnt/datos
+```
+
+La persona no eligió el alias `datos`; apareció durante la reimplementación y quedó corregido. El TOML usa la identidad reconocible:
 
 ```toml
 [almacenamiento]
-disponibles = ["datos"]
+disponibles = ["ST3500413AS · 500 GB"]
 ```
 
-La UUID, el formato, UID/GID y otros hechos detectados no se escriben en TOML. En el equipo actual, `hardware.nix` conoce esos datos y Nix deriva `/mnt/datos`, automount y las opciones necesarias.
+`hardware.nix` conserva el UUID y la ruta técnica. Nix sigue montando exactamente la misma partición. Cambiar el nombre visible no puede cambiar de disco.
+
+El plan de Korunix muestra la identidad humana de la unidad y no obliga a enseñar `/mnt/datos`. La ruta sigue disponible por dentro para NixOS, pero no forma parte de la decisión que la persona tiene que entender.
+
+Almacenamiento tendrá una sección propia en la GUI. No se mezcla con «Sesión y equipo» ni se publica un interruptor ambiguo mientras la interfaz no pueda mostrar las unidades de forma reconocible.
 
 Se conserva como comportamiento útil:
 
@@ -743,6 +760,51 @@ Generación aplicada:
 
 ```text
 /nix/store/9v0zbbnv88gdyxbng725lpdg2rld7574-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+
+### Sesión y equipo desde GUI y CLI
+
+La GUI y la CLI permiten ahora cambiar mediante la misma lógica de `src/configuracion.rs`:
+
+- qué escritorios quedan instalados entre Niri, Hyprland, Plasma y Cinnamon;
+- qué teclados normales quedan disponibles entre España y Latinoamérica en el catálogo actual;
+- resolución y frecuencia del monitor.
+
+El escritorio principal no puede quitarse de los escritorios instalados. Tampoco se acepta dejar el equipo sin ninguna distribución de teclado. La combinación Alt+Shift se conserva mientras todavía no exista un selector humano para cambiarla.
+
+La primera prueba gráfica incluyó un interruptor llamado «Unidad datos». La persona señaló que ese nombre no permitía saber qué disco era y que nunca había elegido ese alias. Esa fila no se publicó.
+
+La lectura real del equipo identificó:
+
+```text
+/dev/sda
+ST3500413AS
+465,8 GiB
+SATA
+
+/dev/sda1
+NTFS
+UUID 036F8E656FF00FB2
+/mnt/datos
+```
+
+La corrección separa almacenamiento de «Sesión y equipo». `ST3500413AS · 500 GB` es la identidad humana; UUID y `/mnt/datos` quedan internos.
+
+El cierre detectó además que el plan de Nix ya había dejado de emitir la ruta técnica, pero Rust todavía la exigía. Eso hacía fallar preview con `missing field ruta`. El contrato se corrigió: el plan visible de almacenamiento contiene la identidad humana, no la ruta técnica.
+
+Los 87 tests de Rust pasaron en serie. El motor nuevo entendió el plan real, el preview completo se construyó y Nix comprobó que `/mnt/datos` sigue resolviendo al UUID original.
+
+Código publicado:
+
+```text
+05e3ee3bc04536f64e7db1bad88dd36880e72d2a
+```
+
+Generación aplicada:
+
+```text
+/nix/store/c36riszpnm8b5iyv241igj8x2gm8cc58-nixos-system-korunix-26.11.20260831.34ab990
 ```
 
 
