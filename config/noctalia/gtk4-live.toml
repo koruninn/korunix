@@ -1,0 +1,7 @@
+# Integración GTK4 dinámica de Korunix.
+# La plantilla gtk4 integrada de Noctalia permanece activa.
+
+[theme.templates.user.korunix_gtk4_live]
+input_path = "/etc/korunix/noctalia/gtk4-live.css"
+output_path = "$XDG_CONFIG_HOME/gtk-4.0/korunix-noctalia-live.css"
+post_hook = "bash /etc/korunix/noctalia/gtk4-live-apply.sh"

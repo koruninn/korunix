@@ -1,0 +1,116 @@
+/*
+ * GTK4 dinámico para la experiencia Noctalia de Korunix.
+ *
+ * No sustituye la plantilla gtk4 oficial. Se procesa después de ella y
+ * mantiene simultáneamente las variantes clara y oscura de la misma paleta.
+ */
+
+:root {
+  --accent-color: {{colors.primary.light.hex}};
+  --accent-bg-color: {{colors.primary.light.hex}};
+  --accent-fg-color: {{colors.on_primary.light.hex}};
+
+  --destructive-bg-color: {{colors.error.light.hex}};
+  --destructive-fg-color: {{colors.on_error.light.hex}};
+
+  --error-bg-color: {{colors.error.light.hex}};
+  --error-fg-color: {{colors.on_error.light.hex}};
+  --error-color: {{colors.error.light.hex}};
+
+  --window-bg-color: {{colors.surface.light.hex}};
+  --window-fg-color: {{colors.on_surface.light.hex}};
+
+  --view-bg-color: {{colors.surface.light.hex}};
+  --view-fg-color: {{colors.on_surface.light.hex}};
+
+  --headerbar-bg-color: {{colors.surface.light.hex}};
+  --headerbar-fg-color: {{colors.on_surface.light.hex}};
+  --headerbar-backdrop-color: {{colors.surface.light.hex}};
+
+  --popover-bg-color: {{colors.surface_container.light.hex}};
+  --popover-fg-color: {{colors.on_surface.light.hex}};
+
+  --card-bg-color: {{colors.surface_container.light.hex}};
+  --card-fg-color: {{colors.on_surface.light.hex}};
+
+  --dialog-bg-color: {{colors.surface.light.hex}};
+  --dialog-fg-color: {{colors.on_surface.light.hex}};
+
+  --overview-bg-color: {{colors.surface_container.light.hex}};
+  --overview-fg-color: {{colors.on_surface.light.hex}};
+
+  --sidebar-bg-color: {{colors.surface_container.light.hex}};
+  --sidebar-fg-color: {{colors.on_surface.light.hex}};
+  --sidebar-backdrop-color: {{colors.surface.light.hex}};
+  --sidebar-border-color: {{colors.surface.light.hex}};
+
+  --secondary-sidebar-bg-color: {{colors.surface.light.hex}};
+  --secondary-sidebar-fg-color: {{colors.on_surface.light.hex}};
+  --secondary-sidebar-backdrop-color: {{colors.surface.light.hex}};
+
+  --warning-bg-color: {{colors.tertiary_container.light.hex}};
+  --warning-fg-color: {{colors.on_tertiary_container.light.hex}};
+  --warning-color: {{colors.tertiary.light.hex}};
+
+  --success-color: {{colors.secondary.light.hex}};
+  --success-bg-color: {{colors.secondary_container.light.hex}};
+  --success-fg-color: {{colors.on_secondary_container.light.hex}};
+
+  --shade-color: rgba(0, 0, 0, 0.36);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --accent-color: {{colors.primary.dark.hex}};
+    --accent-bg-color: {{colors.primary.dark.hex}};
+    --accent-fg-color: {{colors.on_primary.dark.hex}};
+
+    --destructive-bg-color: {{colors.error.dark.hex}};
+    --destructive-fg-color: {{colors.on_error.dark.hex}};
+
+    --error-bg-color: {{colors.error.dark.hex}};
+    --error-fg-color: {{colors.on_error.dark.hex}};
+    --error-color: {{colors.error.dark.hex}};
+
+    --window-bg-color: {{colors.surface.dark.hex}};
+    --window-fg-color: {{colors.on_surface.dark.hex}};
+
+    --view-bg-color: {{colors.surface.dark.hex}};
+    --view-fg-color: {{colors.on_surface.dark.hex}};
+
+    --headerbar-bg-color: {{colors.surface.dark.hex}};
+    --headerbar-fg-color: {{colors.on_surface.dark.hex}};
+    --headerbar-backdrop-color: {{colors.surface.dark.hex}};
+
+    --popover-bg-color: {{colors.surface_container.dark.hex}};
+    --popover-fg-color: {{colors.on_surface.dark.hex}};
+
+    --card-bg-color: {{colors.surface_container.dark.hex}};
+    --card-fg-color: {{colors.on_surface.dark.hex}};
+
+    --dialog-bg-color: {{colors.surface.dark.hex}};
+    --dialog-fg-color: {{colors.on_surface.dark.hex}};
+
+    --overview-bg-color: {{colors.surface_container.dark.hex}};
+    --overview-fg-color: {{colors.on_surface.dark.hex}};
+
+    --sidebar-bg-color: {{colors.surface_container.dark.hex}};
+    --sidebar-fg-color: {{colors.on_surface.dark.hex}};
+    --sidebar-backdrop-color: {{colors.surface.dark.hex}};
+    --sidebar-border-color: {{colors.surface.dark.hex}};
+
+    --secondary-sidebar-bg-color: {{colors.surface.dark.hex}};
+    --secondary-sidebar-fg-color: {{colors.on_surface.dark.hex}};
+    --secondary-sidebar-backdrop-color: {{colors.surface.dark.hex}};
+
+    --warning-bg-color: {{colors.tertiary_container.dark.hex}};
+    --warning-fg-color: {{colors.on_tertiary_container.dark.hex}};
+    --warning-color: {{colors.tertiary.dark.hex}};
+
+    --success-color: {{colors.secondary.dark.hex}};
+    --success-bg-color: {{colors.secondary_container.dark.hex}};
+    --success-fg-color: {{colors.on_secondary_container.dark.hex}};
+
+    --shade-color: rgba(0, 0, 0, 0.36);
+  }
+}

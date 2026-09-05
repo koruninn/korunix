@@ -2,7 +2,7 @@ use crate::preview;
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;
-use std::io::{self, Write};
+use std::io;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
@@ -758,16 +758,7 @@ pub fn ejecutar_como_root(argumentos: &[String]) -> i32 {
     println!("Persistencia: esta misma generación quedará elegida para los próximos arranques.");
     println!("Rollback: la generación actual ya está protegida como «anterior».");
     println!("NixOS todavía no cambió.");
-    println!();
-    print!("Escribe exactamente APLICAR para activar esta generación: ");
-    let _ = io::stdout().flush();
-
-    let mut respuesta = String::new();
-    if io::stdin().read_line(&mut respuesta).is_err() || respuesta.trim() != "APLICAR" {
-        println!("Cancelado. NixOS no cambió.");
-        marcar(&resultado, "cancelado");
-        return 0;
-    }
+    println!("Autorización recibida. Aplicando exactamente esta generación...");
 
     let activa = match destino(Path::new(SISTEMA_ACTIVO)) {
         Ok(ruta) => ruta,
@@ -787,7 +778,7 @@ pub fn ejecutar_como_root(argumentos: &[String]) -> i32 {
     };
 
     if activa != anterior || persistente != anterior {
-        eprintln!("El sistema cambió entre la revisión y tu autorización.");
+        eprintln!("El sistema cambió entre la revisión y la activación.");
         marcar(&resultado, "sin-cambio");
         return 13;
     }

@@ -5,7 +5,14 @@
     nixpkgs-estable.url = "github:NixOS/nixpkgs/nixos-26.05";
     nixpkgs-inestable.url = "github:NixOS/nixpkgs/nixos-unstable";
 
+    millennium.url = "github:SteamClientHomebrew/Millennium?dir=packages/nix";
+
     figma-linux-next.url = "github:arximus88/figma-linux-next";
+
+    hatter = {
+      url = "github:Mibea/Hatter";
+      flake = false;
+    };
 
     aagl-inestable = {
       url = "github:ezKEa/aagl-gtk-on-nix";
@@ -29,9 +36,11 @@
     aagl-estable,
     aagl-inestable,
     figma-linux-next,
+    hatter,
     nix-flatpak,
     nixpkgs-estable,
     nixpkgs-inestable,
+    millennium,
     spicetify-nix,
     ...
   }: let
@@ -183,6 +192,11 @@
       spotify = {
         nombre = "Spotify con Spicetify";
         version = "";
+      };
+
+      whatsapp = {
+        nombre = "WhatsApp Web";
+        version = "PWA";
       };
     };
 
@@ -381,6 +395,7 @@
       system = sistema;
 
       specialArgs = {
+        hatterSource = hatter;
         inherit
           ajustesAagl
           almacenamiento
@@ -407,11 +422,17 @@
       };
 
       modules = [
+        {
+          # Steam usa Millennium por debajo. El overlay se aplica al mismo
+          # conjunto de paquetes que recibe sistema.nix.
+          nixpkgs.overlays = [millennium.overlays.default];
+        }
         aagl.nixosModules.default
         figma-linux-next.nixosModules.default
         nix-flatpak.nixosModules.nix-flatpak
         spicetify-nix.nixosModules.default
         ./sistema.nix
+        ./apariencia.nix
       ];
     };
 

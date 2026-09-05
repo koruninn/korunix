@@ -261,6 +261,282 @@
   scrcpyActivo = builtins.elem "scrcpy" aplicacionesElegidas;
   spotifyActivo = builtins.elem "spotify" aplicacionesElegidas;
 
+  # Noctalia genera la paleta de Spicetify. Spotify vive en el store, así que
+  # esta copia de ejecución permite aplicar colores nuevos sin reconstruirlo.
+  temaSpotify = pkgs.runCommand "korunix-spicetify-comfy" {} ''
+    set -eu
+
+    mkdir -p "$out"
+    cp -R ${paquetesSpicetify.themes.comfy.src}/. "$out/"
+    chmod -R u+w "$out"
+
+    cp "$out/app.css" "$out/user.css"
+    cp "$out/theme.script.js" "$out/theme.js"
+  '';
+
+  temaSpotifyComfy =
+    paquetesSpicetify.themes.comfy
+    // {
+      src = temaSpotify;
+      extraCommands = "";
+      injectThemeJs = false;
+      requiredExtensions = [
+        {
+          src = temaSpotify;
+          name = "theme.js";
+        }
+      ];
+    };
+
+  # Esta pequeña extensión relee colors.css. Así un cambio de paleta puede
+  # aparecer en Spotify abierto sin volver a ejecutar Spicetify.
+  paletaSpotifyEnVivo = pkgs.writeTextDir "noctalia-palette.js" ''
+    (() => {
+      "use strict";
+
+      const styleId = "korunix-noctalia-palette";
+      let previous = "";
+
+      async function refreshKorunixPalette() {
+        try {
+          const response = await fetch(
+            "colors.css?korunix=" + Date.now(),
+            { cache: "no-store" },
+          );
+
+          if (!response.ok) return;
+
+          const css = await response.text();
+          if (!css || css === previous) return;
+
+          let style = document.getElementById(styleId);
+          if (!style) {
+            style = document.createElement("style");
+            style.id = styleId;
+            document.head.appendChild(style);
+          }
+
+          style.textContent = css;
+          previous = css;
+        } catch (_) {
+          // La paleta incluida por Spicetify queda como respaldo.
+        }
+      }
+
+      refreshKorunixPalette();
+      window.setInterval(refreshKorunixPalette, 2000);
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) refreshKorunixPalette();
+      });
+    })();
+  '';
+
+  prepararSpotify = pkgs.writeShellScript "korunix-spicetify-runtime-prepare" ''
+    set -eu
+
+    case ":''${XDG_CURRENT_DESKTOP:-}:''${XDG_SESSION_DESKTOP:-}:''${DESKTOP_SESSION:-}:" in
+      *:niri:*|*:Niri:*|*:Hyprland:*|*:hyprland:*|*:hyprland-uwsm:*)
+        ;;
+      *)
+        exit 0
+        ;;
+    esac
+
+    estado="''${XDG_STATE_HOME:-$HOME/.local/state}/korunix/spicetify"
+    destino="$estado/spotify"
+    marca="$estado/source"
+    origen=${lib.escapeShellArg (toString config.programs.spicetify.spicedSpotify)}
+
+    mkdir -p "$estado"
+
+    if [ -x "$destino/spotify" ] \
+        && [ -f "$marca" ] \
+        && [ "$(cat "$marca")" = "$origen" ]
+    then
+      exit 0
+    fi
+
+    temporal=""
+    anterior="$estado/.spotify.previous"
+
+    hacer_extraible() {
+      ruta="$1"
+      [ -e "$ruta" ] || return 0
+      ${pkgs.findutils}/bin/find "$ruta" -type d -exec chmod u+rwx {} +
+    }
+
+    limpiar() {
+      if [ -n "''${temporal:-}" ] && [ -d "$temporal" ]; then
+        hacer_extraible "$temporal" || true
+        rm -rf -- "$temporal"
+      fi
+    }
+
+    trap limpiar EXIT HUP INT TERM
+
+    for residuo in "$estado"/.spotify.new.*; do
+      [ -e "$residuo" ] || continue
+      hacer_extraible "$residuo"
+      rm -rf -- "$residuo"
+    done
+
+    temporal="$(${pkgs.coreutils}/bin/mktemp -d "$estado/.spotify.new.XXXXXX")"
+    cp -a --reflink=auto "$origen/share/spotify/." "$temporal/"
+
+    hacer_extraible "$temporal"
+    chmod u+w \
+      "$temporal/spotify" \
+      "$temporal/Apps/xpui/colors.css"
+
+    ${pkgs.python3}/bin/python3 - \
+      "$temporal/spotify" \
+      "$origen/share/spotify" \
+      "$destino" \
+      <<'PY'
+    import sys
+    from pathlib import Path
+
+    wrapper = Path(sys.argv[1])
+    source = sys.argv[2]
+    target = sys.argv[3]
+    content = wrapper.read_text(encoding="utf-8")
+
+    if source not in content:
+        raise SystemExit(
+            "Korunix: el lanzador de Spotify no contiene la ruta esperada."
+        )
+
+    wrapper.write_text(content.replace(source, target), encoding="utf-8")
+    PY
+
+    hacer_extraible "$anterior"
+    rm -rf -- "$anterior"
+
+    if [ -e "$destino" ]; then
+      mv "$destino" "$anterior"
+    fi
+
+    mv "$temporal" "$destino"
+    temporal=""
+
+    printf '%s\n' "$origen" > "$marca.new"
+    mv "$marca.new" "$marca"
+
+    hacer_extraible "$anterior"
+    rm -rf -- "$anterior"
+  '';
+
+  sincronizarSpotify = pkgs.writeShellApplication {
+    name = "korunix-spotify-theme-sync";
+    runtimeInputs = [pkgs.python3];
+    text = ''
+      set -eu
+
+      config_home="''${XDG_CONFIG_HOME:-$HOME/.config}"
+      state_home="''${XDG_STATE_HOME:-$HOME/.local/state}"
+      paleta="$config_home/spicetify/Themes/Comfy/color.ini"
+      colores="$state_home/korunix/spicetify/spotify/Apps/xpui/colors.css"
+
+      if [ ! -f "$paleta" ] || [ ! -f "$colores" ]; then
+        exit 0
+      fi
+
+      python3 - "$paleta" "$colores" <<'PY'
+      import configparser
+      import os
+      import re
+      import sys
+      from pathlib import Path
+
+      palette_path = Path(sys.argv[1])
+      colors_path = Path(sys.argv[2])
+
+      color_names = [
+          "text", "subtext", "main", "main-elevated", "main-transition",
+          "highlight", "highlight-elevated", "sidebar", "player", "card",
+          "shadow", "selected-row", "button", "button-active",
+          "button-disabled", "tab-active", "notification",
+          "notification-error", "misc", "play-button",
+          "play-button-active", "progress-fg", "progress-bg", "heart",
+          "pagelink-active", "radio-btn-active",
+      ]
+
+      parser = configparser.ConfigParser(interpolation=None)
+      parser.read(palette_path, encoding="utf-8")
+
+      if "Comfy" not in parser:
+          raise SystemExit(
+              "Korunix: la paleta de Noctalia no contiene la sección Comfy."
+          )
+
+      scheme = parser["Comfy"]
+      values = {}
+
+      for name in color_names:
+          color = scheme.get(name, "").strip().lstrip("#")
+          if not re.fullmatch(r"[0-9A-Fa-f]{6}", color):
+              raise SystemExit(
+                  f"Korunix: el color {name} no es hexadecimal válido."
+              )
+          values[name] = color.lower()
+
+      lines = [":root {"]
+      for name in color_names:
+          color = values[name]
+          rgb = ", ".join(
+              str(int(color[index:index + 2], 16))
+              for index in (0, 2, 4)
+          )
+          lines.append(f"  --spice-{name}: #{color} !important;")
+          lines.append(f"  --spice-rgb-{name}: {rgb} !important;")
+      lines.append("}")
+      lines.append("")
+
+      temporary = colors_path.with_name(colors_path.name + ".new")
+      temporary.write_text("\n".join(lines), encoding="utf-8")
+      os.replace(temporary, colors_path)
+      PY
+    '';
+  };
+
+  spotifySesion = pkgs.writeShellApplication {
+    name = "spotify";
+    runtimeInputs = [pkgs.systemd];
+    text = ''
+      set -eu
+
+      case ":''${XDG_CURRENT_DESKTOP:-}:''${XDG_SESSION_DESKTOP:-}:''${DESKTOP_SESSION:-}:" in
+        *:niri:*|*:Niri:*|*:Hyprland:*|*:hyprland:*|*:hyprland-uwsm:*)
+          if systemctl --user start korunix-spicetify-runtime.service; then
+            state_home="''${XDG_STATE_HOME:-$HOME/.local/state}"
+            spotify="$state_home/korunix/spicetify/spotify/spotify"
+
+            if [ -x "$spotify" ]; then
+              exec "$spotify" "$@"
+            fi
+          fi
+          ;;
+      esac
+
+      exec ${config.programs.spicetify.spicedSpotify}/bin/spotify "$@"
+    '';
+  };
+  whatsappActivo = builtins.elem "whatsapp" aplicacionesElegidas;
+
+  # WhatsApp se ofrece como aplicación web. Chrome es el motor técnico; la
+  # persona solo expresa «whatsapp» una vez.
+  whatsappWeb = pkgs.makeDesktopItem {
+    name = "whatsapp";
+    desktopName = "WhatsApp";
+    genericName = "Mensajería";
+    comment = "WhatsApp Web como aplicación";
+    exec = "${lib.getExe pkgs.google-chrome} --app=https://web.whatsapp.com/";
+    icon = "web-browser";
+    terminal = false;
+    categories = ["Network" "InstantMessaging"];
+    startupNotify = true;
+  };
+
   cuentas = map (persona: persona.cuenta) personas;
 
   rutaHumanaValida = valor:
@@ -698,10 +974,6 @@ in {
     '';
   };
 
-  environment.etc."korunix/noctalia.toml" = lib.mkIf noctaliaActivo {
-    source = ./noctalia.toml;
-  };
-
   # Bluetooth es una decisión del equipo, no una consecuencia de usar Noctalia.
   hardware.bluetooth = {
     enable = bluetooth.activo or false;
@@ -750,6 +1022,10 @@ in {
       KORUNIX_NOCTALIA_BASE = "/etc/korunix/noctalia.toml";
       KORUNIX_NOCTALIA_SOURCE = aparienciaNoctalia.source;
       KORUNIX_NOCTALIA_MODE = aparienciaNoctalia.mode;
+      KORUNIX_SPOTIFY_ACTIVO =
+        if spotifyActivo
+        then "1"
+        else "0";
     };
 
     serviceConfig = {
@@ -824,11 +1100,58 @@ in {
       adblock
       spicyLyrics
       oneko
+      {
+        src = paletaSpotifyEnVivo;
+        name = "noctalia-palette.js";
+      }
     ];
+
+    theme = temaSpotifyComfy;
+    colorScheme = "Comfy";
   };
+
+  systemd.user.services.korunix-spicetify-runtime =
+    lib.mkIf (spotifyActivo && noctaliaActivo)
+    {
+      description = "Prepara Spotify para la paleta de Noctalia";
+
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = prepararSpotify;
+        ExecStartPost = lib.getExe sincronizarSpotify;
+      };
+    };
+
+  systemd.user.services.korunix-spicetify-palette-sync =
+    lib.mkIf (spotifyActivo && noctaliaActivo)
+    {
+      description = "Sincroniza Spotify con la paleta de Noctalia";
+
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe sincronizarSpotify;
+      };
+    };
+
+  systemd.user.paths.korunix-spicetify-palette-sync =
+    lib.mkIf (spotifyActivo && noctaliaActivo)
+    {
+      description = "Observa la paleta de Spotify generada por Noctalia";
+      wantedBy = ["graphical-session.target"];
+
+      pathConfig = {
+        PathChanged = ["%h/.config/spicetify/Themes/Comfy/color.ini"];
+        Unit = "korunix-spicetify-palette-sync.service";
+      };
+    };
 
   programs.steam = lib.mkIf (steam.activo or false) {
     enable = true;
+
+    # La plantilla visual de Steam usa Millennium. Se deriva de Steam
+    # para no convertir un detalle técnico en otra pregunta.
+    package = pkgs.millennium-steam;
+
     remotePlay.openFirewall = steam.remote_play or false;
     dedicatedServer.openFirewall = steam.servidor_dedicado or false;
   };
@@ -871,6 +1194,10 @@ in {
 
   environment.systemPackages =
     aplicaciones
+    ++ lib.optionals spotifyActivo [
+      (lib.hiPrio spotifySesion)
+      sincronizarSpotify
+    ]
     ++ [
       programa
       pkgs.git
@@ -906,6 +1233,10 @@ in {
     ]
     ++ lib.optionals niriActivo [
       pkgs.xwayland-satellite
+    ]
+    ++ lib.optionals whatsappActivo [
+      pkgs.google-chrome
+      whatsappWeb
     ];
 
   system.stateVersion = "26.05";

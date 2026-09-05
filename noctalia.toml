@@ -1,7 +1,0 @@
-# Noctalia conserva sus demás valores predeterminados y las preferencias
-# cambiadas desde su propia interfaz. Korunix fija aquí solo la política
-# de capturas que ya está acordada.
-
-[shell.screenshot]
-directory = ""
-filename_pattern = "Captura de pantalla del %Y-%m-%d %H-%M-%S"

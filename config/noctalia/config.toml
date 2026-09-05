@@ -1,0 +1,231 @@
+# Configuración base de Noctalia administrada por Korunix.
+#
+# Este archivo conserva las decisiones visuales y funcionales compartidas entre
+# usuarios. Los marcadores @KORUNIX_*@ se sustituyen al iniciar cada sesión para
+# respetar avatar, idioma y directorios XDG sin guardar rutas personales rígidas.
+# Los cambios hechos desde la interfaz de Noctalia siguen siendo preferencias de
+# esa persona; Korunix no sobrescribe silenciosamente un archivo modificado a mano.
+
+[accessibility]
+ui_scale = 0.9
+
+[bar]
+order = ["default"]
+
+[bar.default]
+auto_hide = false
+background_opacity = 0.5
+border = "outline"
+border_width = 0.0
+capsule = false
+capsule_fill = "surface_variant"
+capsule_opacity = 1.0
+capsule_radius = 8.0
+capsule_thickness = 0.76
+center = ["clock"]
+contact_shadow = false
+enabled = true
+end = ["media", "tray", "notifications", "clipboard", "network", "bluetooth", "volume", "brightness", "battery", "control-center", "screenshot", "session"]
+font_family = ""
+font_weight = "regular"
+layer = "top"
+margin_edge = 10
+margin_ends = 180
+margin_opposite_edge = 0
+padding = 14
+panel_overlap = 1
+position = "top"
+radius = 12
+radius_bottom_left = 12
+radius_bottom_right = 12
+radius_top_left = 12
+radius_top_right = 12
+reserve_space = true
+scale = 1.0
+shadow = false
+start = ["launcher", "wallpaper", "workspaces"]
+thickness = 34
+widget_spacing = 12
+
+[calendar]
+enabled = true
+refresh_minutes = 15
+
+[dock]
+active_monitor_only = false
+active_opacity = 1.0
+active_scale = 1.0
+auto_hide = false
+background_opacity = 0.5
+cross_axis_padding = 8
+enabled = true
+icon_size = 40
+inactive_opacity = 0.85
+inactive_scale = 0.85
+item_spacing = 6
+launcher_icon = "grid-dots"
+launcher_position = "none"
+layer = "top"
+magnification = true
+magnification_scale = 1.35
+main_axis_padding = 16
+margin_edge = 8
+margin_ends = 0
+monitors = []
+pinned = ["firefox", "org.gnome.Nautilus", "spotify", "steam", "net.lutris.Lutris", "anime-game-launcher", "honkers-railway-launcher", "vesktop", "LocalSend", "code", "com.obsproject.Studio", "org.kde.kdenlive", "com.heroicgameslauncher.hgl", "onlyoffice-desktopeditors", "birdfont"]
+position = "bottom"
+radius = 16
+radius_bottom_left = 16
+radius_bottom_right = 16
+radius_top_left = 16
+radius_top_right = 16
+reserve_space = true
+shadow = false
+show_dots = true
+show_instance_count = true
+show_running = true
+
+[lockscreen]
+blur_intensity = 0.5
+blurred_desktop = true
+enabled = false
+monitors = []
+tint_intensity = 0.6
+wallpaper = "~/.korunix/config/noctalia/wallpapers/dark/capriccio-arco-rovinato-e-una-villa-nello-sfondo.jpg"
+
+[osd]
+background_opacity = 0.5
+offset_x = 20
+offset_y = 8
+orientation = "horizontal"
+position = "top_center"
+position_vertical = "top_center"
+scale = 1.0
+
+[osd.kinds]
+bluetooth = true
+brightness = true
+caffeine = true
+dnd = true
+keyboard_layout = true
+lock_keys = true
+nightlight = true
+power_profile = true
+privacy = true
+volume = true
+volume_input = true
+volume_output = true
+wifi = true
+
+[shell]
+avatar_path = "@KORUNIX_AVATAR@"
+clipboard_auto_paste = "auto"
+clipboard_enabled = true
+clipboard_history_max_entries = 100
+clipboard_image_action_command = ""
+clipboard_keep_from_closed_apps = true
+corner_radius_scale = 1.0
+date_format = "%A, %x"
+font_family = "sans-serif"
+lang = "es"
+niri_overview_type_to_launch_enabled = false
+offline_mode = false
+password_style = "default"
+polkit_agent = true
+settings_show_advanced = false
+shared_gl_context = true
+show_location = true
+telemetry_enabled = false
+time_format = "{:%H:%M:%S}"
+
+[shell.animation]
+enabled = true
+speed = 1.0
+
+[shell.launcher]
+app_grid = false
+auto_paste = "auto"
+categories = true
+compact = false
+fetch_exchange_rates = true
+provider_prefix = "/"
+show_icons = true
+sort_by_usage = true
+
+[shell.mpris]
+blacklist = []
+
+[shell.panel]
+borders = true
+clipboard_placement = "floating"
+clipboard_position = "center"
+control_center_placement = "attached"
+launcher_placement = "floating"
+launcher_position = "center"
+open_near_click_clipboard = false
+open_near_click_control_center = false
+open_near_click_launcher = false
+open_near_click_session = false
+open_near_click_wallpaper = false
+session_placement = "attached"
+shadow = false
+transparency_mode = "glass"
+wallpaper_placement = "attached"
+
+[shell.screenshot]
+confirm_region = false
+copy_to_clipboard = true
+directory = "@KORUNIX_SCREENSHOTS@"
+filename_pattern = "@KORUNIX_SCREENSHOT_PATTERN@"
+freeze_screen = true
+pipe_command = ""
+pipe_to_command = false
+remember_last_region = false
+save_to_file = true
+show_cursor = false
+
+[shell.shadow]
+alpha = 0.55
+direction = "down"
+
+[theme]
+builtin = "Noctalia"
+community_palette = "Everforest"
+mode = "@KORUNIX_THEME_MODE@"
+pure_black_dark = false
+source = "@KORUNIX_THEME_SOURCE@"
+
+[theme.templates]
+builtin_ids = ["alacritty", "gtk3", "gtk4", "niri", "qt"]
+community_ids = ["discord", "fastfetch", "gimp", "heroiclauncher", "inkscape", "obs", "obsidian", "prismlauncher", "pywalfox-beta4", "steam", "vscode"]
+enable_builtin_templates = true
+enable_community_templates = true
+
+
+[wallpaper]
+directory = "~/.korunix/config/noctalia/wallpapers"
+directory_dark = "~/.korunix/config/noctalia/wallpapers/dark"
+directory_light = "~/.korunix/config/noctalia/wallpapers/light"
+edge_smoothness = 0.3
+enabled = true
+fill_color = "#111111"
+fill_mode = "crop"
+transition = ["fade", "wipe", "disc", "stripes", "zoom", "honeycomb"]
+transition_duration = 1500
+transition_on_startup = false
+
+[wallpaper.automation]
+enabled = false
+interval_seconds = 1800
+order = "random"
+recursive = true
+
+[wallpaper.default]
+path = "~/.korunix/config/noctalia/wallpapers/dark/capriccio-arco-rovinato-e-una-villa-nello-sfondo.jpg"
+
+[widget.keyboard_layout]
+display = "full"
+show_label = true
+hide_when_single_layout = false
+
+# Las etiquetas humanas del teclado se generan desde korunix.localization.

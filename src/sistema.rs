@@ -4,7 +4,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
-use toml_edit::{value, DocumentMut, Item, Table};
+use toml_edit::{value, Array, DocumentMut, Item, Table};
 
 const PATRON_CAPTURA: &str = "Captura de pantalla del %Y-%m-%d %H-%M-%S";
 
@@ -456,6 +456,7 @@ fn fusionar_noctalia(
     capturas: &Path,
     tema: Option<(&str, &str)>,
     tiene_avatar: bool,
+    spicetify: Option<bool>,
 ) -> Result<(), String> {
     let texto = fs::read_to_string(ruta)
         .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
@@ -485,11 +486,94 @@ fn fusionar_noctalia(
         theme["mode"] = value(mode);
     }
 
+    if let Some(activo) = spicetify {
+        let theme = tabla(documento.as_table_mut(), "theme", "theme")?;
+        let templates = tabla(theme, "templates", "theme.templates")?;
+        let community_ids = templates
+            .entry("community_ids")
+            .or_insert(value(Array::new()))
+            .as_array_mut()
+            .ok_or_else(|| {
+                "No pude usar theme.templates.community_ids. Tiene que ser una lista.".to_string()
+            })?;
+
+        if activo {
+            if !community_ids
+                .iter()
+                .any(|item| item.as_str() == Some("spicetify"))
+            {
+                community_ids.push("spicetify");
+            }
+        } else {
+            loop {
+                let indice = community_ids
+                    .iter()
+                    .position(|item| item.as_str() == Some("spicetify"));
+
+                let Some(indice) = indice else {
+                    break;
+                };
+
+                community_ids.remove(indice);
+            }
+        }
+    }
+
     guardar_toml(ruta, &documento.to_string())
 }
 
 fn fusionar_capturas(ruta: &Path, capturas: &Path) -> Result<(), String> {
-    fusionar_noctalia(ruta, capturas, None, false)
+    fusionar_noctalia(ruta, capturas, None, false, None)
+}
+
+fn escapar_kdl(valor: &str) -> String {
+    valor.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn preparar_capturas_niri(config_home: &Path, capturas: &Path) -> Result<PathBuf, String> {
+    let ruta = config_home.join("niri/korunix-screenshots.kdl");
+    let destino = escapar_kdl(&capturas.to_string_lossy());
+    let patron = escapar_kdl(PATRON_CAPTURA);
+    let texto = format!(
+        "// Korunix mantiene Niri y Noctalia en la misma carpeta de capturas.\n\
+         screenshot-path \"{destino}/{patron}.png\"\n"
+    );
+
+    guardar_toml(&ruta, &texto)?;
+    Ok(ruta)
+}
+
+fn enlazar_integracion_noctalia(destino: &Path, origen: &Path) -> Result<(), String> {
+    if !origen.exists() {
+        return Ok(());
+    }
+
+    if let Some(carpeta) = destino.parent() {
+        fs::create_dir_all(carpeta).map_err(|error| {
+            format!("No pude preparar {}.\nDetalle: {error}", carpeta.display())
+        })?;
+    }
+
+    if destino.is_symlink() {
+        let actual = fs::read_link(destino)
+            .map_err(|error| format!("No pude revisar {}.\nDetalle: {error}", destino.display()))?;
+
+        if actual.starts_with("/etc/korunix/noctalia") {
+            fs::remove_file(destino).map_err(|error| {
+                format!(
+                    "No pude actualizar {}.\nDetalle: {error}",
+                    destino.display()
+                )
+            })?;
+        } else {
+            return Ok(());
+        }
+    } else if destino.exists() {
+        return Ok(());
+    }
+
+    std::os::unix::fs::symlink(origen, destino)
+        .map_err(|error| format!("No pude enlazar {}.\nDetalle: {error}", destino.display()))
 }
 
 fn preparar_sesion_en_con_politica(
@@ -499,6 +583,7 @@ fn preparar_sesion_en_con_politica(
     state_home: &Path,
     tema: Option<(&str, &str)>,
     tiene_avatar: bool,
+    spotify_activo: bool,
 ) -> Result<SesionPreparada, String> {
     if !base.is_file() {
         return Err(format!(
@@ -514,6 +599,8 @@ fn preparar_sesion_en_con_politica(
             capturas.display()
         )
     })?;
+
+    preparar_capturas_niri(config_home, &capturas)?;
 
     let noctalia_dir = config_home.join("noctalia");
     let configuracion_noctalia = noctalia_dir.join("config.toml");
@@ -531,13 +618,34 @@ fn preparar_sesion_en_con_politica(
         })?;
     }
 
-    fusionar_noctalia(&configuracion_noctalia, &capturas, tema, tiene_avatar)?;
+    fusionar_noctalia(
+        &configuracion_noctalia,
+        &capturas,
+        tema,
+        tiene_avatar,
+        Some(spotify_activo),
+    )?;
 
     let settings = state_home.join("noctalia/settings.toml");
 
     if settings.is_file() {
-        fusionar_noctalia(&settings, &capturas, tema, tiene_avatar)?;
+        fusionar_noctalia(&settings, &capturas, tema, tiene_avatar, None)?;
     }
+
+    enlazar_integracion_noctalia(
+        &noctalia_dir.join("30-korunix-gtk4-live.toml"),
+        Path::new("/etc/korunix/noctalia/gtk4-live.toml"),
+    )?;
+
+    enlazar_integracion_noctalia(
+        &home.join(".obsidian/snippets/noctalia.css"),
+        Path::new("/etc/korunix/noctalia/themes/obsidian/obsidian.css"),
+    )?;
+
+    enlazar_integracion_noctalia(
+        &config_home.join("heroic/themes/noctalia.css"),
+        Path::new("/etc/korunix/noctalia/themes/heroic/heroic.css"),
+    )?;
 
     Ok(SesionPreparada {
         configuracion_noctalia,
@@ -551,7 +659,7 @@ fn preparar_sesion_en(
     config_home: &Path,
     state_home: &Path,
 ) -> Result<SesionPreparada, String> {
-    preparar_sesion_en_con_politica(base, home, config_home, state_home, None, false)
+    preparar_sesion_en_con_politica(base, home, config_home, state_home, None, false, false)
 }
 
 pub fn preparar_sesion() -> Result<SesionPreparada, String> {
@@ -580,6 +688,9 @@ pub fn preparar_sesion() -> Result<SesionPreparada, String> {
     };
 
     let tiene_avatar = home.join(".face").exists();
+    let spotify_activo = env::var("KORUNIX_SPOTIFY_ACTIVO")
+        .map(|valor| valor == "1")
+        .unwrap_or(false);
 
     preparar_sesion_en_con_politica(
         &base,
@@ -589,6 +700,7 @@ pub fn preparar_sesion() -> Result<SesionPreparada, String> {
         tema.as_ref()
             .map(|(source, mode)| (source.as_str(), mode.as_str())),
         tiene_avatar,
+        spotify_activo,
     )
 }
 
@@ -647,7 +759,7 @@ mod pruebas {
             },
             virtualizacion: Virtualizacion { activa: true },
             aplicaciones: Aplicaciones {
-                instaladas: vec!["firefox".to_string(), "karere".to_string()],
+                instaladas: vec!["firefox".to_string(), "whatsapp".to_string()],
             },
         }
     }
@@ -677,9 +789,9 @@ mod pruebas {
                     version: "1".to_string(),
                 },
                 Aplicacion {
-                    elegida: "karere".to_string(),
-                    nombre: "karere".to_string(),
-                    version: "2".to_string(),
+                    elegida: "whatsapp".to_string(),
+                    nombre: "whatsapp".to_string(),
+                    version: "PWA".to_string(),
                 },
             ],
             noctalia: true,
@@ -1026,11 +1138,17 @@ filename_pattern = ""
         let texto = fs::read_to_string(&preparada.configuracion_noctalia)
             .expect("debería leer la configuración");
         let capturas = preparada.capturas.clone();
-        let _ = fs::remove_dir_all(&carpeta);
+        let niri = fs::read_to_string(config_home.join("niri/korunix-screenshots.kdl"))
+            .expect("debería generar las capturas de Niri");
 
         assert!(capturas.ends_with("Imágenes/Capturas de pantalla"));
         assert!(texto.contains("# Base de prueba."));
         assert!(texto.contains(PATRON_CAPTURA));
+        assert!(niri.contains("Imágenes/Capturas de pantalla"));
+        assert!(niri.contains(PATRON_CAPTURA));
+        assert!(niri.contains("screenshot-path"));
+
+        let _ = fs::remove_dir_all(&carpeta);
     }
 
     #[test]
@@ -1074,6 +1192,85 @@ filename_pattern = "viejo"
         assert!(despues.contains("enabled = false"));
         assert!(despues.contains(PATRON_CAPTURA));
     }
+
+    #[test]
+    fn spotify_activo_agrega_spicetify_sin_borrar_otras_plantillas() {
+        let carpeta = temporal("spicetify-activo");
+        let home = carpeta.join("home");
+        let config_home = carpeta.join("config");
+        let state_home = carpeta.join("state");
+        let base = carpeta.join("base.toml");
+
+        fs::create_dir_all(&config_home).expect("debería crear XDG_CONFIG_HOME");
+        fs::write(
+            &base,
+            r#"[shell.screenshot]
+directory = ""
+filename_pattern = ""
+
+[theme.templates]
+community_ids = ["steam", "vscode"]
+"#,
+        )
+        .expect("debería escribir la base");
+
+        preparar_sesion_en_con_politica(&base, &home, &config_home, &state_home, None, false, true)
+            .expect("debería preparar Spicetify");
+
+        let texto = fs::read_to_string(config_home.join("noctalia/config.toml"))
+            .expect("debería leer la configuración");
+        let documento = texto
+            .parse::<DocumentMut>()
+            .expect("el TOML debería seguir siendo válido");
+        let ids = documento["theme"]["templates"]["community_ids"]
+            .as_array()
+            .expect("community_ids debería seguir siendo una lista");
+
+        let valores: Vec<&str> = ids.iter().filter_map(|item| item.as_str()).collect();
+        let _ = fs::remove_dir_all(&carpeta);
+
+        assert!(valores.contains(&"steam"));
+        assert!(valores.contains(&"vscode"));
+        assert!(valores.contains(&"spicetify"));
+    }
+
+    #[test]
+    fn spotify_apagado_retira_solo_spicetify() {
+        let carpeta = temporal("spicetify-apagado");
+        let ruta = carpeta.join("config.toml");
+        fs::create_dir_all(&carpeta).expect("debería crear la prueba");
+        fs::write(
+            &ruta,
+            r#"[shell.screenshot]
+directory = ""
+filename_pattern = ""
+
+[theme.templates]
+community_ids = ["steam", "spicetify", "vscode"]
+"#,
+        )
+        .expect("debería escribir la prueba");
+
+        let capturas = carpeta.join("Capturas");
+        fusionar_noctalia(&ruta, &capturas, None, false, Some(false))
+            .expect("debería retirar solo Spicetify");
+
+        let texto = fs::read_to_string(&ruta).expect("debería releer la configuración");
+        let documento = texto
+            .parse::<DocumentMut>()
+            .expect("el TOML debería seguir siendo válido");
+        let ids = documento["theme"]["templates"]["community_ids"]
+            .as_array()
+            .expect("community_ids debería seguir siendo una lista");
+
+        let valores: Vec<&str> = ids.iter().filter_map(|item| item.as_str()).collect();
+        let _ = fs::remove_dir_all(&carpeta);
+
+        assert!(valores.contains(&"steam"));
+        assert!(valores.contains(&"vscode"));
+        assert!(!valores.contains(&"spicetify"));
+    }
+
     #[test]
     fn rechaza_un_plan_con_otra_apariencia() {
         let configuracion = configuracion();
@@ -1152,6 +1349,7 @@ mode = "light"
             &state_home,
             Some(("wallpaper", "auto")),
             true,
+            false,
         )
         .expect("debería preparar la sesión");
 
