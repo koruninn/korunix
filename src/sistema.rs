@@ -71,7 +71,6 @@ pub struct EntradaPlan {
 #[derive(Debug, Deserialize)]
 pub struct UnidadPlan {
     pub nombre: String,
-    pub ruta: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -741,7 +740,7 @@ mod pruebas {
             teclado: Teclado::default(),
             monitor: Monitor::default(),
             almacenamiento: Almacenamiento {
-                disponibles: vec!["datos".to_string()],
+                disponibles: vec!["ST3500413AS · 500 GB".to_string()],
             },
             bluetooth: Bluetooth { activo: true },
             sunshine: Sunshine {
@@ -823,8 +822,7 @@ mod pruebas {
                 wayland: true,
             },
             almacenamiento: vec![UnidadPlan {
-                nombre: "datos".to_string(),
-                ruta: "/mnt/datos".to_string(),
+                nombre: "ST3500413AS · 500 GB".to_string(),
             }],
             bluetooth: true,
             sunshine: SunshinePlan {
@@ -899,7 +897,7 @@ mod pruebas {
             "wayland": true
           },
           "almacenamiento": [
-            {"nombre": "datos", "ruta": "/mnt/datos"}
+            {"nombre": "ST3500413AS · 500 GB"}
           ],
           "bluetooth": true,
           "sunshine": {

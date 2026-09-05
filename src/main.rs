@@ -62,6 +62,12 @@ fn ayuda() {
     eprintln!("  korunix personas");
     eprintln!("  korunix escritorio");
     eprintln!("  korunix escritorio <niri|hyprland|cinnamon|plasma>");
+    eprintln!("  korunix escritorios");
+    eprintln!("  korunix escritorios <niri|hyprland|plasma|cinnamon> <activar|desactivar>");
+    eprintln!("  korunix teclado");
+    eprintln!("  korunix teclado <españa|latinoamérica> <activar|desactivar>");
+    eprintln!("  korunix monitor");
+    eprintln!("  korunix monitor <resolucion> <hz>");
     eprintln!("  korunix canal");
     eprintln!("  korunix canal <estable|inestable>");
     eprintln!("  korunix apariencia");
@@ -289,7 +295,7 @@ fn mostrar_plan(raiz: &Path) {
         println!("Unidades disponibles:");
 
         for unidad in &plan.almacenamiento {
-            println!("  - {} → {}", unidad.nombre, unidad.ruta);
+            println!("  - {}", unidad.nombre);
         }
     }
 
@@ -463,6 +469,149 @@ fn cambiar_escritorio(raiz: &Path, escritorio: &str) {
             println!("El escritorio principal ya era «{escritorio}».");
             println!("No cambié nada.");
         }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn orden_escritorio(nombre: &str) -> usize {
+    match nombre {
+        "niri" => 0,
+        "hyprland" => 1,
+        "plasma" => 2,
+        "cinnamon" => 3,
+        _ => usize::MAX,
+    }
+}
+
+fn mostrar_escritorios(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => {
+            println!(
+                "Escritorio principal: {}",
+                configuracion.escritorio.principal
+            );
+            println!(
+                "Disponibles: {}",
+                configuracion.escritorio.instalados_efectivos().join(", ")
+            );
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn cambiar_escritorio_instalado(raiz: &Path, nombre: &str, valor: &str) {
+    if !matches!(nombre, "niri" | "hyprland" | "plasma" | "cinnamon") {
+        salir_con_error(&format!(
+            "No conozco el escritorio «{nombre}».\nUsa niri, hyprland, plasma o cinnamon."
+        ));
+    }
+
+    let activo = leer_interruptor(valor).unwrap_or_else(|error| salir_con_error(&error));
+    let actual = configuracion::leer(&raiz.join("configuracion.toml"))
+        .unwrap_or_else(|error| salir_con_error(&error));
+
+    let mut instalados: Vec<String> = actual
+        .escritorio
+        .instalados_efectivos()
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+
+    if activo {
+        if !instalados.iter().any(|instalado| instalado == nombre) {
+            instalados.push(nombre.to_string());
+        }
+    } else {
+        instalados.retain(|instalado| instalado != nombre);
+    }
+
+    instalados.sort_by_key(|instalado| orden_escritorio(instalado));
+
+    match configuracion::cambiar_escritorios(&raiz.join("configuracion.toml"), &instalados) {
+        Ok(true) => {
+            println!(
+                "✓ {nombre} quedó {} entre los escritorios disponibles.",
+                if activo { "activo" } else { "apagado" }
+            );
+            println!("NixOS todavía no cambió.");
+        }
+        Ok(false) => println!("No cambié nada."),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn mostrar_teclado(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => {
+            println!(
+                "Teclados: {}",
+                configuracion.teclado.distribuciones.join(", ")
+            );
+            println!("Cambio: {}", configuracion.teclado.cambio);
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn cambiar_teclado(raiz: &Path, nombre: &str, valor: &str) {
+    if !matches!(nombre, "españa" | "latinoamérica") {
+        salir_con_error(&format!(
+            "Todavía no conozco el teclado «{nombre}» en este primer catálogo."
+        ));
+    }
+
+    let activo = leer_interruptor(valor).unwrap_or_else(|error| salir_con_error(&error));
+    let actual = configuracion::leer(&raiz.join("configuracion.toml"))
+        .unwrap_or_else(|error| salir_con_error(&error));
+    let mut distribuciones = actual.teclado.distribuciones;
+
+    if activo {
+        if !distribuciones
+            .iter()
+            .any(|distribucion| distribucion == nombre)
+        {
+            distribuciones.push(nombre.to_string());
+        }
+    } else {
+        distribuciones.retain(|distribucion| distribucion != nombre);
+    }
+
+    distribuciones.sort_by_key(|distribucion| if distribucion == "españa" { 0 } else { 1 });
+
+    match configuracion::cambiar_teclado(&raiz.join("configuracion.toml"), &distribuciones) {
+        Ok(true) => {
+            println!(
+                "✓ El teclado «{nombre}» quedó {}.",
+                if activo { "activo" } else { "apagado" }
+            );
+            println!("NixOS todavía no cambió.");
+        }
+        Ok(false) => println!("No cambié nada."),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn mostrar_monitor(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => println!(
+            "Monitor: {} @ {} Hz",
+            configuracion.monitor.resolucion, configuracion.monitor.hz
+        ),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn cambiar_monitor(raiz: &Path, resolucion: &str, hz: &str) {
+    let hz = hz.parse::<u32>().unwrap_or_else(|_| {
+        salir_con_error("Los Hz tienen que ser un número entero mayor que cero.")
+    });
+
+    match configuracion::cambiar_monitor(&raiz.join("configuracion.toml"), resolucion, hz) {
+        Ok(true) => {
+            println!("✓ Monitor: {resolucion} @ {hz} Hz.");
+            println!("NixOS todavía no cambió.");
+        }
+        Ok(false) => println!("El monitor ya tenía esos valores."),
         Err(error) => salir_con_error(&error),
     }
 }
@@ -885,6 +1034,14 @@ fn main() {
         [comando] if comando == "personas" => mostrar_personas(&raiz),
         [comando] if comando == "escritorio" => mostrar_escritorio(&raiz),
         [comando, escritorio] if comando == "escritorio" => cambiar_escritorio(&raiz, escritorio),
+        [comando] if comando == "escritorios" => mostrar_escritorios(&raiz),
+        [comando, escritorio, valor] if comando == "escritorios" => {
+            cambiar_escritorio_instalado(&raiz, escritorio, valor)
+        }
+        [comando] if comando == "teclado" => mostrar_teclado(&raiz),
+        [comando, teclado, valor] if comando == "teclado" => cambiar_teclado(&raiz, teclado, valor),
+        [comando] if comando == "monitor" => mostrar_monitor(&raiz),
+        [comando, resolucion, hz] if comando == "monitor" => cambiar_monitor(&raiz, resolucion, hz),
         [comando] if comando == "canal" => mostrar_canal(&raiz),
         [comando, canal] if comando == "canal" => cambiar_canal(&raiz, canal),
         [comando] if comando == "apariencia" => mostrar_apariencia(&raiz),

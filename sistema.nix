@@ -724,7 +724,7 @@
     ];
 
   sistemasDeArchivos = builtins.listToAttrs (map (unidad: {
-      name = "/mnt/${unidad.nombre}";
+      name = unidad.ruta;
       value = {
         device = "/dev/disk/by-uuid/${unidad.uuid}";
         fsType =

@@ -165,6 +165,61 @@ fn palabra_estado(activo: bool) -> &'static str {
     }
 }
 
+fn escritorios_elegidos(
+    niri: &adw::SwitchRow,
+    hyprland: &adw::SwitchRow,
+    plasma: &adw::SwitchRow,
+    cinnamon: &adw::SwitchRow,
+) -> Vec<String> {
+    [
+        ("niri", niri.is_active()),
+        ("hyprland", hyprland.is_active()),
+        ("plasma", plasma.is_active()),
+        ("cinnamon", cinnamon.is_active()),
+    ]
+    .into_iter()
+    .filter(|(_, activo)| *activo)
+    .map(|(nombre, _)| nombre.to_string())
+    .collect()
+}
+
+fn teclados_elegidos(espana: &adw::SwitchRow, latinoamerica: &adw::SwitchRow) -> Vec<String> {
+    [
+        ("españa", espana.is_active()),
+        ("latinoamérica", latinoamerica.is_active()),
+    ]
+    .into_iter()
+    .filter(|(_, activo)| *activo)
+    .map(|(nombre, _)| nombre.to_string())
+    .collect()
+}
+
+fn guardar_monitor(
+    resolucion: &gtk::Entry,
+    hz: &gtk::SpinButton,
+    raiz: &Path,
+    mensaje: &gtk::Label,
+    aviso: &gtk::Revealer,
+    boton_aplicar: &gtk::Button,
+    ocupado: &Rc<Cell<bool>>,
+) {
+    let resolucion = resolucion.text().to_string();
+    let hz = hz.value_as_int().max(0) as u32;
+
+    match configuracion::cambiar_monitor(&raiz.join("configuracion.toml"), &resolucion, hz) {
+        Ok(true) => mensaje_guardado(
+            mensaje,
+            raiz,
+            aviso,
+            boton_aplicar,
+            ocupado,
+            &format!("✓ Monitor guardado como {resolucion} @ {hz} Hz. NixOS todavía no cambió."),
+        ),
+        Ok(false) => mensaje.set_text("El monitor ya tenía esos valores."),
+        Err(error) => mensaje.set_text(&error),
+    }
+}
+
 fn anexar_linea(vista: &gtk::TextView, linea: &str) {
     let buffer = vista.buffer();
     let mut final_texto = buffer.end_iter();
@@ -362,6 +417,14 @@ fn recargar_controles(
     entrada_nombre: &gtk::Entry,
     selector_canal: &gtk::DropDown,
     selector_escritorio: &gtk::DropDown,
+    escritorio_niri: &adw::SwitchRow,
+    escritorio_hyprland: &adw::SwitchRow,
+    escritorio_plasma: &adw::SwitchRow,
+    escritorio_cinnamon: &adw::SwitchRow,
+    teclado_espana: &adw::SwitchRow,
+    teclado_latinoamerica: &adw::SwitchRow,
+    entrada_resolucion: &gtk::Entry,
+    entrada_hz: &gtk::SpinButton,
     selector_estilo: &gtk::DropDown,
     selector_modo: &gtk::DropDown,
     bluetooth: &adw::SwitchRow,
@@ -392,6 +455,31 @@ fn recargar_controles(
     entrada_nombre.set_text(&configuracion.nombre);
     selector_canal.set_selected(indice_canal(&configuracion.canal));
     selector_escritorio.set_selected(indice_escritorio(&configuracion.escritorio.principal));
+
+    let escritorios = configuracion.escritorio.instalados_efectivos();
+    escritorio_niri.set_active(escritorios.contains(&"niri"));
+    escritorio_hyprland.set_active(escritorios.contains(&"hyprland"));
+    escritorio_plasma.set_active(escritorios.contains(&"plasma"));
+    escritorio_cinnamon.set_active(escritorios.contains(&"cinnamon"));
+
+    teclado_espana.set_active(
+        configuracion
+            .teclado
+            .distribuciones
+            .iter()
+            .any(|distribucion| distribucion == "españa"),
+    );
+    teclado_latinoamerica.set_active(
+        configuracion
+            .teclado
+            .distribuciones
+            .iter()
+            .any(|distribucion| distribucion == "latinoamérica"),
+    );
+
+    entrada_resolucion.set_text(&configuracion.monitor.resolucion);
+    entrada_hz.set_value(f64::from(configuracion.monitor.hz));
+
     selector_estilo.set_selected(indice_estilo(&configuracion.apariencia.estilo));
     selector_modo.set_selected(indice_modo(&configuracion.apariencia.modo));
     bluetooth.set_active(configuracion.bluetooth.activo);
@@ -659,6 +747,73 @@ fn construir_ventana(aplicacion: &Application) {
     configuracion_grupo.add(&edicion);
     contenido.append(&configuracion_grupo);
 
+    let equipo_grupo = adw::PreferencesGroup::builder()
+        .title("Sesión y equipo")
+        .description("Aquí eliges qué escritorios quedan disponibles, tus teclados y la pantalla.")
+        .build();
+
+    let escritorio_niri = adw::SwitchRow::builder()
+        .title("Niri disponible")
+        .subtitle("No puedes apagarlo mientras sea el escritorio principal.")
+        .build();
+
+    let escritorio_hyprland = adw::SwitchRow::builder()
+        .title("Hyprland disponible")
+        .build();
+
+    let escritorio_plasma = adw::SwitchRow::builder().title("Plasma disponible").build();
+
+    let escritorio_cinnamon = adw::SwitchRow::builder()
+        .title("Cinnamon disponible")
+        .build();
+
+    let teclado_espana = adw::SwitchRow::builder()
+        .title("Teclado de España")
+        .subtitle("Incluye la variante con composición usada por Korunix.")
+        .build();
+
+    let teclado_latinoamerica = adw::SwitchRow::builder()
+        .title("Teclado latinoamericano")
+        .build();
+
+    let cambio_teclado = adw::ActionRow::builder()
+        .title("Cambiar entre teclados")
+        .subtitle("Alt + Shift")
+        .build();
+
+    let monitor_titulo = gtk::Label::new(Some("Pantalla"));
+    monitor_titulo.set_halign(gtk::Align::Start);
+    monitor_titulo.add_css_class("heading");
+
+    let monitor_caja = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+
+    let entrada_resolucion = gtk::Entry::new();
+    entrada_resolucion.set_hexpand(true);
+    entrada_resolucion.set_placeholder_text(Some("1920x1080"));
+
+    let entrada_hz = gtk::SpinButton::with_range(1.0, 1000.0, 1.0);
+    entrada_hz.set_numeric(true);
+    entrada_hz.set_width_chars(5);
+
+    let boton_monitor = gtk::Button::with_label("Guardar");
+    monitor_caja.append(&entrada_resolucion);
+    monitor_caja.append(&entrada_hz);
+    monitor_caja.append(&boton_monitor);
+
+    let monitor_bloque = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    monitor_bloque.append(&monitor_titulo);
+    monitor_bloque.append(&monitor_caja);
+
+    equipo_grupo.add(&escritorio_niri);
+    equipo_grupo.add(&escritorio_hyprland);
+    equipo_grupo.add(&escritorio_plasma);
+    equipo_grupo.add(&escritorio_cinnamon);
+    equipo_grupo.add(&teclado_espana);
+    equipo_grupo.add(&teclado_latinoamerica);
+    equipo_grupo.add(&cambio_teclado);
+    equipo_grupo.add(&monitor_bloque);
+    contenido.append(&equipo_grupo);
+
     let apariencia_grupo = adw::PreferencesGroup::builder()
         .title("Apariencia")
         .description(
@@ -849,6 +1004,15 @@ fn construir_ventana(aplicacion: &Application) {
         boton_nombre.clone().upcast(),
         selector_canal.clone().upcast(),
         selector_escritorio.clone().upcast(),
+        escritorio_niri.clone().upcast(),
+        escritorio_hyprland.clone().upcast(),
+        escritorio_plasma.clone().upcast(),
+        escritorio_cinnamon.clone().upcast(),
+        teclado_espana.clone().upcast(),
+        teclado_latinoamerica.clone().upcast(),
+        entrada_resolucion.clone().upcast(),
+        entrada_hz.clone().upcast(),
+        boton_monitor.clone().upcast(),
         selector_estilo.clone().upcast(),
         selector_modo.clone().upcast(),
         bluetooth.clone().upcast(),
@@ -973,6 +1137,160 @@ fn construir_ventana(aplicacion: &Application) {
                     }
                 }
             }
+        });
+    }
+
+    for (fila, nombre) in [
+        (escritorio_niri.clone(), "niri"),
+        (escritorio_hyprland.clone(), "hyprland"),
+        (escritorio_plasma.clone(), "plasma"),
+        (escritorio_cinnamon.clone(), "cinnamon"),
+    ] {
+        let niri = escritorio_niri.clone();
+        let hyprland = escritorio_hyprland.clone();
+        let plasma = escritorio_plasma.clone();
+        let cinnamon = escritorio_cinnamon.clone();
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        fila.connect_active_notify(move |_| {
+            if actualizando.get() {
+                return;
+            }
+
+            let instalados = escritorios_elegidos(&niri, &hyprland, &plasma, &cinnamon);
+
+            match configuracion::cambiar_escritorios(&raiz.join("configuracion.toml"), &instalados)
+            {
+                Ok(true) => mensaje_guardado(
+                    &mensaje,
+                    &raiz,
+                    &aviso,
+                    &boton_aplicar,
+                    &ocupado,
+                    &format!("✓ Cambié la disponibilidad de {nombre}. NixOS todavía no cambió."),
+                ),
+                Ok(false) => {}
+                Err(error) => {
+                    mensaje.set_text(&error);
+
+                    if let Ok(configuracion) = configuracion::leer(&raiz.join("configuracion.toml"))
+                    {
+                        let instalados = configuracion.escritorio.instalados_efectivos();
+                        actualizando.set(true);
+                        niri.set_active(instalados.contains(&"niri"));
+                        hyprland.set_active(instalados.contains(&"hyprland"));
+                        plasma.set_active(instalados.contains(&"plasma"));
+                        cinnamon.set_active(instalados.contains(&"cinnamon"));
+                        actualizando.set(false);
+                    }
+                }
+            }
+        });
+    }
+
+    for (fila, nombre) in [
+        (teclado_espana.clone(), "españa"),
+        (teclado_latinoamerica.clone(), "latinoamérica"),
+    ] {
+        let espana = teclado_espana.clone();
+        let latinoamerica = teclado_latinoamerica.clone();
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        fila.connect_active_notify(move |_| {
+            if actualizando.get() {
+                return;
+            }
+
+            let distribuciones = teclados_elegidos(&espana, &latinoamerica);
+
+            match configuracion::cambiar_teclado(&raiz.join("configuracion.toml"), &distribuciones)
+            {
+                Ok(true) => mensaje_guardado(
+                    &mensaje,
+                    &raiz,
+                    &aviso,
+                    &boton_aplicar,
+                    &ocupado,
+                    &format!("✓ Cambié el teclado «{nombre}». NixOS todavía no cambió."),
+                ),
+                Ok(false) => {}
+                Err(error) => {
+                    mensaje.set_text(&error);
+
+                    if let Ok(configuracion) = configuracion::leer(&raiz.join("configuracion.toml"))
+                    {
+                        actualizando.set(true);
+                        espana.set_active(
+                            configuracion
+                                .teclado
+                                .distribuciones
+                                .iter()
+                                .any(|valor| valor == "españa"),
+                        );
+                        latinoamerica.set_active(
+                            configuracion
+                                .teclado
+                                .distribuciones
+                                .iter()
+                                .any(|valor| valor == "latinoamérica"),
+                        );
+                        actualizando.set(false);
+                    }
+                }
+            }
+        });
+    }
+
+    {
+        let resolucion = entrada_resolucion.clone();
+        let hz = entrada_hz.clone();
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+
+        boton_monitor.connect_clicked(move |_| {
+            guardar_monitor(
+                &resolucion,
+                &hz,
+                &raiz,
+                &mensaje,
+                &aviso,
+                &boton_aplicar,
+                &ocupado,
+            );
+        });
+    }
+
+    {
+        let hz = entrada_hz.clone();
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+
+        entrada_resolucion.connect_activate(move |resolucion| {
+            guardar_monitor(
+                resolucion,
+                &hz,
+                &raiz,
+                &mensaje,
+                &aviso,
+                &boton_aplicar,
+                &ocupado,
+            );
         });
     }
 
@@ -1427,6 +1745,14 @@ fn construir_ventana(aplicacion: &Application) {
         let entrada_nombre = entrada_nombre.clone();
         let selector_canal = selector_canal.clone();
         let selector_escritorio = selector_escritorio.clone();
+        let escritorio_niri = escritorio_niri.clone();
+        let escritorio_hyprland = escritorio_hyprland.clone();
+        let escritorio_plasma = escritorio_plasma.clone();
+        let escritorio_cinnamon = escritorio_cinnamon.clone();
+        let teclado_espana = teclado_espana.clone();
+        let teclado_latinoamerica = teclado_latinoamerica.clone();
+        let entrada_resolucion = entrada_resolucion.clone();
+        let entrada_hz = entrada_hz.clone();
         let selector_estilo = selector_estilo.clone();
         let selector_modo = selector_modo.clone();
         let bluetooth = bluetooth.clone();
@@ -1451,6 +1777,14 @@ fn construir_ventana(aplicacion: &Application) {
                 &entrada_nombre,
                 &selector_canal,
                 &selector_escritorio,
+                &escritorio_niri,
+                &escritorio_hyprland,
+                &escritorio_plasma,
+                &escritorio_cinnamon,
+                &teclado_espana,
+                &teclado_latinoamerica,
+                &entrada_resolucion,
+                &entrada_hz,
                 &selector_estilo,
                 &selector_modo,
                 &bluetooth,
@@ -1558,6 +1892,14 @@ fn construir_ventana(aplicacion: &Application) {
         &entrada_nombre,
         &selector_canal,
         &selector_escritorio,
+        &escritorio_niri,
+        &escritorio_hyprland,
+        &escritorio_plasma,
+        &escritorio_cinnamon,
+        &teclado_espana,
+        &teclado_latinoamerica,
+        &entrada_resolucion,
+        &entrada_hz,
         &selector_estilo,
         &selector_modo,
         &bluetooth,

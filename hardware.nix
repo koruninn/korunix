@@ -12,12 +12,16 @@
   # La resolución y los Hz se eligen en configuracion.toml.
   _module.args.salidaMonitor = "DP-1";
 
-  # Estos datos describen la unidad que Korunix conoce como «datos».
-  # La persona solo decide en configuracion.toml si quiere tenerla disponible.
+  # Este disco fue detectado en este equipo. La persona lo reconoce por
+  # modelo y capacidad; UUID y ruta siguen siendo detalles técnicos.
   _module.args.unidadesDetectadas = {
-    datos = {
+    "ST3500413AS · 500 GB" = {
       uuid = "036F8E656FF00FB2";
       sistemaArchivos = "ntfs";
+      ruta = "/mnt/datos";
+      modelo = "ST3500413AS";
+      capacidad = "500 GB";
+      transporte = "SATA";
       uid = 1000;
       gid = 100;
     };

@@ -42,7 +42,7 @@ hz = 120
 
 [almacenamiento]
 # Korunix ya conoce el disco por dentro; aquí solo eliges si quieres tenerlo disponible.
-disponibles = ["datos"]
+disponibles = ["ST3500413AS · 500 GB"]
 
 [bluetooth]
 activo = true

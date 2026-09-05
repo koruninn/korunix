@@ -467,7 +467,7 @@ fn revisar_almacenamiento(almacenamiento: &Almacenamiento) -> Result<(), String>
     let mut vistas = HashSet::new();
 
     for unidad in &almacenamiento.disponibles {
-        if unidad != "datos" {
+        if unidad != "ST3500413AS · 500 GB" {
             return Err(format!(
                 "Todavía no conozco la unidad «{unidad}» en este equipo."
             ));
@@ -779,6 +779,104 @@ fn seccion<'a>(documento: &'a mut DocumentMut, nombre: &str) -> Result<&'a mut T
         })
 }
 
+fn array_humano(valores: &[String]) -> Array {
+    let mut array = Array::new();
+
+    for valor in valores {
+        array.push(valor.as_str());
+    }
+
+    array
+}
+
+fn cambiar_escritorios_en_texto(
+    texto: &str,
+    instalados: &[String],
+) -> Result<Option<String>, String> {
+    let actual = entender(texto, "la configuración")?;
+    let nueva = Escritorio {
+        principal: actual.escritorio.principal.clone(),
+        instalados: instalados.to_vec(),
+    };
+    revisar_escritorios(&nueva)?;
+
+    let actuales: Vec<String> = actual
+        .escritorio
+        .instalados_efectivos()
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+
+    if actuales == instalados {
+        return Ok(None);
+    }
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+    seccion(&mut documento, "escritorio")?["instalados"] = value(array_humano(instalados));
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
+fn cambiar_teclado_en_texto(
+    texto: &str,
+    distribuciones: &[String],
+) -> Result<Option<String>, String> {
+    let actual = entender(texto, "la configuración")?;
+    let nuevo_teclado = Teclado {
+        distribuciones: distribuciones.to_vec(),
+        cambio: actual.teclado.cambio.clone(),
+    };
+    revisar_teclado(&nuevo_teclado)?;
+
+    if actual.teclado.distribuciones == distribuciones {
+        return Ok(None);
+    }
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+    seccion(&mut documento, "teclado")?["distribuciones"] = value(array_humano(distribuciones));
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
+fn cambiar_monitor_en_texto(
+    texto: &str,
+    resolucion: &str,
+    hz: u32,
+) -> Result<Option<String>, String> {
+    let actual = entender(texto, "la configuración")?;
+    let nuevo_monitor = Monitor {
+        resolucion: resolucion.to_string(),
+        hz,
+    };
+    revisar_monitor(&nuevo_monitor)?;
+
+    if actual.monitor.resolucion == resolucion && actual.monitor.hz == hz {
+        return Ok(None);
+    }
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+    let monitor = seccion(&mut documento, "monitor")?;
+    monitor["resolucion"] = value(resolucion);
+    monitor["hz"] = value(i64::from(hz));
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
 fn cambiar_apariencia_en_texto(
     texto: &str,
     estilo: &str,
@@ -949,6 +1047,51 @@ fn guardar(ruta: &Path, texto: &str) -> Result<(), String> {
     }
 
     resultado
+}
+
+pub fn cambiar_escritorios(ruta: &Path, instalados: &[String]) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    entender_completa(&texto, &ruta.display().to_string())?;
+
+    let Some(nuevo) = cambiar_escritorios_en_texto(&texto, instalados)? else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
+}
+
+pub fn cambiar_teclado(ruta: &Path, distribuciones: &[String]) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    entender_completa(&texto, &ruta.display().to_string())?;
+
+    let Some(nuevo) = cambiar_teclado_en_texto(&texto, distribuciones)? else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
+}
+
+pub fn cambiar_monitor(ruta: &Path, resolucion: &str, hz: u32) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    entender_completa(&texto, &ruta.display().to_string())?;
+
+    let Some(nuevo) = cambiar_monitor_en_texto(&texto, resolucion, hz)? else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
 }
 
 pub fn cambiar_apariencia(ruta: &Path, estilo: &str, modo: &str) -> Result<bool, String> {
@@ -1664,16 +1807,19 @@ instalados = ["niri", "niri"]
     }
 
     #[test]
-    fn la_unidad_datos_se_elige_sin_escribir_uuid() {
+    fn la_unidad_reconocible_se_elige_sin_escribir_uuid() {
         let configuracion = leer_texto(
             r#"
 [almacenamiento]
-disponibles = ["datos"]
+disponibles = ["ST3500413AS · 500 GB"]
 "#,
         )
         .expect("la unidad conocida debería ser válida");
 
-        assert_eq!(configuracion.almacenamiento.disponibles, vec!["datos"]);
+        assert_eq!(
+            configuracion.almacenamiento.disponibles,
+            vec!["ST3500413AS · 500 GB"]
+        );
     }
 
     #[test]
@@ -1788,6 +1934,59 @@ modo = "automatico"
         .expect_err("un estilo inventado debería rechazarse");
 
         assert!(error.contains("superbonito"));
+    }
+
+    #[test]
+    fn el_escritorio_principal_no_se_puede_quitar_de_instalados() {
+        let original = r#"[escritorio]
+principal = "niri"
+instalados = ["niri", "hyprland"]
+"#;
+
+        let error = cambiar_escritorios_en_texto(original, &["hyprland".to_string()])
+            .expect_err("no debería quitar el escritorio principal");
+
+        assert!(error.contains("principal"));
+        assert!(error.contains("instalados"));
+    }
+
+    #[test]
+    fn cambiar_teclados_conserva_el_metodo_de_cambio() {
+        let original = r#"# Este comentario sigue.
+[teclado]
+distribuciones = ["españa", "latinoamérica"]
+cambio = "alt+shift"
+"#;
+
+        let nuevo = cambiar_teclado_en_texto(original, &["españa".to_string()])
+            .expect("debería poder cambiar la lista")
+            .expect("debería existir un cambio");
+
+        assert!(nuevo.contains("# Este comentario sigue."));
+        assert!(nuevo.contains("cambio = \"alt+shift\""));
+
+        let configuracion = leer_texto(&nuevo).expect("el resultado debería ser válido");
+        assert_eq!(configuracion.teclado.distribuciones, vec!["españa"]);
+    }
+
+    #[test]
+    fn cambiar_monitor_conserva_lo_demas() {
+        let original = r#"[monitor]
+resolucion = "1920x1080"
+hz = 120
+
+[bluetooth]
+activo = true
+"#;
+
+        let nuevo = cambiar_monitor_en_texto(original, "2560x1440", 144)
+            .expect("debería poder cambiar el monitor")
+            .expect("debería existir un cambio");
+
+        let configuracion = leer_texto(&nuevo).expect("el resultado debería ser válido");
+        assert_eq!(configuracion.monitor.resolucion, "2560x1440");
+        assert_eq!(configuracion.monitor.hz, 144);
+        assert!(configuracion.bluetooth.activo);
     }
 
     #[test]

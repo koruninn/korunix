@@ -355,7 +355,6 @@
           map
           (unidad: {
             nombre = unidad;
-            ruta = "/mnt/${unidad}";
           })
           almacenamiento.disponibles;
 
