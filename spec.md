@@ -382,7 +382,7 @@ a476d7d1dbee231266f9e904d878ec931bcafe6e37b14191430b5feb1d3da21e
 
 Figma Linux Next se conserva mientras siga siendo la elección comprobada porque aporta la integración `figma://` y comportamiento específico que no se sustituye automáticamente solo porque exista otro paquete llamado Figma en Nixpkgs.
 
-Elegir Spotify deriva Spotify con Spicetify y su funcionamiento Wayland. Los temas ligados a la apariencia global se resuelven en el frente de apariencia; no se convierten en otra decisión duplicada dentro de Aplicaciones.
+Elegir Spotify deriva Spotify con Spicetify y su funcionamiento Wayland. En Niri/Hyprland, esa misma elección añade la plantilla comunitaria `spicetify` a Noctalia; Noctalia genera la paleta Comfy y Korunix sincroniza sus colores con la copia de ejecución de Spotify. No existe una segunda opción humana para activar Spicetify ni otra plantilla duplicada. Al apagar Spotify, Korunix retira únicamente esa integración y conserva las demás plantillas de Noctalia.
 
 ## 12. Escritorios y apariencia
 
@@ -436,9 +436,13 @@ Blueman y el applet de NetworkManager pueden estar instalados porque Cinnamon lo
 
 La integración con teléfonos también se deriva del escritorio: Niri, Hyprland y Cinnamon usan Valent; Plasma usa KDE Connect. Si están instaladas ambas familias, ambas implementaciones pueden coexistir, pero cada una aparece y arranca únicamente en sus sesiones.
 
-Elegir Niri o Hyprland deriva Noctalia como parte de esa familia de escritorio. Cinnamon y Plasma no reciben su servicio ni su configuración. En el primer corte de `desde-cero`, Niri usa una configuración KDL pequeña y explícita con launcher, controles, bloqueo, capturas, terminal, archivos y navegación básica.
+Elegir Niri o Hyprland deriva Noctalia como parte de esa familia de escritorio. Cinnamon y Plasma no reciben su servicio ni su configuración. Niri conserva la experiencia comprobada: desenfoque, esquinas redondeadas, cursor Bibata, PiP, atajos, launcher, controles, bloqueo, capturas localizadas, terminal, archivos y navegación.
 
 Noctalia conserva sus valores predeterminados y las preferencias cambiadas desde su interfaz. Korunix no reemplaza un `~/.config/noctalia/config.toml` existente: fusiona únicamente la política que administra. La misma política se aplica a `~/.local/state/noctalia/settings.toml` cuando ese archivo existe.
+
+La familia Noctalia instala los 19 fondos comprobados sin reemplazar la elección actual de la persona. Los iconos usan Hatter: Everforest deriva `Hatter-Green` y Predeterminado/Dinámico usan `Hatter-Slate`. Los cambios visuales que Noctalia puede recoger en vivo no obligan a cerrar sesión.
+
+Las plantillas de aplicaciones se derivan de las aplicaciones elegidas. Steam usa la plantilla comunitaria `steam`; Spotify usa la plantilla comunitaria `spicetify` y sincroniza los 26 colores Comfy con Spotify. Plasma y Cinnamon permanecen fuera de estas plantillas.
 
 Las capturas usan el directorio XDG de imágenes más `Capturas de pantalla` y el patrón `Captura de pantalla del %Y-%m-%d %H-%M-%S`.
 
@@ -482,7 +486,7 @@ remote_play = true
 servidor_dedicado = true
 ```
 
-Steam deriva GameMode. Remote Play y servidor dedicado abren sus reglas únicamente cuando Steam está activo y la subopción correspondiente está encendida. Millennium y la integración visual de Steam no se convierten en nuevas preguntas humanas; se resolverán dentro del frente de apariencia cuando corresponda.
+Steam deriva GameMode. Remote Play y servidor dedicado abren sus reglas únicamente cuando Steam está activo y la subopción correspondiente está encendida. Cuando Steam está activo, Korunix deriva también Millennium como detalle técnico. En Niri/Hyprland, Noctalia habilita la plantilla comunitaria `steam`. Millennium y esa plantilla no son preguntas humanas adicionales.
 
 El acceso remoto más amplio puede integrar Sunshine/Moonlight y Tailscale cuando se trabaje ese frente; no es requisito del primer corte desde cero.
 
@@ -1034,7 +1038,29 @@ anterior    = /nix/store/yc3bwpvcsdlxsz6d6b5pjcr695ysxy15-nixos-system-korunix-2
 kernel      = 7.2.2
 ```
 
-No aparecieron unidades systemd fallidas nuevas. Con `preview`, `aplicar` y `rollback` ya probados sobre generaciones reales, el siguiente frente de la reimplementación es llevar estos mismos flujos a GTK4/libadwaita sin duplicar la lógica: la interfaz muestra y pregunta; el mismo Rust sigue haciendo el trabajo.
+No aparecieron unidades systemd fallidas nuevas.
+
+La recuperación de la experiencia visual completa quedó cerrada en:
+
+```text
+1356982c5c2453cf21ce1493750e9c3b677d3318
+```
+
+La generación final comprobada y aplicada exactamente fue:
+
+```text
+/nix/store/7xhk5rmhl23439qgwylmljz5n0pqcgh6-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+En Niri quedaron comprobados en uso real el desenfoque, las esquinas redondeadas, Bibata, PiP, atajos, capturas localizadas, Hatter y los 19 fondos. Los cambios visuales de Noctalia pudieron recogerse sin cerrar sesión.
+
+Steam deriva Millennium automáticamente y la plantilla comunitaria `steam` de Noctalia quedó comprobada en uso real.
+
+Spotify sigue siendo una sola elección humana. Esa elección deriva Spicetify, Wayland y, en Niri/Hyprland, la plantilla comunitaria `spicetify`. Noctalia genera la paleta Comfy y Korunix sincroniza sus 26 colores con Spotify; la integración quedó comprobada en uso real. El bloque terminó con 80 tests de Rust aprobados.
+
+Durante el cierre apareció una unidad transitoria de `drkonqi-coredump-processor` en estado fallido por timeout mientras DrKonqi procesaba un coredump. El diagnóstico confirmó que era el ayudante de informes de fallos de KDE, no una unidad de Korunix ni un fallo persistente del sistema. Se limpió únicamente ese estado transitorio y el cierre terminó sin unidades systemd fallidas.
+
+Con `preview`, `aplicar` y `rollback` ya probados sobre generaciones reales y el frente visual completo nuevamente funcional, el siguiente frente de la reimplementación es llevar estos mismos flujos a GTK4/libadwaita sin duplicar la lógica: la interfaz muestra y pregunta; el mismo Rust sigue haciendo el trabajo.
 
 ## 22. Regla final
 
