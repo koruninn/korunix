@@ -1,3 +1,6 @@
+#[allow(dead_code)]
+mod configuracion;
+
 use adw::prelude::*;
 use adw::{Application, ApplicationWindow, HeaderBar, ToolbarView};
 use gtk::glib;
@@ -11,18 +14,10 @@ use std::rc::Rc;
 use std::sync::mpsc::{self, TryRecvError};
 use std::thread;
 use std::time::Duration;
-use toml::Value;
 
 const ID_APLICACION: &str = "io.github.koruninn.Korunix";
 
-#[derive(Clone)]
-struct Resumen {
-    nombre: String,
-    canal: String,
-    escritorio: String,
-    apariencia: String,
-    aplicaciones: usize,
-}
+type AlTerminar = Rc<dyn Fn(bool)>;
 
 enum Mensaje {
     Linea(String),
@@ -39,6 +34,18 @@ fn raiz_korunix() -> PathBuf {
     }
 
     env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+fn carpeta_estado() -> PathBuf {
+    if let Some(ruta) = env::var_os("XDG_STATE_HOME") {
+        return PathBuf::from(ruta).join("korunix");
+    }
+
+    if let Some(home) = env::var_os("HOME") {
+        return PathBuf::from(home).join(".local/state/korunix");
+    }
+
+    PathBuf::from(".").join(".korunix-estado")
 }
 
 fn motor_korunix() -> PathBuf {
@@ -58,53 +65,60 @@ fn autorizador_grafico() -> Option<&'static str> {
     .find(|ruta| Path::new(ruta).is_file())
 }
 
-fn texto(tabla: &Value, ruta: &[&str], predeterminado: &str) -> String {
-    let mut actual = tabla;
+fn configuracion_pendiente(raiz: &Path) -> bool {
+    let actual = fs::read(raiz.join("configuracion.toml"));
+    let preview = fs::read(carpeta_estado().join("preview-configuracion.toml"));
 
-    for parte in ruta {
-        let Some(siguiente) = actual.get(*parte) else {
-            return predeterminado.to_string();
-        };
-        actual = siguiente;
+    match (actual, preview) {
+        (Ok(actual), Ok(preview)) => actual != preview,
+        _ => true,
     }
-
-    actual
-        .as_str()
-        .map(str::to_string)
-        .unwrap_or_else(|| predeterminado.to_string())
 }
 
-fn leer_resumen(raiz: &Path) -> Result<Resumen, String> {
-    let ruta = raiz.join("configuracion.toml");
-    let contenido = fs::read_to_string(&ruta)
-        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
-    let datos = contenido
-        .parse::<Value>()
-        .map_err(|error| format!("configuracion.toml no se pudo leer.\nDetalle: {error}"))?;
-
-    let estilo = texto(&datos, &["apariencia", "estilo"], "predeterminado");
-    let modo = texto(&datos, &["apariencia", "modo"], "automatico");
-    let aplicaciones = datos
-        .get("aplicaciones")
-        .and_then(|valor| valor.get("instaladas"))
-        .and_then(Value::as_array)
-        .map(Vec::len)
-        .unwrap_or(0);
-
-    Ok(Resumen {
-        nombre: texto(&datos, &["nombre"], "nixos"),
-        canal: texto(&datos, &["canal"], "estable"),
-        escritorio: texto(&datos, &["escritorio", "principal"], "niri"),
-        apariencia: format!("{estilo} · {modo}"),
-        aplicaciones,
-    })
+fn nombre_escritorio(escritorio: &str) -> &str {
+    match escritorio {
+        "niri" => "Niri",
+        "hyprland" => "Hyprland",
+        "cinnamon" => "Cinnamon",
+        "plasma" => "Plasma",
+        otro => otro,
+    }
 }
 
-fn fila(titulo: &str, valor: &str) -> adw::ActionRow {
-    adw::ActionRow::builder()
-        .title(titulo)
-        .subtitle(valor)
-        .build()
+fn indice_canal(canal: &str) -> u32 {
+    if canal == "inestable" {
+        1
+    } else {
+        0
+    }
+}
+
+fn canal_por_indice(indice: u32) -> Option<&'static str> {
+    match indice {
+        0 => Some("estable"),
+        1 => Some("inestable"),
+        _ => None,
+    }
+}
+
+fn indice_escritorio(escritorio: &str) -> u32 {
+    match escritorio {
+        "niri" => 0,
+        "hyprland" => 1,
+        "cinnamon" => 2,
+        "plasma" => 3,
+        _ => 0,
+    }
+}
+
+fn escritorio_por_indice(indice: u32) -> Option<&'static str> {
+    match indice {
+        0 => Some("niri"),
+        1 => Some("hyprland"),
+        2 => Some("cinnamon"),
+        3 => Some("plasma"),
+        _ => None,
+    }
 }
 
 fn anexar_linea(vista: &gtk::TextView, linea: &str) {
@@ -112,6 +126,236 @@ fn anexar_linea(vista: &gtk::TextView, linea: &str) {
     let mut final_texto = buffer.end_iter();
     buffer.insert(&mut final_texto, linea);
     buffer.insert(&mut final_texto, "\n");
+}
+
+fn sensibilidad(controles: &[gtk::Widget], sensible: bool) {
+    for control in controles {
+        control.set_sensitive(sensible);
+    }
+}
+
+fn actualizar_estado_preview(
+    raiz: &Path,
+    aviso: &gtk::Revealer,
+    boton_aplicar: &gtk::Button,
+    ocupado: &Rc<Cell<bool>>,
+) {
+    let pendiente = configuracion_pendiente(raiz);
+    aviso.set_reveal_child(pendiente);
+
+    if !ocupado.get() {
+        boton_aplicar.set_sensitive(!pendiente);
+    }
+}
+
+fn mensaje_guardado(
+    mensaje: &gtk::Label,
+    raiz: &Path,
+    aviso: &gtk::Revealer,
+    boton_aplicar: &gtk::Button,
+    ocupado: &Rc<Cell<bool>>,
+    texto: &str,
+) {
+    mensaje.set_text(texto);
+    actualizar_estado_preview(raiz, aviso, boton_aplicar, ocupado);
+}
+
+fn limpiar_lista(lista: &gtk::ListBox) {
+    while let Some(hijo) = lista.first_child() {
+        lista.remove(&hijo);
+    }
+}
+
+fn recargar_aplicaciones(
+    lista: &gtk::ListBox,
+    contador: &gtk::Label,
+    raiz: &Path,
+    mensaje: &gtk::Label,
+    aviso: &gtk::Revealer,
+    boton_aplicar: &gtk::Button,
+    ocupado: &Rc<Cell<bool>>,
+) {
+    limpiar_lista(lista);
+
+    let configuracion = match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => configuracion,
+        Err(error) => {
+            contador.set_text("No pude leer la lista");
+            mensaje.set_text(&error);
+            return;
+        }
+    };
+
+    contador.set_text(&format!(
+        "{} elegidas",
+        configuracion.aplicaciones.instaladas.len()
+    ));
+
+    for nombre in configuracion.aplicaciones.instaladas {
+        let fila = gtk::ListBoxRow::new();
+        let caja = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        caja.set_margin_top(6);
+        caja.set_margin_bottom(6);
+        caja.set_margin_start(10);
+        caja.set_margin_end(8);
+
+        let etiqueta = gtk::Label::new(Some(&nombre));
+        etiqueta.set_halign(gtk::Align::Start);
+        etiqueta.set_hexpand(true);
+        etiqueta.set_ellipsize(gtk::pango::EllipsizeMode::End);
+
+        let quitar = gtk::Button::with_label("Quitar");
+        quitar.add_css_class("flat");
+
+        caja.append(&etiqueta);
+        caja.append(&quitar);
+        fila.set_child(Some(&caja));
+        lista.append(&fila);
+
+        let lista = lista.clone();
+        let contador = contador.clone();
+        let raiz = raiz.to_path_buf();
+        let mensaje = mensaje.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(ocupado);
+        let nombre = nombre.clone();
+
+        quitar.connect_clicked(move |_| {
+            match configuracion::quitar_aplicacion(&raiz.join("configuracion.toml"), &nombre) {
+                Ok(true) => {
+                    mensaje_guardado(
+                        &mensaje,
+                        &raiz,
+                        &aviso,
+                        &boton_aplicar,
+                        &ocupado,
+                        &format!("✓ Quité «{nombre}». NixOS todavía no cambió."),
+                    );
+
+                    recargar_aplicaciones(
+                        &lista,
+                        &contador,
+                        &raiz,
+                        &mensaje,
+                        &aviso,
+                        &boton_aplicar,
+                        &ocupado,
+                    );
+                }
+                Ok(false) => mensaje.set_text(&format!("«{nombre}» ya no estaba en la lista.")),
+                Err(error) => mensaje.set_text(&error),
+            }
+        });
+    }
+}
+
+fn guardar_nombre(
+    entrada: &gtk::Entry,
+    raiz: &Path,
+    mensaje: &gtk::Label,
+    aviso: &gtk::Revealer,
+    boton_aplicar: &gtk::Button,
+    ocupado: &Rc<Cell<bool>>,
+) {
+    let nombre = entrada.text().to_string();
+
+    match configuracion::cambiar_nombre(&raiz.join("configuracion.toml"), &nombre) {
+        Ok(true) => mensaje_guardado(
+            mensaje,
+            raiz,
+            aviso,
+            boton_aplicar,
+            ocupado,
+            &format!("✓ El equipo ahora se llama «{nombre}» en la configuración. NixOS todavía no cambió."),
+        ),
+        Ok(false) => mensaje.set_text("Ese nombre ya estaba guardado."),
+        Err(error) => mensaje.set_text(&error),
+    }
+}
+
+fn agregar_aplicacion(
+    entrada: &gtk::Entry,
+    lista: &gtk::ListBox,
+    contador: &gtk::Label,
+    raiz: &Path,
+    mensaje: &gtk::Label,
+    aviso: &gtk::Revealer,
+    boton_aplicar: &gtk::Button,
+    ocupado: &Rc<Cell<bool>>,
+) {
+    let nombre = entrada.text().to_string();
+
+    match configuracion::agregar_aplicacion(&raiz.join("configuracion.toml"), &nombre) {
+        Ok(true) => {
+            entrada.set_text("");
+            mensaje_guardado(
+                mensaje,
+                raiz,
+                aviso,
+                boton_aplicar,
+                ocupado,
+                &format!("✓ Agregué «{nombre}». NixOS todavía no cambió."),
+            );
+
+            recargar_aplicaciones(
+                lista,
+                contador,
+                raiz,
+                mensaje,
+                aviso,
+                boton_aplicar,
+                ocupado,
+            );
+        }
+        Ok(false) => mensaje.set_text(&format!("«{nombre}» ya estaba elegida.")),
+        Err(error) => mensaje.set_text(&error),
+    }
+}
+
+fn recargar_controles(
+    raiz: &Path,
+    entrada_nombre: &gtk::Entry,
+    selector_canal: &gtk::DropDown,
+    selector_escritorio: &gtk::DropDown,
+    fila_apariencia: &adw::ActionRow,
+    lista: &gtk::ListBox,
+    contador: &gtk::Label,
+    mensaje: &gtk::Label,
+    aviso: &gtk::Revealer,
+    boton_aplicar: &gtk::Button,
+    ocupado: &Rc<Cell<bool>>,
+    actualizando: &Rc<Cell<bool>>,
+) {
+    let configuracion = match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => configuracion,
+        Err(error) => {
+            mensaje.set_text(&error);
+            return;
+        }
+    };
+
+    actualizando.set(true);
+    entrada_nombre.set_text(&configuracion.nombre);
+    selector_canal.set_selected(indice_canal(&configuracion.canal));
+    selector_escritorio.set_selected(indice_escritorio(&configuracion.escritorio.principal));
+    fila_apariencia.set_subtitle(&format!(
+        "{} · {}",
+        configuracion.apariencia.estilo, configuracion.apariencia.modo
+    ));
+    actualizando.set(false);
+
+    recargar_aplicaciones(
+        lista,
+        contador,
+        raiz,
+        mensaje,
+        aviso,
+        boton_aplicar,
+        ocupado,
+    );
+
+    actualizar_estado_preview(raiz, aviso, boton_aplicar, ocupado);
 }
 
 fn ejecutar_motor(
@@ -190,21 +434,21 @@ fn iniciar_operacion(
     raiz: &Path,
     motor: &Path,
     vista: &gtk::TextView,
+    salida_visible: &gtk::Revealer,
     estado: &gtk::Label,
-    botones: &[gtk::Button],
+    controles: &[gtk::Widget],
     ocupado: &Rc<Cell<bool>>,
+    al_terminar: Option<AlTerminar>,
 ) {
     if ocupado.get() {
         return;
     }
 
     ocupado.set(true);
-
-    for boton in botones {
-        boton.set_sensitive(false);
-    }
+    sensibilidad(controles, false);
 
     vista.buffer().set_text("");
+    salida_visible.set_reveal_child(true);
     estado.set_text(nombre);
     anexar_linea(vista, &format!("→ {nombre}"));
 
@@ -219,7 +463,7 @@ fn iniciar_operacion(
 
     let vista = vista.clone();
     let estado = estado.clone();
-    let botones = botones.to_vec();
+    let controles = controles.to_vec();
     let ocupado = Rc::clone(ocupado);
 
     glib::timeout_add_local(Duration::from_millis(80), move || {
@@ -235,20 +479,25 @@ fn iniciar_operacion(
                         anexar_linea(&vista, "✗ Korunix devolvió un error.");
                     }
 
-                    for boton in &botones {
-                        boton.set_sensitive(true);
+                    sensibilidad(&controles, true);
+                    ocupado.set(false);
+
+                    if let Some(ref terminar) = al_terminar {
+                        terminar(correcto);
                     }
 
-                    ocupado.set(false);
                     return glib::ControlFlow::Break;
                 }
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
                     estado.set_text("La operación terminó sin respuesta");
-                    for boton in &botones {
-                        boton.set_sensitive(true);
-                    }
+                    sensibilidad(&controles, true);
                     ocupado.set(false);
+
+                    if let Some(ref terminar) = al_terminar {
+                        terminar(false);
+                    }
+
                     return glib::ControlFlow::Break;
                 }
             }
@@ -266,7 +515,7 @@ fn construir_ventana(aplicacion: &Application) {
         .application(aplicacion)
         .title("Korunix")
         .default_width(520)
-        .default_height(720)
+        .default_height(760)
         .build();
 
     let barra = HeaderBar::new();
@@ -281,7 +530,7 @@ fn construir_ventana(aplicacion: &Application) {
     titulo.set_halign(gtk::Align::Start);
 
     let subtitulo = gtk::Label::new(Some(
-        "Configura y mantiene NixOS sin tener que tocar la parte técnica.",
+        "Lo que cambies aquí se guarda como una decisión humana. NixOS solo cambia después de revisar y aplicar un preview.",
     ));
     subtitulo.set_wrap(true);
     subtitulo.set_halign(gtk::Align::Start);
@@ -290,32 +539,119 @@ fn construir_ventana(aplicacion: &Application) {
     contenido.append(&titulo);
     contenido.append(&subtitulo);
 
-    let grupo = adw::PreferencesGroup::builder()
-        .title("Este equipo")
+    let aviso_texto = gtk::Label::new(Some(
+        "La configuración y el preview no coinciden. Crea un preview antes de aplicar.",
+    ));
+    aviso_texto.set_wrap(true);
+    aviso_texto.set_halign(gtk::Align::Start);
+    aviso_texto.set_margin_top(10);
+    aviso_texto.set_margin_bottom(10);
+    aviso_texto.set_margin_start(12);
+    aviso_texto.set_margin_end(12);
+
+    let aviso_caja = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    aviso_caja.add_css_class("card");
+    aviso_caja.append(&aviso_texto);
+
+    let aviso = gtk::Revealer::new();
+    aviso.set_child(Some(&aviso_caja));
+    contenido.append(&aviso);
+
+    let configuracion_grupo = adw::PreferencesGroup::builder()
+        .title("Configuración")
+        .description(
+            "Guardar una opción modifica configuracion.toml. No activa ni reconstruye NixOS.",
+        )
         .build();
 
-    match leer_resumen(&raiz) {
-        Ok(resumen) => {
-            grupo.add(&fila("Nombre", &resumen.nombre));
-            grupo.add(&fila("Canal", &resumen.canal));
-            grupo.add(&fila("Escritorio", &resumen.escritorio));
-            grupo.add(&fila("Apariencia", &resumen.apariencia));
-            grupo.add(&fila(
-                "Aplicaciones elegidas",
-                &resumen.aplicaciones.to_string(),
-            ));
-        }
-        Err(error) => {
-            grupo.add(&fila("Configuración", &error));
-        }
-    }
+    let nombre_titulo = gtk::Label::new(Some("Nombre del equipo"));
+    nombre_titulo.set_halign(gtk::Align::Start);
+    nombre_titulo.add_css_class("heading");
 
-    contenido.append(&grupo);
+    let nombre_caja = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let entrada_nombre = gtk::Entry::new();
+    entrada_nombre.set_hexpand(true);
+    entrada_nombre.set_placeholder_text(Some("por ejemplo, korunix"));
+    let boton_nombre = gtk::Button::with_label("Guardar");
+    nombre_caja.append(&entrada_nombre);
+    nombre_caja.append(&boton_nombre);
+
+    let canal_titulo = gtk::Label::new(Some("Canal"));
+    canal_titulo.set_halign(gtk::Align::Start);
+    canal_titulo.add_css_class("heading");
+
+    let selector_canal = gtk::DropDown::from_strings(&["Estable", "Inestable"]);
+
+    let escritorio_titulo = gtk::Label::new(Some("Escritorio principal"));
+    escritorio_titulo.set_halign(gtk::Align::Start);
+    escritorio_titulo.add_css_class("heading");
+
+    let selector_escritorio =
+        gtk::DropDown::from_strings(&["Niri", "Hyprland", "Cinnamon", "Plasma"]);
+
+    let fila_apariencia = adw::ActionRow::builder()
+        .title("Apariencia")
+        .subtitle("—")
+        .build();
+
+    let edicion = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    edicion.append(&nombre_titulo);
+    edicion.append(&nombre_caja);
+    edicion.append(&canal_titulo);
+    edicion.append(&selector_canal);
+    edicion.append(&escritorio_titulo);
+    edicion.append(&selector_escritorio);
+
+    configuracion_grupo.add(&edicion);
+    configuracion_grupo.add(&fila_apariencia);
+    contenido.append(&configuracion_grupo);
+
+    let aplicaciones_grupo = adw::PreferencesGroup::builder()
+        .title("Aplicaciones")
+        .description(
+            "Puedes escribir cualquier nombre. El catálogo visual no limita lo que Korunix puede intentar resolver.",
+        )
+        .build();
+
+    let agregar_caja = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let entrada_aplicacion = gtk::Entry::new();
+    entrada_aplicacion.set_hexpand(true);
+    entrada_aplicacion.set_placeholder_text(Some("por ejemplo, karere"));
+    let boton_agregar = gtk::Button::with_label("Agregar");
+    agregar_caja.append(&entrada_aplicacion);
+    agregar_caja.append(&boton_agregar);
+
+    let contador_aplicaciones = gtk::Label::new(Some("—"));
+    contador_aplicaciones.set_halign(gtk::Align::Start);
+    contador_aplicaciones.add_css_class("dim-label");
+
+    let lista_aplicaciones = gtk::ListBox::new();
+    lista_aplicaciones.set_selection_mode(gtk::SelectionMode::None);
+    lista_aplicaciones.add_css_class("boxed-list");
+
+    let aplicaciones_expandir = gtk::Expander::new(Some("Mostrar aplicaciones elegidas"));
+    aplicaciones_expandir.set_child(Some(&lista_aplicaciones));
+
+    let aplicaciones_caja = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    aplicaciones_caja.append(&agregar_caja);
+    aplicaciones_caja.append(&contador_aplicaciones);
+    aplicaciones_caja.append(&aplicaciones_expandir);
+
+    aplicaciones_grupo.add(&aplicaciones_caja);
+    contenido.append(&aplicaciones_grupo);
+
+    let mensaje_configuracion = gtk::Label::new(Some(
+        "Los cambios de esta sección se guardan enseguida, pero NixOS permanece igual.",
+    ));
+    mensaje_configuracion.set_wrap(true);
+    mensaje_configuracion.set_halign(gtk::Align::Start);
+    mensaje_configuracion.add_css_class("dim-label");
+    contenido.append(&mensaje_configuracion);
 
     let acciones = adw::PreferencesGroup::builder()
         .title("Cambios del sistema")
         .description(
-            "La interfaz usa el mismo motor de Korunix. Preview no cambia NixOS; aplicar y volver usan las generaciones ya preparadas.",
+            "Preview construye una generación completa sin activarla. Aplicar usa exactamente el preview revisado. Volver recupera la generación protegida.",
         )
         .build();
 
@@ -344,13 +680,15 @@ fn construir_ventana(aplicacion: &Application) {
     salida.set_monospace(true);
     salida.set_wrap_mode(gtk::WrapMode::WordChar);
 
-    let desplazamiento = gtk::ScrolledWindow::builder()
+    let desplazamiento_salida = gtk::ScrolledWindow::builder()
         .min_content_height(190)
-        .vexpand(true)
         .child(&salida)
         .build();
-    desplazamiento.add_css_class("card");
-    contenido.append(&desplazamiento);
+    desplazamiento_salida.add_css_class("card");
+
+    let salida_visible = gtk::Revealer::new();
+    salida_visible.set_child(Some(&desplazamiento_salida));
+    contenido.append(&salida_visible);
 
     let clamp = adw::Clamp::builder()
         .maximum_size(680)
@@ -368,20 +706,218 @@ fn construir_ventana(aplicacion: &Application) {
     ventana.set_content(Some(&vista));
 
     let ocupado = Rc::new(Cell::new(false));
+    let actualizando = Rc::new(Cell::new(false));
 
-    let botones = [
-        boton_preview.clone(),
-        boton_aplicar.clone(),
-        boton_volver.clone(),
+    let controles: Vec<gtk::Widget> = vec![
+        entrada_nombre.clone().upcast(),
+        boton_nombre.clone().upcast(),
+        selector_canal.clone().upcast(),
+        selector_escritorio.clone().upcast(),
+        entrada_aplicacion.clone().upcast(),
+        boton_agregar.clone().upcast(),
+        lista_aplicaciones.clone().upcast(),
+        boton_preview.clone().upcast(),
+        boton_aplicar.clone().upcast(),
+        boton_volver.clone().upcast(),
     ];
+
+    {
+        let entrada_nombre = entrada_nombre.clone();
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+
+        boton_nombre.connect_clicked(move |_| {
+            guardar_nombre(
+                &entrada_nombre,
+                &raiz,
+                &mensaje,
+                &aviso,
+                &boton_aplicar,
+                &ocupado,
+            );
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+
+        entrada_nombre.connect_activate(move |entrada| {
+            guardar_nombre(entrada, &raiz, &mensaje, &aviso, &boton_aplicar, &ocupado);
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        selector_canal.connect_selected_notify(move |selector| {
+            if actualizando.get() {
+                return;
+            }
+
+            let Some(canal) = canal_por_indice(selector.selected()) else {
+                return;
+            };
+
+            match configuracion::cambiar_canal(&raiz.join("configuracion.toml"), canal) {
+                Ok(true) => mensaje_guardado(
+                    &mensaje,
+                    &raiz,
+                    &aviso,
+                    &boton_aplicar,
+                    &ocupado,
+                    &format!("✓ Canal cambiado a «{canal}». NixOS todavía no cambió."),
+                ),
+                Ok(false) => mensaje.set_text("Ese canal ya estaba elegido."),
+                Err(error) => mensaje.set_text(&error),
+            }
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        selector_escritorio.connect_selected_notify(move |selector| {
+            if actualizando.get() {
+                return;
+            }
+
+            let Some(escritorio) = escritorio_por_indice(selector.selected()) else {
+                return;
+            };
+
+            match configuracion::cambiar_escritorio(&raiz.join("configuracion.toml"), escritorio) {
+                Ok(true) => mensaje_guardado(
+                    &mensaje,
+                    &raiz,
+                    &aviso,
+                    &boton_aplicar,
+                    &ocupado,
+                    &format!(
+                        "✓ {} quedó como escritorio principal. NixOS todavía no cambió.",
+                        nombre_escritorio(escritorio)
+                    ),
+                ),
+                Ok(false) => mensaje.set_text("Ese escritorio ya era el principal."),
+                Err(error) => {
+                    mensaje.set_text(&error);
+
+                    if let Ok(configuracion) = configuracion::leer(&raiz.join("configuracion.toml"))
+                    {
+                        actualizando.set(true);
+                        selector
+                            .set_selected(indice_escritorio(&configuracion.escritorio.principal));
+                        actualizando.set(false);
+                    }
+                }
+            }
+        });
+    }
+
+    {
+        let entrada = entrada_aplicacion.clone();
+        let lista = lista_aplicaciones.clone();
+        let contador = contador_aplicaciones.clone();
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+
+        boton_agregar.connect_clicked(move |_| {
+            agregar_aplicacion(
+                &entrada,
+                &lista,
+                &contador,
+                &raiz,
+                &mensaje,
+                &aviso,
+                &boton_aplicar,
+                &ocupado,
+            );
+        });
+    }
+
+    {
+        let lista = lista_aplicaciones.clone();
+        let contador = contador_aplicaciones.clone();
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+
+        entrada_aplicacion.connect_activate(move |entrada| {
+            agregar_aplicacion(
+                entrada,
+                &lista,
+                &contador,
+                &raiz,
+                &mensaje,
+                &aviso,
+                &boton_aplicar,
+                &ocupado,
+            );
+        });
+    }
+
+    let refrescar: AlTerminar = {
+        let raiz = raiz.clone();
+        let entrada_nombre = entrada_nombre.clone();
+        let selector_canal = selector_canal.clone();
+        let selector_escritorio = selector_escritorio.clone();
+        let fila_apariencia = fila_apariencia.clone();
+        let lista = lista_aplicaciones.clone();
+        let contador = contador_aplicaciones.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        Rc::new(move |_| {
+            recargar_controles(
+                &raiz,
+                &entrada_nombre,
+                &selector_canal,
+                &selector_escritorio,
+                &fila_apariencia,
+                &lista,
+                &contador,
+                &mensaje,
+                &aviso,
+                &boton_aplicar,
+                &ocupado,
+                &actualizando,
+            );
+        })
+    };
 
     {
         let raiz = raiz.clone();
         let motor = motor.clone();
         let salida = salida.clone();
+        let salida_visible = salida_visible.clone();
         let estado = estado.clone();
-        let botones = botones.clone();
+        let controles = controles.clone();
         let ocupado = Rc::clone(&ocupado);
+        let refrescar = Rc::clone(&refrescar);
 
         boton_preview.connect_clicked(move |_| {
             iniciar_operacion(
@@ -391,9 +927,11 @@ fn construir_ventana(aplicacion: &Application) {
                 &raiz,
                 &motor,
                 &salida,
+                &salida_visible,
                 &estado,
-                &botones,
+                &controles,
                 &ocupado,
+                Some(Rc::clone(&refrescar)),
             );
         });
     }
@@ -402,9 +940,11 @@ fn construir_ventana(aplicacion: &Application) {
         let raiz = raiz.clone();
         let motor = motor.clone();
         let salida = salida.clone();
+        let salida_visible = salida_visible.clone();
         let estado = estado.clone();
-        let botones = botones.clone();
+        let controles = controles.clone();
         let ocupado = Rc::clone(&ocupado);
+        let refrescar = Rc::clone(&refrescar);
 
         boton_aplicar.connect_clicked(move |_| {
             iniciar_operacion(
@@ -414,18 +954,24 @@ fn construir_ventana(aplicacion: &Application) {
                 &raiz,
                 &motor,
                 &salida,
+                &salida_visible,
                 &estado,
-                &botones,
+                &controles,
                 &ocupado,
+                Some(Rc::clone(&refrescar)),
             );
         });
     }
 
     {
+        let raiz = raiz.clone();
+        let motor = motor.clone();
         let salida = salida.clone();
+        let salida_visible = salida_visible.clone();
         let estado = estado.clone();
-        let botones = botones.clone();
+        let controles = controles.clone();
         let ocupado = Rc::clone(&ocupado);
+        let refrescar = Rc::clone(&refrescar);
 
         boton_volver.connect_clicked(move |_| {
             iniciar_operacion(
@@ -435,12 +981,29 @@ fn construir_ventana(aplicacion: &Application) {
                 &raiz,
                 &motor,
                 &salida,
+                &salida_visible,
                 &estado,
-                &botones,
+                &controles,
                 &ocupado,
+                Some(Rc::clone(&refrescar)),
             );
         });
     }
+
+    recargar_controles(
+        &raiz,
+        &entrada_nombre,
+        &selector_canal,
+        &selector_escritorio,
+        &fila_apariencia,
+        &lista_aplicaciones,
+        &contador_aplicaciones,
+        &mensaje_configuracion,
+        &aviso,
+        &boton_aplicar,
+        &ocupado,
+        &actualizando,
+    );
 
     ventana.present();
 }
