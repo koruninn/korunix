@@ -766,6 +766,155 @@ fn cambiar_escritorio_en_texto(texto: &str, escritorio: &str) -> Result<Option<S
     Ok(Some(nuevo))
 }
 
+fn seccion<'a>(documento: &'a mut DocumentMut, nombre: &str) -> Result<&'a mut Table, String> {
+    documento
+        .as_table_mut()
+        .entry(nombre)
+        .or_insert(Item::Table(Table::new()))
+        .as_table_mut()
+        .ok_or_else(|| {
+            format!(
+                "No pude usar [{nombre}].\nEsa parte de configuracion.toml tiene que ser una sección."
+            )
+        })
+}
+
+fn cambiar_apariencia_en_texto(
+    texto: &str,
+    estilo: &str,
+    modo: &str,
+) -> Result<Option<String>, String> {
+    let actual = entender(texto, "la configuración")?;
+    let nueva = Apariencia {
+        estilo: estilo.to_string(),
+        modo: modo.to_string(),
+    };
+    revisar_apariencia(&nueva)?;
+
+    if actual.apariencia.estilo == estilo && actual.apariencia.modo == modo {
+        return Ok(None);
+    }
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+    let apariencia = seccion(&mut documento, "apariencia")?;
+    apariencia["estilo"] = value(estilo);
+    apariencia["modo"] = value(modo);
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
+fn cambiar_bluetooth_en_texto(texto: &str, activo: bool) -> Result<Option<String>, String> {
+    let actual = entender(texto, "la configuración")?;
+
+    if actual.bluetooth.activo == activo {
+        return Ok(None);
+    }
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+    seccion(&mut documento, "bluetooth")?["activo"] = value(activo);
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
+fn cambiar_sunshine_en_texto(
+    texto: &str,
+    activo: bool,
+    autoinicio: bool,
+) -> Result<Option<String>, String> {
+    let actual = entender(texto, "la configuración")?;
+
+    if actual.sunshine.activo == activo && actual.sunshine.autoinicio == autoinicio {
+        return Ok(None);
+    }
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+    let sunshine = seccion(&mut documento, "sunshine")?;
+    sunshine["activo"] = value(activo);
+    sunshine["autoinicio"] = value(autoinicio);
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
+fn cambiar_steam_en_texto(
+    texto: &str,
+    activo: bool,
+    remote_play: bool,
+    servidor_dedicado: bool,
+) -> Result<Option<String>, String> {
+    let actual = entender(texto, "la configuración")?;
+
+    if actual.steam.activo == activo
+        && actual.steam.remote_play == remote_play
+        && actual.steam.servidor_dedicado == servidor_dedicado
+    {
+        return Ok(None);
+    }
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+    let steam = seccion(&mut documento, "steam")?;
+    steam["activo"] = value(activo);
+    steam["remote_play"] = value(remote_play);
+    steam["servidor_dedicado"] = value(servidor_dedicado);
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
+fn cambiar_impresion_en_texto(texto: &str, activa: bool) -> Result<Option<String>, String> {
+    let actual = entender(texto, "la configuración")?;
+
+    if actual.impresion.activa == activa {
+        return Ok(None);
+    }
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+    seccion(&mut documento, "impresion")?["activa"] = value(activa);
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
+fn cambiar_virtualizacion_en_texto(texto: &str, activa: bool) -> Result<Option<String>, String> {
+    let actual = entender(texto, "la configuración")?;
+
+    if actual.virtualizacion.activa == activa {
+        return Ok(None);
+    }
+
+    let mut documento = texto.parse::<DocumentMut>().map_err(|error| {
+        format!("No pude preparar configuracion.toml para editarlo.\nDetalle: {error}")
+    })?;
+    seccion(&mut documento, "virtualizacion")?["activa"] = value(activa);
+
+    let nuevo = documento.to_string();
+    entender(&nuevo, "la configuración después del cambio")?;
+
+    Ok(Some(nuevo))
+}
+
 fn guardar(ruta: &Path, texto: &str) -> Result<(), String> {
     let carpeta = ruta.parent().unwrap_or_else(|| Path::new("."));
     let nombre = ruta
@@ -800,6 +949,102 @@ fn guardar(ruta: &Path, texto: &str) -> Result<(), String> {
     }
 
     resultado
+}
+
+pub fn cambiar_apariencia(ruta: &Path, estilo: &str, modo: &str) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    entender_completa(&texto, &ruta.display().to_string())?;
+
+    let Some(nuevo) = cambiar_apariencia_en_texto(&texto, estilo, modo)? else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
+}
+
+pub fn cambiar_bluetooth(ruta: &Path, activo: bool) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    entender_completa(&texto, &ruta.display().to_string())?;
+
+    let Some(nuevo) = cambiar_bluetooth_en_texto(&texto, activo)? else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
+}
+
+pub fn cambiar_sunshine(ruta: &Path, activo: bool, autoinicio: bool) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    entender_completa(&texto, &ruta.display().to_string())?;
+
+    let Some(nuevo) = cambiar_sunshine_en_texto(&texto, activo, autoinicio)? else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
+}
+
+pub fn cambiar_steam(
+    ruta: &Path,
+    activo: bool,
+    remote_play: bool,
+    servidor_dedicado: bool,
+) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    entender_completa(&texto, &ruta.display().to_string())?;
+
+    let Some(nuevo) = cambiar_steam_en_texto(&texto, activo, remote_play, servidor_dedicado)?
+    else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
+}
+
+pub fn cambiar_impresion(ruta: &Path, activa: bool) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    entender_completa(&texto, &ruta.display().to_string())?;
+
+    let Some(nuevo) = cambiar_impresion_en_texto(&texto, activa)? else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
+}
+
+pub fn cambiar_virtualizacion(ruta: &Path, activa: bool) -> Result<bool, String> {
+    let texto = fs::read_to_string(ruta)
+        .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
+
+    entender_completa(&texto, &ruta.display().to_string())?;
+
+    let Some(nuevo) = cambiar_virtualizacion_en_texto(&texto, activa)? else {
+        return Ok(false);
+    };
+
+    guardar(ruta, &nuevo)?;
+
+    Ok(true)
 }
 
 pub fn agregar_aplicacion(ruta: &Path, nombre: &str) -> Result<bool, String> {
@@ -1543,6 +1788,95 @@ modo = "automatico"
         .expect_err("un estilo inventado debería rechazarse");
 
         assert!(error.contains("superbonito"));
+    }
+
+    #[test]
+    fn cambiar_apariencia_conserva_lo_demas() {
+        let original = r#"# Este comentario tiene que quedarse.
+[apariencia]
+estilo = "dinamico"
+modo = "automatico"
+
+[sunshine]
+activo = true
+autoinicio = true
+"#;
+
+        let nuevo = cambiar_apariencia_en_texto(original, "everforest", "oscuro")
+            .expect("debería poder cambiar la apariencia")
+            .expect("debería existir un cambio");
+
+        assert!(nuevo.contains("# Este comentario tiene que quedarse."));
+        assert!(nuevo.contains("estilo = \"everforest\""));
+        assert!(nuevo.contains("modo = \"oscuro\""));
+        assert!(nuevo.contains("autoinicio = true"));
+    }
+
+    #[test]
+    fn apagar_sunshine_no_borra_autoinicio_al_editar() {
+        let original = r#"[sunshine]
+activo = true
+autoinicio = true
+"#;
+
+        let nuevo = cambiar_sunshine_en_texto(original, false, true)
+            .expect("debería poder apagar Sunshine")
+            .expect("debería existir un cambio");
+
+        let configuracion = leer_texto(&nuevo).expect("el resultado debería ser válido");
+        assert!(!configuracion.sunshine.activo);
+        assert!(configuracion.sunshine.autoinicio);
+    }
+
+    #[test]
+    fn apagar_steam_no_borra_sus_subopciones_al_editar() {
+        let original = r#"[steam]
+activo = true
+remote_play = true
+servidor_dedicado = true
+"#;
+
+        let nuevo = cambiar_steam_en_texto(original, false, true, true)
+            .expect("debería poder apagar Steam")
+            .expect("debería existir un cambio");
+
+        let configuracion = leer_texto(&nuevo).expect("el resultado debería ser válido");
+        assert!(!configuracion.steam.activo);
+        assert!(configuracion.steam.remote_play);
+        assert!(configuracion.steam.servidor_dedicado);
+    }
+
+    #[test]
+    fn los_interruptores_no_borran_preferencias_ajenas() {
+        let original = r#"[bluetooth]
+activo = true
+
+[impresion]
+activa = true
+controlador = "epson-201207w"
+
+[virtualizacion]
+activa = true
+"#;
+
+        let sin_bluetooth = cambiar_bluetooth_en_texto(original, false)
+            .expect("debería poder apagar Bluetooth")
+            .expect("debería existir un cambio");
+        let sin_impresion = cambiar_impresion_en_texto(&sin_bluetooth, false)
+            .expect("debería poder apagar impresión")
+            .expect("debería existir un cambio");
+        let nuevo = cambiar_virtualizacion_en_texto(&sin_impresion, false)
+            .expect("debería poder apagar virtualización")
+            .expect("debería existir un cambio");
+
+        let configuracion = leer_texto(&nuevo).expect("el resultado debería ser válido");
+        assert!(!configuracion.bluetooth.activo);
+        assert!(!configuracion.impresion.activa);
+        assert_eq!(
+            configuracion.impresion.controlador.as_deref(),
+            Some("epson-201207w")
+        );
+        assert!(!configuracion.virtualizacion.activa);
     }
 
     #[test]

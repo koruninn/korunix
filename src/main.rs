@@ -64,6 +64,18 @@ fn ayuda() {
     eprintln!("  korunix escritorio <niri|hyprland|cinnamon|plasma>");
     eprintln!("  korunix canal");
     eprintln!("  korunix canal <estable|inestable>");
+    eprintln!("  korunix apariencia");
+    eprintln!(
+        "  korunix apariencia <predeterminado|dinamico|everforest> <claro|oscuro|automatico>"
+    );
+    eprintln!("  korunix bluetooth [activar|desactivar]");
+    eprintln!("  korunix sunshine [activar|desactivar]");
+    eprintln!("  korunix sunshine autoinicio <activar|desactivar>");
+    eprintln!("  korunix steam [activar|desactivar]");
+    eprintln!("  korunix steam remote-play <activar|desactivar>");
+    eprintln!("  korunix steam servidor-dedicado <activar|desactivar>");
+    eprintln!("  korunix impresion [activar|desactivar]");
+    eprintln!("  korunix virtualizacion [activar|desactivar]");
     eprintln!("  korunix aplicaciones");
     eprintln!("  korunix aplicaciones agregar <nombre>");
     eprintln!("  korunix aplicaciones quitar <nombre>");
@@ -476,6 +488,297 @@ fn cambiar_canal(raiz: &Path, canal: &str) {
     }
 }
 
+fn leer_interruptor(valor: &str) -> Result<bool, String> {
+    match valor {
+        "activar" => Ok(true),
+        "desactivar" => Ok(false),
+        _ => Err(format!(
+            "No entiendo «{valor}».\nUsa «activar» o «desactivar»."
+        )),
+    }
+}
+
+fn mostrar_apariencia(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => println!(
+            "Apariencia: {} · {}",
+            configuracion.apariencia.estilo, configuracion.apariencia.modo
+        ),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn cambiar_apariencia(raiz: &Path, estilo: &str, modo: &str) {
+    match configuracion::cambiar_apariencia(&raiz.join("configuracion.toml"), estilo, modo) {
+        Ok(true) => {
+            println!("✓ Apariencia: {estilo} · {modo}.");
+            println!("NixOS todavía no cambió.");
+        }
+        Ok(false) => {
+            println!("Esa apariencia ya estaba elegida.");
+            println!("No cambié nada.");
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn mostrar_bluetooth(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => println!(
+            "Bluetooth: {}",
+            if configuracion.bluetooth.activo {
+                "activo"
+            } else {
+                "apagado"
+            }
+        ),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn cambiar_bluetooth(raiz: &Path, valor: &str) {
+    let activo = leer_interruptor(valor).unwrap_or_else(|error| salir_con_error(&error));
+
+    match configuracion::cambiar_bluetooth(&raiz.join("configuracion.toml"), activo) {
+        Ok(true) => {
+            println!(
+                "✓ Bluetooth quedó {}.",
+                if activo { "activo" } else { "apagado" }
+            );
+            println!("NixOS todavía no cambió.");
+        }
+        Ok(false) => println!(
+            "Bluetooth ya estaba {}.",
+            if activo { "activo" } else { "apagado" }
+        ),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn mostrar_sunshine(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => println!(
+            "Sunshine: {} · autoinicio {}",
+            if configuracion.sunshine.activo {
+                "activo"
+            } else {
+                "apagado"
+            },
+            if configuracion.sunshine.autoinicio {
+                "sí"
+            } else {
+                "no"
+            }
+        ),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn cambiar_sunshine(raiz: &Path, valor: &str) {
+    let activo = leer_interruptor(valor).unwrap_or_else(|error| salir_con_error(&error));
+    let actual = configuracion::leer(&raiz.join("configuracion.toml"))
+        .unwrap_or_else(|error| salir_con_error(&error));
+
+    match configuracion::cambiar_sunshine(
+        &raiz.join("configuracion.toml"),
+        activo,
+        actual.sunshine.autoinicio,
+    ) {
+        Ok(true) => {
+            println!(
+                "✓ Sunshine quedó {}.",
+                if activo { "activo" } else { "apagado" }
+            );
+            println!("Su preferencia de autoinicio se conservó.");
+            println!("NixOS todavía no cambió.");
+        }
+        Ok(false) => println!(
+            "Sunshine ya estaba {}.",
+            if activo { "activo" } else { "apagado" }
+        ),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn cambiar_sunshine_autoinicio(raiz: &Path, valor: &str) {
+    let autoinicio = leer_interruptor(valor).unwrap_or_else(|error| salir_con_error(&error));
+    let actual = configuracion::leer(&raiz.join("configuracion.toml"))
+        .unwrap_or_else(|error| salir_con_error(&error));
+
+    match configuracion::cambiar_sunshine(
+        &raiz.join("configuracion.toml"),
+        actual.sunshine.activo,
+        autoinicio,
+    ) {
+        Ok(true) => {
+            println!(
+                "✓ Autoinicio de Sunshine: {}.",
+                if autoinicio { "activo" } else { "apagado" }
+            );
+            println!("NixOS todavía no cambió.");
+        }
+        Ok(false) => println!("El autoinicio de Sunshine ya estaba así."),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn mostrar_steam(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => println!(
+            "Steam: {} · Remote Play {} · servidor dedicado {}",
+            if configuracion.steam.activo {
+                "activo"
+            } else {
+                "apagado"
+            },
+            if configuracion.steam.remote_play {
+                "sí"
+            } else {
+                "no"
+            },
+            if configuracion.steam.servidor_dedicado {
+                "sí"
+            } else {
+                "no"
+            }
+        ),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn guardar_steam(
+    raiz: &Path,
+    activo: bool,
+    remote_play: bool,
+    servidor_dedicado: bool,
+    mensaje: &str,
+) {
+    match configuracion::cambiar_steam(
+        &raiz.join("configuracion.toml"),
+        activo,
+        remote_play,
+        servidor_dedicado,
+    ) {
+        Ok(true) => {
+            println!("✓ {mensaje}");
+            println!("NixOS todavía no cambió.");
+        }
+        Ok(false) => println!("No cambié nada."),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn cambiar_steam(raiz: &Path, valor: &str) {
+    let activo = leer_interruptor(valor).unwrap_or_else(|error| salir_con_error(&error));
+    let actual = configuracion::leer(&raiz.join("configuracion.toml"))
+        .unwrap_or_else(|error| salir_con_error(&error));
+
+    guardar_steam(
+        raiz,
+        activo,
+        actual.steam.remote_play,
+        actual.steam.servidor_dedicado,
+        &format!(
+            "Steam quedó {} y conservó sus subopciones.",
+            if activo { "activo" } else { "apagado" }
+        ),
+    );
+}
+
+fn cambiar_steam_remote_play(raiz: &Path, valor: &str) {
+    let remote_play = leer_interruptor(valor).unwrap_or_else(|error| salir_con_error(&error));
+    let actual = configuracion::leer(&raiz.join("configuracion.toml"))
+        .unwrap_or_else(|error| salir_con_error(&error));
+
+    guardar_steam(
+        raiz,
+        actual.steam.activo,
+        remote_play,
+        actual.steam.servidor_dedicado,
+        &format!(
+            "Steam Remote Play: {}.",
+            if remote_play { "activo" } else { "apagado" }
+        ),
+    );
+}
+
+fn cambiar_steam_servidor(raiz: &Path, valor: &str) {
+    let servidor = leer_interruptor(valor).unwrap_or_else(|error| salir_con_error(&error));
+    let actual = configuracion::leer(&raiz.join("configuracion.toml"))
+        .unwrap_or_else(|error| salir_con_error(&error));
+
+    guardar_steam(
+        raiz,
+        actual.steam.activo,
+        actual.steam.remote_play,
+        servidor,
+        &format!(
+            "Servidor dedicado de Steam: {}.",
+            if servidor { "activo" } else { "apagado" }
+        ),
+    );
+}
+
+fn mostrar_impresion(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => println!(
+            "Impresión: {}",
+            if configuracion.impresion.activa {
+                "activa"
+            } else {
+                "apagada"
+            }
+        ),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn cambiar_impresion(raiz: &Path, valor: &str) {
+    let activa = leer_interruptor(valor).unwrap_or_else(|error| salir_con_error(&error));
+
+    match configuracion::cambiar_impresion(&raiz.join("configuracion.toml"), activa) {
+        Ok(true) => {
+            println!(
+                "✓ Impresión: {}.",
+                if activa { "activa" } else { "apagada" }
+            );
+            println!("NixOS todavía no cambió.");
+        }
+        Ok(false) => println!("La impresión ya estaba así."),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn mostrar_virtualizacion(raiz: &Path) {
+    match configuracion::leer(&raiz.join("configuracion.toml")) {
+        Ok(configuracion) => println!(
+            "Virtualización: {}",
+            if configuracion.virtualizacion.activa {
+                "activa"
+            } else {
+                "apagada"
+            }
+        ),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn cambiar_virtualizacion(raiz: &Path, valor: &str) {
+    let activa = leer_interruptor(valor).unwrap_or_else(|error| salir_con_error(&error));
+
+    match configuracion::cambiar_virtualizacion(&raiz.join("configuracion.toml"), activa) {
+        Ok(true) => {
+            println!(
+                "✓ Virtualización: {}.",
+                if activa { "activa" } else { "apagada" }
+            );
+            println!("NixOS todavía no cambió.");
+        }
+        Ok(false) => println!("La virtualización ya estaba así."),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
 fn listar_aplicaciones(raiz: &Path) {
     match configuracion::leer(&raiz.join("configuracion.toml")) {
         Ok(configuracion) => {
@@ -584,6 +887,29 @@ fn main() {
         [comando, escritorio] if comando == "escritorio" => cambiar_escritorio(&raiz, escritorio),
         [comando] if comando == "canal" => mostrar_canal(&raiz),
         [comando, canal] if comando == "canal" => cambiar_canal(&raiz, canal),
+        [comando] if comando == "apariencia" => mostrar_apariencia(&raiz),
+        [comando, estilo, modo] if comando == "apariencia" => {
+            cambiar_apariencia(&raiz, estilo, modo)
+        }
+        [comando] if comando == "bluetooth" => mostrar_bluetooth(&raiz),
+        [comando, valor] if comando == "bluetooth" => cambiar_bluetooth(&raiz, valor),
+        [comando] if comando == "sunshine" => mostrar_sunshine(&raiz),
+        [comando, valor] if comando == "sunshine" => cambiar_sunshine(&raiz, valor),
+        [comando, opcion, valor] if comando == "sunshine" && opcion == "autoinicio" => {
+            cambiar_sunshine_autoinicio(&raiz, valor)
+        }
+        [comando] if comando == "steam" => mostrar_steam(&raiz),
+        [comando, valor] if comando == "steam" => cambiar_steam(&raiz, valor),
+        [comando, opcion, valor] if comando == "steam" && opcion == "remote-play" => {
+            cambiar_steam_remote_play(&raiz, valor)
+        }
+        [comando, opcion, valor] if comando == "steam" && opcion == "servidor-dedicado" => {
+            cambiar_steam_servidor(&raiz, valor)
+        }
+        [comando] if comando == "impresion" => mostrar_impresion(&raiz),
+        [comando, valor] if comando == "impresion" => cambiar_impresion(&raiz, valor),
+        [comando] if comando == "virtualizacion" => mostrar_virtualizacion(&raiz),
+        [comando, valor] if comando == "virtualizacion" => cambiar_virtualizacion(&raiz, valor),
         [comando] if comando == "aplicaciones" => listar_aplicaciones(&raiz),
         [grupo, accion, nombre] if grupo == "aplicaciones" && accion == "agregar" => {
             agregar_aplicacion(&raiz, nombre)

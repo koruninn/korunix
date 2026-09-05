@@ -121,6 +121,50 @@ fn escritorio_por_indice(indice: u32) -> Option<&'static str> {
     }
 }
 
+fn indice_estilo(estilo: &str) -> u32 {
+    match estilo {
+        "predeterminado" => 0,
+        "dinamico" => 1,
+        "everforest" => 2,
+        _ => 0,
+    }
+}
+
+fn estilo_por_indice(indice: u32) -> Option<&'static str> {
+    match indice {
+        0 => Some("predeterminado"),
+        1 => Some("dinamico"),
+        2 => Some("everforest"),
+        _ => None,
+    }
+}
+
+fn indice_modo(modo: &str) -> u32 {
+    match modo {
+        "claro" => 0,
+        "oscuro" => 1,
+        "automatico" => 2,
+        _ => 2,
+    }
+}
+
+fn modo_por_indice(indice: u32) -> Option<&'static str> {
+    match indice {
+        0 => Some("claro"),
+        1 => Some("oscuro"),
+        2 => Some("automatico"),
+        _ => None,
+    }
+}
+
+fn palabra_estado(activo: bool) -> &'static str {
+    if activo {
+        "activado"
+    } else {
+        "apagado"
+    }
+}
+
 fn anexar_linea(vista: &gtk::TextView, linea: &str) {
     let buffer = vista.buffer();
     let mut final_texto = buffer.end_iter();
@@ -318,7 +362,16 @@ fn recargar_controles(
     entrada_nombre: &gtk::Entry,
     selector_canal: &gtk::DropDown,
     selector_escritorio: &gtk::DropDown,
-    fila_apariencia: &adw::ActionRow,
+    selector_estilo: &gtk::DropDown,
+    selector_modo: &gtk::DropDown,
+    bluetooth: &adw::SwitchRow,
+    sunshine: &adw::SwitchRow,
+    sunshine_autoinicio: &adw::SwitchRow,
+    steam: &adw::SwitchRow,
+    steam_remote_play: &adw::SwitchRow,
+    steam_servidor: &adw::SwitchRow,
+    impresion: &adw::SwitchRow,
+    virtualizacion: &adw::SwitchRow,
     lista: &gtk::ListBox,
     contador: &gtk::Label,
     mensaje: &gtk::Label,
@@ -339,10 +392,16 @@ fn recargar_controles(
     entrada_nombre.set_text(&configuracion.nombre);
     selector_canal.set_selected(indice_canal(&configuracion.canal));
     selector_escritorio.set_selected(indice_escritorio(&configuracion.escritorio.principal));
-    fila_apariencia.set_subtitle(&format!(
-        "{} · {}",
-        configuracion.apariencia.estilo, configuracion.apariencia.modo
-    ));
+    selector_estilo.set_selected(indice_estilo(&configuracion.apariencia.estilo));
+    selector_modo.set_selected(indice_modo(&configuracion.apariencia.modo));
+    bluetooth.set_active(configuracion.bluetooth.activo);
+    sunshine.set_active(configuracion.sunshine.activo);
+    sunshine_autoinicio.set_active(configuracion.sunshine.autoinicio);
+    steam.set_active(configuracion.steam.activo);
+    steam_remote_play.set_active(configuracion.steam.remote_play);
+    steam_servidor.set_active(configuracion.steam.servidor_dedicado);
+    impresion.set_active(configuracion.impresion.activa);
+    virtualizacion.set_active(configuracion.virtualizacion.activa);
     actualizando.set(false);
 
     recargar_aplicaciones(
@@ -589,11 +648,6 @@ fn construir_ventana(aplicacion: &Application) {
     let selector_escritorio =
         gtk::DropDown::from_strings(&["Niri", "Hyprland", "Cinnamon", "Plasma"]);
 
-    let fila_apariencia = adw::ActionRow::builder()
-        .title("Apariencia")
-        .subtitle("—")
-        .build();
-
     let edicion = gtk::Box::new(gtk::Orientation::Vertical, 8);
     edicion.append(&nombre_titulo);
     edicion.append(&nombre_caja);
@@ -603,8 +657,90 @@ fn construir_ventana(aplicacion: &Application) {
     edicion.append(&selector_escritorio);
 
     configuracion_grupo.add(&edicion);
-    configuracion_grupo.add(&fila_apariencia);
     contenido.append(&configuracion_grupo);
+
+    let apariencia_grupo = adw::PreferencesGroup::builder()
+        .title("Apariencia")
+        .description(
+            "El estilo y el modo son decisiones separadas. Noctalia deriva el resto cuando corresponde.",
+        )
+        .build();
+
+    let estilo_titulo = gtk::Label::new(Some("Estilo"));
+    estilo_titulo.set_halign(gtk::Align::Start);
+    estilo_titulo.add_css_class("heading");
+    let selector_estilo =
+        gtk::DropDown::from_strings(&["Predeterminado", "Dinámico", "Everforest"]);
+
+    let modo_titulo = gtk::Label::new(Some("Modo"));
+    modo_titulo.set_halign(gtk::Align::Start);
+    modo_titulo.add_css_class("heading");
+    let selector_modo = gtk::DropDown::from_strings(&["Claro", "Oscuro", "Automático"]);
+
+    let apariencia_caja = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    apariencia_caja.append(&estilo_titulo);
+    apariencia_caja.append(&selector_estilo);
+    apariencia_caja.append(&modo_titulo);
+    apariencia_caja.append(&selector_modo);
+    apariencia_grupo.add(&apariencia_caja);
+    contenido.append(&apariencia_grupo);
+
+    let funciones_grupo = adw::PreferencesGroup::builder()
+        .title("Funciones")
+        .description(
+            "Apagar una función no borra sus preferencias internas. Solo deja de aplicarlas mientras esté apagada.",
+        )
+        .build();
+
+    let bluetooth = adw::SwitchRow::builder()
+        .title("Bluetooth")
+        .subtitle("También prepara el soporte de mandos compatible que Korunix deriva.")
+        .build();
+
+    let sunshine = adw::SwitchRow::builder()
+        .title("Sunshine")
+        .subtitle("Acceso y transmisión remota.")
+        .build();
+
+    let sunshine_autoinicio = adw::SwitchRow::builder()
+        .title("Iniciar Sunshine automáticamente")
+        .subtitle("Esta preferencia se conserva aunque Sunshine esté apagado.")
+        .build();
+
+    let steam = adw::SwitchRow::builder()
+        .title("Steam")
+        .subtitle("Korunix deriva GameMode, Millennium y la integración visual.")
+        .build();
+
+    let steam_remote_play = adw::SwitchRow::builder()
+        .title("Steam Remote Play")
+        .subtitle("Solo abre sus reglas cuando Steam también está activo.")
+        .build();
+
+    let steam_servidor = adw::SwitchRow::builder()
+        .title("Servidor dedicado de Steam")
+        .subtitle("La preferencia se conserva aunque Steam esté apagado.")
+        .build();
+
+    let impresion = adw::SwitchRow::builder()
+        .title("Impresión")
+        .subtitle("El controlador conocido del equipo sigue siendo un detalle técnico.")
+        .build();
+
+    let virtualizacion = adw::SwitchRow::builder()
+        .title("Virtualización")
+        .subtitle("Activa la capacidad de ejecutar máquinas virtuales.")
+        .build();
+
+    funciones_grupo.add(&bluetooth);
+    funciones_grupo.add(&sunshine);
+    funciones_grupo.add(&sunshine_autoinicio);
+    funciones_grupo.add(&steam);
+    funciones_grupo.add(&steam_remote_play);
+    funciones_grupo.add(&steam_servidor);
+    funciones_grupo.add(&impresion);
+    funciones_grupo.add(&virtualizacion);
+    contenido.append(&funciones_grupo);
 
     let aplicaciones_grupo = adw::PreferencesGroup::builder()
         .title("Aplicaciones")
@@ -713,6 +849,16 @@ fn construir_ventana(aplicacion: &Application) {
         boton_nombre.clone().upcast(),
         selector_canal.clone().upcast(),
         selector_escritorio.clone().upcast(),
+        selector_estilo.clone().upcast(),
+        selector_modo.clone().upcast(),
+        bluetooth.clone().upcast(),
+        sunshine.clone().upcast(),
+        sunshine_autoinicio.clone().upcast(),
+        steam.clone().upcast(),
+        steam_remote_play.clone().upcast(),
+        steam_servidor.clone().upcast(),
+        impresion.clone().upcast(),
+        virtualizacion.clone().upcast(),
         entrada_aplicacion.clone().upcast(),
         boton_agregar.clone().upcast(),
         lista_aplicaciones.clone().upcast(),
@@ -831,6 +977,405 @@ fn construir_ventana(aplicacion: &Application) {
     }
 
     {
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        selector_estilo.connect_selected_notify(move |selector| {
+            if actualizando.get() {
+                return;
+            }
+
+            let Some(estilo) = estilo_por_indice(selector.selected()) else {
+                return;
+            };
+
+            let configuracion = match configuracion::leer(&raiz.join("configuracion.toml")) {
+                Ok(configuracion) => configuracion,
+                Err(error) => {
+                    mensaje.set_text(&error);
+                    return;
+                }
+            };
+
+            match configuracion::cambiar_apariencia(
+                &raiz.join("configuracion.toml"),
+                estilo,
+                &configuracion.apariencia.modo,
+            ) {
+                Ok(true) => mensaje_guardado(
+                    &mensaje,
+                    &raiz,
+                    &aviso,
+                    &boton_aplicar,
+                    &ocupado,
+                    &format!("✓ Estilo cambiado a «{estilo}». NixOS todavía no cambió."),
+                ),
+                Ok(false) => mensaje.set_text("Ese estilo ya estaba elegido."),
+                Err(error) => mensaje.set_text(&error),
+            }
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        selector_modo.connect_selected_notify(move |selector| {
+            if actualizando.get() {
+                return;
+            }
+
+            let Some(modo) = modo_por_indice(selector.selected()) else {
+                return;
+            };
+
+            let configuracion = match configuracion::leer(&raiz.join("configuracion.toml")) {
+                Ok(configuracion) => configuracion,
+                Err(error) => {
+                    mensaje.set_text(&error);
+                    return;
+                }
+            };
+
+            match configuracion::cambiar_apariencia(
+                &raiz.join("configuracion.toml"),
+                &configuracion.apariencia.estilo,
+                modo,
+            ) {
+                Ok(true) => mensaje_guardado(
+                    &mensaje,
+                    &raiz,
+                    &aviso,
+                    &boton_aplicar,
+                    &ocupado,
+                    &format!("✓ Modo cambiado a «{modo}». NixOS todavía no cambió."),
+                ),
+                Ok(false) => mensaje.set_text("Ese modo ya estaba elegido."),
+                Err(error) => mensaje.set_text(&error),
+            }
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        bluetooth.connect_active_notify(move |fila| {
+            if actualizando.get() {
+                return;
+            }
+
+            let activo = fila.is_active();
+
+            match configuracion::cambiar_bluetooth(&raiz.join("configuracion.toml"), activo) {
+                Ok(true) => mensaje_guardado(
+                    &mensaje,
+                    &raiz,
+                    &aviso,
+                    &boton_aplicar,
+                    &ocupado,
+                    &format!(
+                        "✓ Bluetooth {} en la configuración. NixOS todavía no cambió.",
+                        palabra_estado(activo)
+                    ),
+                ),
+                Ok(false) => {}
+                Err(error) => mensaje.set_text(&error),
+            }
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        sunshine.connect_active_notify(move |fila| {
+            if actualizando.get() {
+                return;
+            }
+
+            let configuracion = match configuracion::leer(&raiz.join("configuracion.toml")) {
+                Ok(configuracion) => configuracion,
+                Err(error) => {
+                    mensaje.set_text(&error);
+                    return;
+                }
+            };
+            let activo = fila.is_active();
+
+            match configuracion::cambiar_sunshine(
+                &raiz.join("configuracion.toml"),
+                activo,
+                configuracion.sunshine.autoinicio,
+            ) {
+                Ok(true) => mensaje_guardado(
+                    &mensaje,
+                    &raiz,
+                    &aviso,
+                    &boton_aplicar,
+                    &ocupado,
+                    &format!(
+                        "✓ Sunshine {}. Su preferencia de autoinicio se conservó. NixOS todavía no cambió.",
+                        palabra_estado(activo)
+                    ),
+                ),
+                Ok(false) => {}
+                Err(error) => mensaje.set_text(&error),
+            }
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        sunshine_autoinicio.connect_active_notify(move |fila| {
+            if actualizando.get() {
+                return;
+            }
+
+            let configuracion = match configuracion::leer(&raiz.join("configuracion.toml")) {
+                Ok(configuracion) => configuracion,
+                Err(error) => {
+                    mensaje.set_text(&error);
+                    return;
+                }
+            };
+            let autoinicio = fila.is_active();
+
+            match configuracion::cambiar_sunshine(
+                &raiz.join("configuracion.toml"),
+                configuracion.sunshine.activo,
+                autoinicio,
+            ) {
+                Ok(true) => mensaje_guardado(
+                    &mensaje,
+                    &raiz,
+                    &aviso,
+                    &boton_aplicar,
+                    &ocupado,
+                    "✓ Cambié el autoinicio de Sunshine. NixOS todavía no cambió.",
+                ),
+                Ok(false) => {}
+                Err(error) => mensaje.set_text(&error),
+            }
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        steam.connect_active_notify(move |fila| {
+            if actualizando.get() {
+                return;
+            }
+
+            let configuracion = match configuracion::leer(&raiz.join("configuracion.toml")) {
+                Ok(configuracion) => configuracion,
+                Err(error) => {
+                    mensaje.set_text(&error);
+                    return;
+                }
+            };
+            let activo = fila.is_active();
+
+            match configuracion::cambiar_steam(
+                &raiz.join("configuracion.toml"),
+                activo,
+                configuracion.steam.remote_play,
+                configuracion.steam.servidor_dedicado,
+            ) {
+                Ok(true) => mensaje_guardado(
+                    &mensaje,
+                    &raiz,
+                    &aviso,
+                    &boton_aplicar,
+                    &ocupado,
+                    &format!(
+                        "✓ Steam {}. Remote Play y servidor dedicado conservaron sus preferencias. NixOS todavía no cambió.",
+                        palabra_estado(activo)
+                    ),
+                ),
+                Ok(false) => {}
+                Err(error) => mensaje.set_text(&error),
+            }
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        steam_remote_play.connect_active_notify(move |fila| {
+            if actualizando.get() {
+                return;
+            }
+
+            let configuracion = match configuracion::leer(&raiz.join("configuracion.toml")) {
+                Ok(configuracion) => configuracion,
+                Err(error) => {
+                    mensaje.set_text(&error);
+                    return;
+                }
+            };
+
+            match configuracion::cambiar_steam(
+                &raiz.join("configuracion.toml"),
+                configuracion.steam.activo,
+                fila.is_active(),
+                configuracion.steam.servidor_dedicado,
+            ) {
+                Ok(true) => mensaje_guardado(
+                    &mensaje,
+                    &raiz,
+                    &aviso,
+                    &boton_aplicar,
+                    &ocupado,
+                    "✓ Cambié Steam Remote Play. NixOS todavía no cambió.",
+                ),
+                Ok(false) => {}
+                Err(error) => mensaje.set_text(&error),
+            }
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        steam_servidor.connect_active_notify(move |fila| {
+            if actualizando.get() {
+                return;
+            }
+
+            let configuracion = match configuracion::leer(&raiz.join("configuracion.toml")) {
+                Ok(configuracion) => configuracion,
+                Err(error) => {
+                    mensaje.set_text(&error);
+                    return;
+                }
+            };
+
+            match configuracion::cambiar_steam(
+                &raiz.join("configuracion.toml"),
+                configuracion.steam.activo,
+                configuracion.steam.remote_play,
+                fila.is_active(),
+            ) {
+                Ok(true) => mensaje_guardado(
+                    &mensaje,
+                    &raiz,
+                    &aviso,
+                    &boton_aplicar,
+                    &ocupado,
+                    "✓ Cambié el servidor dedicado de Steam. NixOS todavía no cambió.",
+                ),
+                Ok(false) => {}
+                Err(error) => mensaje.set_text(&error),
+            }
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        impresion.connect_active_notify(move |fila| {
+            if actualizando.get() {
+                return;
+            }
+
+            let activa = fila.is_active();
+
+            match configuracion::cambiar_impresion(&raiz.join("configuracion.toml"), activa) {
+                Ok(true) => mensaje_guardado(
+                    &mensaje,
+                    &raiz,
+                    &aviso,
+                    &boton_aplicar,
+                    &ocupado,
+                    &format!(
+                        "✓ Impresión {} en la configuración. NixOS todavía no cambió.",
+                        palabra_estado(activa)
+                    ),
+                ),
+                Ok(false) => {}
+                Err(error) => mensaje.set_text(&error),
+            }
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let actualizando = Rc::clone(&actualizando);
+
+        virtualizacion.connect_active_notify(move |fila| {
+            if actualizando.get() {
+                return;
+            }
+
+            let activa = fila.is_active();
+
+            match configuracion::cambiar_virtualizacion(&raiz.join("configuracion.toml"), activa) {
+                Ok(true) => mensaje_guardado(
+                    &mensaje,
+                    &raiz,
+                    &aviso,
+                    &boton_aplicar,
+                    &ocupado,
+                    &format!(
+                        "✓ Virtualización {} en la configuración. NixOS todavía no cambió.",
+                        palabra_estado(activa)
+                    ),
+                ),
+                Ok(false) => {}
+                Err(error) => mensaje.set_text(&error),
+            }
+        });
+    }
+
+    {
         let entrada = entrada_aplicacion.clone();
         let lista = lista_aplicaciones.clone();
         let contador = contador_aplicaciones.clone();
@@ -882,7 +1427,16 @@ fn construir_ventana(aplicacion: &Application) {
         let entrada_nombre = entrada_nombre.clone();
         let selector_canal = selector_canal.clone();
         let selector_escritorio = selector_escritorio.clone();
-        let fila_apariencia = fila_apariencia.clone();
+        let selector_estilo = selector_estilo.clone();
+        let selector_modo = selector_modo.clone();
+        let bluetooth = bluetooth.clone();
+        let sunshine = sunshine.clone();
+        let sunshine_autoinicio = sunshine_autoinicio.clone();
+        let steam = steam.clone();
+        let steam_remote_play = steam_remote_play.clone();
+        let steam_servidor = steam_servidor.clone();
+        let impresion = impresion.clone();
+        let virtualizacion = virtualizacion.clone();
         let lista = lista_aplicaciones.clone();
         let contador = contador_aplicaciones.clone();
         let mensaje = mensaje_configuracion.clone();
@@ -897,7 +1451,16 @@ fn construir_ventana(aplicacion: &Application) {
                 &entrada_nombre,
                 &selector_canal,
                 &selector_escritorio,
-                &fila_apariencia,
+                &selector_estilo,
+                &selector_modo,
+                &bluetooth,
+                &sunshine,
+                &sunshine_autoinicio,
+                &steam,
+                &steam_remote_play,
+                &steam_servidor,
+                &impresion,
+                &virtualizacion,
                 &lista,
                 &contador,
                 &mensaje,
@@ -995,7 +1558,16 @@ fn construir_ventana(aplicacion: &Application) {
         &entrada_nombre,
         &selector_canal,
         &selector_escritorio,
-        &fila_apariencia,
+        &selector_estilo,
+        &selector_modo,
+        &bluetooth,
+        &sunshine,
+        &sunshine_autoinicio,
+        &steam,
+        &steam_remote_play,
+        &steam_servidor,
+        &impresion,
+        &virtualizacion,
         &lista_aplicaciones,
         &contador_aplicaciones,
         &mensaje_configuracion,
