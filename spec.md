@@ -655,6 +655,49 @@ Generación final usada después del ajuste de integración de escritorios:
 ```
 
 
+### La GUI edita la configuración humana
+
+La GUI no interpreta `configuracion.toml` por su cuenta. `src/interfaz.rs` reutiliza directamente `src/configuracion.rs`, así que GUI y CLI comparten lectura, validación y guardado para las decisiones que ya están implementadas.
+
+El primer editor gráfico permite cambiar:
+
+- nombre del equipo;
+- canal estable/inestable;
+- escritorio principal;
+- aplicaciones libres, tanto agregar como quitar.
+
+Guardar una de estas opciones modifica solamente `configuracion.toml`. No ejecuta preview, no reconstruye NixOS y no aplica nada automáticamente.
+
+Si `configuracion.toml` ya no coincide con la copia asociada al preview, la GUI lo muestra y desactiva «Aplicar cambios». La persona tiene que crear un preview nuevo antes de poder aplicar esas decisiones. «Crear preview» permanece disponible.
+
+La prueba manual fue reversible:
+
+```text
+nombre:       korunix → korunix-prueba → korunix
+canal:        inestable → estable → inestable
+escritorio:   niri → hyprland → niri
+aplicaciones: 37 → 38 → 37
+```
+
+La aplicación temporal usada fue `korunix-prueba`. Al terminar, `configuracion.toml` volvió exactamente a los mismos bytes con los que empezó la prueba:
+
+```text
+SHA-256 71d874421ff13d65e998e859e9727145883619e543250aae70edf9251e1302fb
+```
+
+La GUI editable quedó publicada en:
+
+```text
+12d1602f80b6e7bae0b740eb416aae71dbc1c7b1
+```
+
+y aplicada dentro de esta generación completa:
+
+```text
+/nix/store/zcm9hh969kkifyld6cd7lj9s9g168gva-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+
 Debe respetar navegación por teclado, foco visible, lectores de pantalla, escalado de texto, contraste, traducciones largas, diacríticos, CJK, preparación para RTL, modo compacto y ausencia de clipping.
 
 Las secciones pueden tener composiciones diferentes según la tarea. Compartir libadwaita no significa clonar la misma página doce veces.
