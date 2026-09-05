@@ -424,6 +424,15 @@ Korunix traduce eso para Noctalia como `source = "wallpaper"` y `mode = "auto"`.
 
 Las plantillas visuales de Noctalia no deben contaminar Plasma o Cinnamon.
 
+La separación también funciona en sentido contrario. DrKonqi pertenece a Plasma: si Plasma está instalado junto con Niri, Hyprland o Cinnamon, el lanzador gráfico de informes de fallos solo puede arrancar cuando `plasma-workspace.target` está activo. `systemd-coredump` puede seguir registrando el fallo técnicamente, pero fuera de Plasma no aparecen notificaciones gráficas de KDE por esos coredumps.
+
+Este límite quedó restaurado y probado en:
+
+```text
+30a692a686e33fe0096719ea43bbae5021ade830
+```
+
+
 Instalar varios escritorios tampoco significa mezclar sus aplicaciones visualmente. Korunix conserva las herramientas propias de cada familia y limita sus lanzadores al escritorio que corresponde:
 
 ```text
@@ -607,6 +616,44 @@ No inventar porcentajes si Nix no puede ofrecerlos. Sí mostrar fase y actividad
 GTK4 + libadwaita son la base visual.
 
 La GUI muestra, pregunta, manda decisiones al mismo Rust que usa la CLI y presenta resultados. No contiene una segunda implementación del sistema.
+
+### Primer corte GTK4/libadwaita probado
+
+La primera interfaz de `desde-cero` quedó en un único `src/interfaz.rs`, sin crear otra arquitectura alrededor. GTK4 y libadwaita son dependencias opcionales del binario gráfico; la CLI sigue pudiendo compilar y funcionar sin arrastrarlas.
+
+La ventana abre leyendo `configuracion.toml` y estado local. No ejecuta `nix eval` al arrancar. Las operaciones largas se ejecutan fuera del hilo de GTK y la ventana sigue respondiendo mientras Korunix trabaja.
+
+Los botones «Crear preview», «Aplicar cambios» y «Volver a la generación anterior» llaman al mismo motor público que usa la CLI. La autorización de apply/rollback se muestra gráficamente con `pkexec` cuando hace falta; no se pide escribir `APLICAR` ni `VOLVER`.
+
+El flujo completo quedó probado desde la GUI:
+
+```text
+preview
+→ no cambió NixOS
+
+aplicar
+→ activó exactamente el preview revisado
+→ no ejecutó nix build
+→ activa = persistente = preview
+
+rollback
+→ volvió exactamente a la generación protegida
+→ restauró configuracion.toml
+→ no ejecutó nix build
+```
+
+Base GTK probada:
+
+```text
+ddac20a2bf9e996bf6d2d866c54e38afaa18b37c
+```
+
+Generación final usada después del ajuste de integración de escritorios:
+
+```text
+/nix/store/2mi464gf6r3sx7kqrkv1wzczijmaymgy-nixos-system-korunix-26.11.20260831.34ab990
+```
+
 
 Debe respetar navegación por teclado, foco visible, lectores de pantalla, escalado de texto, contraste, traducciones largas, diacríticos, CJK, preparación para RTL, modo compacto y ausencia de clipping.
 
