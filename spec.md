@@ -698,6 +698,54 @@ y aplicada dentro de esta generación completa:
 ```
 
 
+### Apariencia y funciones granulares desde GUI y CLI
+
+La misma lógica de `src/configuracion.rs` permite ahora editar desde GUI y CLI:
+
+- apariencia por estilo: Predeterminado, Dinámico o Everforest;
+- modo: Claro, Oscuro o Automático;
+- Bluetooth;
+- Sunshine y su autoinicio;
+- Steam, Remote Play y servidor dedicado;
+- impresión;
+- virtualización.
+
+Las opciones principales y sus subopciones siguen siendo independientes. Apagar Sunshine conserva `autoinicio`. Apagar Steam conserva `remote_play` y `servidor_dedicado`. La interfaz mantiene esas preferencias visibles mientras la función principal está apagada.
+
+Las ediciones siguen tocando solamente `configuracion.toml`; NixOS no cambia hasta crear y aplicar un preview.
+
+La prueba gráfica comprobó específicamente:
+
+```text
+Sunshine apagado
+→ autoinicio siguió activado
+
+Steam apagado
+→ Remote Play siguió activado
+→ servidor dedicado siguió activado
+```
+
+También se probó el cambio reversible de apariencia y de los interruptores. Al terminar, `configuracion.toml` volvió exactamente al contenido inicial:
+
+```text
+SHA-256 71d874421ff13d65e998e859e9727145883619e543250aae70edf9251e1302fb
+```
+
+Los 84 tests de Rust pasaron en serie. El test de reemplazo de preview que primero devolvió `Text file busy` también pasó al ejecutarse solo; `preview.rs` no formaba parte de este cambio.
+
+Código publicado:
+
+```text
+ba53dfc4c0273a0cf14417a4a3cbfa1bb5acc6e3
+```
+
+Generación aplicada:
+
+```text
+/nix/store/9v0zbbnv88gdyxbng725lpdg2rld7574-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+
 Debe respetar navegación por teclado, foco visible, lectores de pantalla, escalado de texto, contraste, traducciones largas, diacríticos, CJK, preparación para RTL, modo compacto y ausencia de clipping.
 
 Las secciones pueden tener composiciones diferentes según la tarea. Compartir libadwaita no significa clonar la misma página doce veces.
