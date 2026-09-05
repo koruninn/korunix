@@ -601,7 +601,52 @@ disponibles = ["ST3500413AS · 500 GB"]
 
 El plan de Korunix muestra la identidad humana de la unidad y no obliga a enseñar `/mnt/datos`. La ruta sigue disponible por dentro para NixOS, pero no forma parte de la decisión que la persona tiene que entender.
 
-Almacenamiento tendrá una sección propia en la GUI. No se mezcla con «Sesión y equipo» ni se publica un interruptor ambiguo mientras la interfaz no pueda mostrar las unidades de forma reconocible.
+Almacenamiento tiene una sección propia en la GUI y no se mezcla con «Sesión y equipo».
+
+La ventana se presenta primero y después lee el estado local de discos una sola vez mediante `lsblk`, en segundo plano. No ejecuta `nix eval` para abrir esta sección ni repite la lectura al refrescar controles después de preview, apply o rollback.
+
+El disco que contiene NixOS no se ofrece como almacenamiento adicional. En el equipo actual se comprobó que el sistema está en `ADATA LEGEND 800 · 1 TB`; contiene `/`, `/home`, `/nix` y `/boot`, y queda fuera de esta lista.
+
+La unidad ya adoptada se muestra así:
+
+```text
+ST3500413AS · 500 GB
+SATA · NTFS · Disponible en Korunix · se monta al usarlo
+```
+
+El texto «se monta al usarlo» representa el automount real de `/mnt/datos`. Korunix no presenta ese estado como si el disco estuviera desconectado o tuviera un problema.
+
+Las unidades conectadas que Korunix todavía no sabe adoptar de forma segura sí pueden mostrarse, pero sin un interruptor que prometa una acción inexistente. Durante la prueba se detectó:
+
+```text
+DataTraveler 2.0 · 16 GB
+USB · exFAT · Etiqueta: Ventoy
+Detectado · todavía no administrado por Korunix
+```
+
+Intentar activarlo por CLI se rechaza sin modificar `configuracion.toml`. UUID, nombres `/dev/...` y rutas de montaje no aparecen en la GUI ni en la salida humana de la CLI.
+
+La prueba apagar → encender del ST3500413AS fue reversible byte por byte: `configuracion.toml` terminó con el mismo SHA-256 que tenía antes:
+
+```text
+dcabb9d73a2b94de078b0532b60b7e128f989d12ddec8f27abbcfd8a22e1fa0e
+```
+
+Los 89 tests de Rust pasaron en serie, la GUI se probó visualmente y el motor empaquetado por Nix confirmó el mismo inventario local.
+
+Código publicado:
+
+```text
+eda1d6e8aa9c4f4e1954e8f65ad39131775f0617
+```
+
+Generación aplicada:
+
+```text
+/nix/store/x8dylkhdlvsx5s3g2i8pj5l3gz02pgbc-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+El siguiente paso de almacenamiento es permitir adoptar una unidad nueva con una sola decisión humana. Korunix deberá capturar y conservar internamente la identidad técnica necesaria sin pedir UUID, `/dev/...` ni rutas a la persona.
 
 Se conserva como comportamiento útil:
 
