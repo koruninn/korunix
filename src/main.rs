@@ -4,6 +4,7 @@ mod configuracion;
 mod preview;
 mod rollback;
 mod sistema;
+mod transferencias;
 
 use std::env;
 use std::io::{self, Write};
@@ -71,7 +72,9 @@ fn ayuda() {
     eprintln!("  korunix monitor <resolucion> <hz>");
     eprintln!("  korunix almacenamiento");
     eprintln!("  korunix almacenamiento adoptar <nombre>");
+    eprintln!("  korunix almacenamiento expulsar <nombre>");
     eprintln!("  korunix almacenamiento <nombre> <activar|desactivar>");
+    eprintln!("  korunix transferir <archivo> <unidad>");
     eprintln!("  korunix canal");
     eprintln!("  korunix canal <estable|inestable>");
     eprintln!("  korunix apariencia");
@@ -663,25 +666,31 @@ fn mostrar_almacenamiento(raiz: &Path) {
 
         println!("  - {}", unidad.nombre);
 
+        let expulsable = if unidad.puede_expulsar() {
+            " · expulsión segura disponible"
+        } else {
+            ""
+        };
+
         if conocida {
             println!(
                 "    {} · {}",
                 unidad.detalle,
                 if elegida {
-                    "disponible en Korunix · se monta al usarlo"
+                    format!("disponible en Korunix · se monta al usarlo{expulsable}")
                 } else {
-                    "no disponible en Korunix"
+                    format!("no disponible en Korunix{expulsable}")
                 }
             );
         } else if let Some(problema) = unidad.problema_adopcion() {
             println!(
-                "    {} · detectado · no puedo administrarlo automáticamente: {}",
-                unidad.detalle, problema
+                "    {} · detectado · no puedo administrarlo automáticamente: {}{}",
+                unidad.detalle, problema, expulsable
             );
         } else {
             println!(
-                "    {} · detectado · todavía no administrado por Korunix",
-                unidad.detalle
+                "    {} · detectado · todavía no administrado por Korunix{}",
+                unidad.detalle, expulsable
             );
         }
 
@@ -742,6 +751,47 @@ fn adoptar_almacenamiento(raiz: &Path, nombre: &str) {
         Ok(false) => {
             println!("«{nombre}» ya estaba adoptado.");
             println!("No cambié nada.");
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn expulsar_almacenamiento(nombre: &str) {
+    println!("Preparando la expulsión segura de «{nombre}»…");
+    let _ = io::stdout().flush();
+
+    match almacenamiento::expulsar(nombre) {
+        Ok(()) => {
+            println!("✓ «{nombre}» ya se puede desconectar físicamente.");
+            println!("No usé sync global ni forcé un desmontaje ocupado.");
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn transferir_archivo(raiz: &Path, archivo: &str, unidad: &str) {
+    let origen = Path::new(archivo);
+
+    println!("Transferencia");
+    println!("Archivo: {}", origen.display());
+    println!("Destino: {unidad}");
+    println!("Korunix no sobrescribirá un archivo existente.");
+    println!("El nombre final solo aparecerá cuando la copia esté completa.");
+    println!();
+    let _ = io::stdout().flush();
+
+    match transferencias::transferir(raiz, unidad, origen, |avance| {
+        println!("{}", avance.linea());
+        let _ = io::stdout().flush();
+    }) {
+        Ok(destino) => {
+            let nombre = destino
+                .file_name()
+                .map(|valor| valor.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "archivo".to_string());
+
+            println!("✓ «{nombre}» terminó de copiarse en «{unidad}».");
+            println!("✓ El archivo fue sincronizado individualmente; no ejecuté sync global.");
         }
         Err(error) => salir_con_error(&error),
     }
@@ -1177,8 +1227,14 @@ fn main() {
         [comando, accion, nombre] if comando == "almacenamiento" && accion == "adoptar" => {
             adoptar_almacenamiento(&raiz, nombre)
         }
+        [comando, accion, nombre] if comando == "almacenamiento" && accion == "expulsar" => {
+            expulsar_almacenamiento(nombre)
+        }
         [comando, nombre, accion] if comando == "almacenamiento" => {
             cambiar_almacenamiento(&raiz, nombre, accion)
+        }
+        [comando, archivo, unidad] if comando == "transferir" => {
+            transferir_archivo(&raiz, archivo, unidad)
         }
         [comando] if comando == "canal" => mostrar_canal(&raiz),
         [comando, canal] if comando == "canal" => cambiar_canal(&raiz, canal),

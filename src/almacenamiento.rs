@@ -7,7 +7,7 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnidadLocal {
@@ -16,11 +16,18 @@ pub struct UnidadLocal {
     tecnica: Option<UnidadTecnica>,
     problema_adopcion: Option<String>,
     serial: Option<String>,
+    dispositivo: Option<String>,
+    particiones_montadas: Vec<String>,
+    usb: bool,
 }
 
 impl UnidadLocal {
     pub fn problema_adopcion(&self) -> Option<&str> {
         self.problema_adopcion.as_deref()
+    }
+
+    pub fn puede_expulsar(&self) -> bool {
+        self.usb && self.dispositivo.is_some()
     }
 }
 
@@ -42,6 +49,8 @@ struct SalidaLsblk {
 
 #[derive(Debug, Deserialize)]
 struct Dispositivo {
+    #[serde(default)]
+    name: Option<String>,
     #[serde(default)]
     size: Option<Value>,
     #[serde(rename = "type", default)]
@@ -88,6 +97,39 @@ fn tiene_montaje(dispositivo: &Dispositivo, buscado: Option<&str>) -> bool {
         .children
         .iter()
         .any(|hijo| tiene_montaje(hijo, buscado))
+}
+
+fn nombre_dispositivo(nombre: &str) -> String {
+    if nombre.starts_with("/dev/") {
+        nombre.to_string()
+    } else {
+        format!("/dev/{nombre}")
+    }
+}
+
+fn particiones_montadas(dispositivo: &Dispositivo, salida: &mut Vec<String>) {
+    let montada = dispositivo
+        .mountpoints
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .flatten()
+        .any(|montaje| !montaje.is_empty());
+
+    if montada {
+        if let Some(nombre) = dispositivo
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|nombre| !nombre.is_empty())
+        {
+            salida.push(nombre_dispositivo(nombre));
+        }
+    }
+
+    for hijo in &dispositivo.children {
+        particiones_montadas(hijo, salida);
+    }
 }
 
 fn capacidad_humana(bytes: u64) -> String {
@@ -291,6 +333,10 @@ fn leer_json(datos: &[u8]) -> Result<Vec<UnidadLocal>, String> {
             Err(error) => (None, Some(error)),
         };
 
+        let mut montadas = Vec::new();
+        particiones_montadas(&disco, &mut montadas);
+        let transporte = conexion_humana(disco.tran.as_deref());
+
         unidades.push(UnidadLocal {
             nombre,
             detalle: detalles.join(" · "),
@@ -302,6 +348,14 @@ fn leer_json(datos: &[u8]) -> Result<Vec<UnidadLocal>, String> {
                 .map(str::trim)
                 .filter(|serial| !serial.is_empty())
                 .map(str::to_string),
+            dispositivo: disco
+                .name
+                .as_deref()
+                .map(str::trim)
+                .filter(|nombre| !nombre.is_empty())
+                .map(nombre_dispositivo),
+            particiones_montadas: montadas,
+            usb: transporte.as_deref() == Some("USB"),
         });
     }
 
@@ -347,7 +401,24 @@ fn leer_json(datos: &[u8]) -> Result<Vec<UnidadLocal>, String> {
     Ok(unidades)
 }
 
-pub fn leer() -> Result<Vec<UnidadLocal>, String> {
+fn esperar_udev() {
+    let programa = env::var_os("KORUNIX_UDEVADM_BIN").unwrap_or_else(|| {
+        if Path::new("/run/current-system/sw/bin/udevadm").is_file() {
+            "/run/current-system/sw/bin/udevadm".into()
+        } else {
+            "udevadm".into()
+        }
+    });
+
+    // Al reconectar un USB, el disco físico puede aparecer unas décimas antes
+    // que sus particiones. Esperamos la cola local de udev una vez y luego
+    // hacemos una sola lectura de lsblk.
+    let _ = Command::new(programa)
+        .args(["settle", "--timeout=2"])
+        .output();
+}
+
+fn ejecutar_lsblk() -> Result<Vec<u8>, String> {
     let programa = env::var_os("KORUNIX_LSBLK_BIN").unwrap_or_else(|| {
         if Path::new("/run/current-system/sw/bin/lsblk").is_file() {
             "/run/current-system/sw/bin/lsblk".into()
@@ -377,7 +448,130 @@ pub fn leer() -> Result<Vec<UnidadLocal>, String> {
         });
     }
 
-    leer_json(&salida.stdout)
+    Ok(salida.stdout)
+}
+
+fn usb_incompleto(datos: &[u8]) -> bool {
+    let Ok(salida) = serde_json::from_slice::<SalidaLsblk>(datos) else {
+        return false;
+    };
+
+    salida.blockdevices.iter().any(|disco| {
+        if disco.tipo.as_deref() != Some("disk")
+            || conexion_humana(disco.tran.as_deref()).as_deref() != Some("USB")
+            || tiene_montaje(disco, Some("/"))
+        {
+            return false;
+        }
+
+        let mut candidatas = Vec::new();
+        candidatas_adoptables(disco, &mut candidatas);
+        candidatas.is_empty()
+    })
+}
+
+pub fn leer() -> Result<Vec<UnidadLocal>, String> {
+    esperar_udev();
+
+    let primera = ejecutar_lsblk()?;
+
+    if usb_incompleto(&primera) {
+        // Algunos pendrives aparecen como disco unas décimas antes que sus
+        // particiones. Esto solo ocurre en ese estado incompleto: damos una
+        // segunda oportunidad breve y luego volvemos a leer una única vez.
+        std::thread::sleep(Duration::from_millis(1500));
+        let segunda = ejecutar_lsblk()?;
+        return leer_json(&segunda);
+    }
+
+    leer_json(&primera)
+}
+
+fn valor_bloque_unidad(texto: &str, nombre: &str, campo: &str) -> Option<String> {
+    let inicio = texto.find(&format!("{}\n", clave_unidad(nombre)))?;
+    let bloque = &texto[inicio..];
+    let fin = bloque.find("\n    };")?;
+    let bloque = &bloque[..fin];
+    let prefijo = format!("      {campo} = \"");
+
+    bloque.lines().find_map(|linea| {
+        let resto = linea.strip_prefix(&prefijo)?;
+        let valor = resto.strip_suffix("\";")?;
+        Some(valor.replace("\\\"", "\"").replace("\\\\", "\\"))
+    })
+}
+
+#[allow(dead_code)]
+pub fn ruta_administrada(raiz: &Path, nombre: &str) -> Result<PathBuf, String> {
+    let texto = fs::read_to_string(raiz.join("hardware.nix"))
+        .map_err(|error| format!("No pude leer hardware.nix.\nDetalle: {error}"))?;
+
+    if !texto.lines().any(|linea| linea == clave_unidad(nombre)) {
+        return Err(format!(
+            "«{nombre}» todavía no tiene una identidad técnica guardada."
+        ));
+    }
+
+    let ruta = valor_bloque_unidad(&texto, nombre, "ruta")
+        .ok_or_else(|| format!("No encontré la ruta técnica guardada para «{nombre}»."))?;
+
+    Ok(PathBuf::from(ruta))
+}
+
+fn programa_udisksctl() -> PathBuf {
+    if let Some(programa) = env::var_os("KORUNIX_UDISKSCTL_BIN") {
+        return programa.into();
+    }
+
+    if Path::new("/run/current-system/sw/bin/udisksctl").is_file() {
+        return "/run/current-system/sw/bin/udisksctl".into();
+    }
+
+    "udisksctl".into()
+}
+
+fn ejecutar_udisks(argumentos: &[&str]) -> Result<(), String> {
+    let salida = Command::new(programa_udisksctl())
+        .args(argumentos)
+        .output()
+        .map_err(|error| format!("No pude iniciar la expulsión segura.\nDetalle: {error}"))?;
+
+    if salida.status.success() {
+        return Ok(());
+    }
+
+    let detalle = String::from_utf8_lossy(&salida.stderr).trim().to_string();
+
+    Err(if detalle.is_empty() {
+        "La unidad está en uso o el sistema no permitió expulsarla. No la forcé.".to_string()
+    } else {
+        format!("No pude expulsar la unidad con seguridad. No la forcé.\nDetalle: {detalle}")
+    })
+}
+
+#[allow(dead_code)]
+pub fn expulsar(nombre: &str) -> Result<(), String> {
+    let unidad = leer()?
+        .into_iter()
+        .find(|unidad| unidad.nombre == nombre)
+        .ok_or_else(|| format!("No encuentro conectada la unidad «{nombre}»."))?;
+
+    if !unidad.puede_expulsar() {
+        return Err(format!(
+            "«{nombre}» no es una unidad USB que Korunix pueda expulsar con seguridad."
+        ));
+    }
+
+    for particion in &unidad.particiones_montadas {
+        ejecutar_udisks(&["unmount", "-b", particion])?;
+    }
+
+    let dispositivo = unidad
+        .dispositivo
+        .as_deref()
+        .ok_or_else(|| "No pude identificar el dispositivo físico.".to_string())?;
+
+    ejecutar_udisks(&["power-off", "-b", dispositivo])
 }
 
 fn escapar_nix(valor: &str) -> String {
@@ -648,6 +842,88 @@ mod pruebas {
         assert!(error.contains("identidad técnica"));
 
         fs::remove_dir_all(&raiz).expect("debería limpiar la carpeta temporal");
+    }
+
+    #[test]
+    fn una_usb_sin_particion_pide_una_segunda_lectura() {
+        let datos = br#"{
+          "blockdevices": [
+            {
+              "name": "sdb",
+              "size": 15518924800,
+              "type": "disk",
+              "model": "DataTraveler 2.0",
+              "serial": "SERIE",
+              "tran": "usb",
+              "mountpoints": [null],
+              "children": []
+            }
+          ]
+        }"#;
+
+        assert!(usb_incompleto(datos));
+    }
+
+    #[test]
+    fn una_usb_con_su_particion_lista_no_repite_lsblk() {
+        let datos = br#"{
+          "blockdevices": [
+            {
+              "name": "sdb",
+              "size": 15518924800,
+              "type": "disk",
+              "model": "DataTraveler 2.0",
+              "serial": "SERIE",
+              "tran": "usb",
+              "mountpoints": [null],
+              "children": [
+                {
+                  "name": "sdb1",
+                  "size": 15485370368,
+                  "type": "part",
+                  "fstype": "exfat",
+                  "label": "Ventoy",
+                  "uuid": "BAF1-579A",
+                  "mountpoints": [null]
+                }
+              ]
+            }
+          ]
+        }"#;
+
+        assert!(!usb_incompleto(datos));
+    }
+
+    #[test]
+    fn lee_la_ruta_tecnica_solo_desde_hardware_nix() {
+        let momento = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let raiz = env::temp_dir().join(format!("korunix-ruta-unidad-{}-{momento}", process::id()));
+        fs::create_dir_all(&raiz).expect("debería crear carpeta temporal");
+        fs::write(
+            raiz.join("hardware.nix"),
+            r#"
+{
+  _module.args.unidadesDetectadas = {
+    "Disco externo · 2 TB" = {
+      uuid = "AAAA";
+      sistemaArchivos = "exfat";
+      ruta = "/mnt/korunix/aaaa";
+    };
+  };
+}
+"#,
+        )
+        .expect("debería escribir hardware.nix");
+
+        assert_eq!(
+            ruta_administrada(&raiz, "Disco externo · 2 TB").expect("debería leer la ruta"),
+            PathBuf::from("/mnt/korunix/aaaa")
+        );
+
+        fs::remove_dir_all(&raiz).expect("debería limpiar");
     }
 
     #[test]

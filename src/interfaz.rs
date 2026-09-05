@@ -1,6 +1,7 @@
 mod almacenamiento;
 #[allow(dead_code)]
 mod configuracion;
+mod transferencias;
 
 use adw::prelude::*;
 use adw::{Application, ApplicationWindow, HeaderBar, ToolbarView};
@@ -19,10 +20,16 @@ use std::time::Duration;
 const ID_APLICACION: &str = "io.github.koruninn.Korunix";
 
 type AlTerminar = Rc<dyn Fn(bool)>;
+type AlExpulsar = Rc<dyn Fn(Result<(), String>)>;
 
 enum Mensaje {
     Linea(String),
     Terminado(bool),
+}
+
+enum MensajeTransferencia {
+    Avance(transferencias::Progreso),
+    Terminado(Result<PathBuf, String>),
 }
 
 fn raiz_korunix() -> PathBuf {
@@ -195,6 +202,221 @@ fn teclados_elegidos(espana: &adw::SwitchRow, latinoamerica: &adw::SwitchRow) ->
     .collect()
 }
 
+fn actualizar_destinos_transferencia(
+    selector: &gtk::DropDown,
+    destinos: &Rc<RefCell<Vec<String>>>,
+    raiz: &Path,
+) -> Result<(), String> {
+    let configuracion = configuracion::leer(&raiz.join("configuracion.toml"))?;
+    let nombres = configuracion.almacenamiento.disponibles;
+    let referencias: Vec<&str> = nombres.iter().map(String::as_str).collect();
+    let modelo = gtk::StringList::new(&referencias);
+
+    selector.set_model(Some(&modelo));
+
+    if !nombres.is_empty() {
+        selector.set_selected(0);
+    }
+
+    *destinos.borrow_mut() = nombres;
+    Ok(())
+}
+
+fn iniciar_transferencia_gui(
+    origen: PathBuf,
+    unidad: String,
+    raiz: &Path,
+    progreso: &gtk::ProgressBar,
+    estado: &gtk::Label,
+    controles: &[gtk::Widget],
+    ocupado: &Rc<Cell<bool>>,
+    aviso: &gtk::Revealer,
+    boton_aplicar: &gtk::Button,
+) {
+    if ocupado.get() {
+        return;
+    }
+
+    ocupado.set(true);
+    sensibilidad(controles, false);
+    progreso.set_fraction(0.0);
+    progreso.set_show_text(true);
+    progreso.set_text(Some("Preparando la transferencia…"));
+
+    let nombre_archivo = origen
+        .file_name()
+        .map(|nombre| nombre.to_string_lossy().into_owned())
+        .unwrap_or_else(|| origen.display().to_string());
+
+    estado.set_text(&format!("Copiando «{nombre_archivo}» a «{unidad}»…"));
+
+    let (envio, recepcion) = mpsc::channel();
+    let raiz_trabajo = raiz.to_path_buf();
+
+    thread::spawn(move || {
+        let envio_progreso = envio.clone();
+        let resultado =
+            transferencias::transferir(&raiz_trabajo, &unidad, &origen, move |avance| {
+                let _ = envio_progreso.send(MensajeTransferencia::Avance(avance));
+            });
+
+        let _ = envio.send(MensajeTransferencia::Terminado(resultado));
+    });
+
+    let progreso = progreso.clone();
+    let estado = estado.clone();
+    let controles = controles.to_vec();
+    let ocupado = Rc::clone(ocupado);
+    let raiz = raiz.to_path_buf();
+    let aviso = aviso.clone();
+    let boton_aplicar = boton_aplicar.clone();
+
+    glib::timeout_add_local(Duration::from_millis(80), move || {
+        loop {
+            match recepcion.try_recv() {
+                Ok(MensajeTransferencia::Avance(avance)) => {
+                    let fraccion = if avance.total == 0 {
+                        1.0
+                    } else {
+                        avance.copiados as f64 / avance.total as f64
+                    };
+
+                    progreso.set_fraction(fraccion.clamp(0.0, 1.0));
+                    progreso.set_text(Some(&avance.linea()));
+                }
+                Ok(MensajeTransferencia::Terminado(resultado)) => {
+                    sensibilidad(&controles, true);
+                    ocupado.set(false);
+                    actualizar_estado_preview(&raiz, &aviso, &boton_aplicar, &ocupado);
+
+                    match resultado {
+                        Ok(destino) => {
+                            progreso.set_fraction(1.0);
+                            let nombre = destino
+                                .file_name()
+                                .map(|valor| valor.to_string_lossy().into_owned())
+                                .unwrap_or_else(|| "archivo".to_string());
+                            estado.set_text(&format!(
+                                "✓ «{nombre}» terminó de copiarse y quedó verificado."
+                            ));
+                        }
+                        Err(error) => {
+                            progreso.set_text(Some("La transferencia no se completó."));
+                            estado.set_text(&error);
+                        }
+                    }
+
+                    return glib::ControlFlow::Break;
+                }
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    sensibilidad(&controles, true);
+                    ocupado.set(false);
+                    actualizar_estado_preview(&raiz, &aviso, &boton_aplicar, &ocupado);
+                    progreso.set_text(Some("La transferencia terminó sin respuesta."));
+                    estado.set_text(
+                        "La transferencia terminó sin respuesta. No doy el archivo por terminado.",
+                    );
+                    return glib::ControlFlow::Break;
+                }
+            }
+        }
+
+        glib::ControlFlow::Continue
+    });
+}
+
+fn conectar_expulsion(
+    boton: &gtk::Button,
+    nombre: String,
+    raiz: &Path,
+    mensaje: &gtk::Label,
+    aviso: &gtk::Revealer,
+    boton_aplicar: &gtk::Button,
+    controles: &[gtk::Widget],
+    ocupado: &Rc<Cell<bool>>,
+    al_terminar: AlExpulsar,
+) {
+    let boton = boton.clone();
+    let raiz = raiz.to_path_buf();
+    let mensaje = mensaje.clone();
+    let aviso = aviso.clone();
+    let boton_aplicar = boton_aplicar.clone();
+    let controles = controles.to_vec();
+    let ocupado = Rc::clone(ocupado);
+
+    boton.clone().connect_clicked(move |_| {
+        if ocupado.get() {
+            return;
+        }
+
+        ocupado.set(true);
+        sensibilidad(&controles, false);
+        boton.set_sensitive(false);
+        boton.set_label("Expulsando…");
+        mensaje.set_text(&format!("Expulsando «{nombre}» con seguridad…"));
+
+        let (envio, recepcion) = mpsc::channel();
+        let nombre_trabajo = nombre.clone();
+
+        thread::spawn(move || {
+            let _ = envio.send(almacenamiento::expulsar(&nombre_trabajo));
+        });
+
+        let boton = boton.clone();
+        let raiz = raiz.clone();
+        let mensaje = mensaje.clone();
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+        let controles = controles.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let nombre = nombre.clone();
+        let al_terminar = Rc::clone(&al_terminar);
+
+        glib::timeout_add_local(Duration::from_millis(80), move || {
+            match recepcion.try_recv() {
+                Ok(resultado) => {
+                    sensibilidad(&controles, true);
+                    ocupado.set(false);
+                    actualizar_estado_preview(&raiz, &aviso, &boton_aplicar, &ocupado);
+
+                    match &resultado {
+                        Ok(()) => {
+                            boton.set_label("Expulsada");
+                            boton.set_sensitive(false);
+                            mensaje.set_text(&format!(
+                                "✓ «{nombre}» ya se puede desconectar físicamente."
+                            ));
+                        }
+                        Err(error) => {
+                            boton.set_label("Reintentar");
+                            boton.set_sensitive(true);
+                            mensaje.set_text(error);
+                        }
+                    }
+
+                    al_terminar(resultado);
+                    glib::ControlFlow::Break
+                }
+                Err(TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(TryRecvError::Disconnected) => {
+                    sensibilidad(&controles, true);
+                    ocupado.set(false);
+                    actualizar_estado_preview(&raiz, &aviso, &boton_aplicar, &ocupado);
+                    boton.set_label("Reintentar");
+                    boton.set_sensitive(true);
+                    let error =
+                        "La expulsión terminó sin respuesta. No doy la unidad por expulsada."
+                            .to_string();
+                    mensaje.set_text(&error);
+                    al_terminar(Err(error));
+                    glib::ControlFlow::Break
+                }
+            }
+        });
+    });
+}
+
 fn guardar_monitor(
     resolucion: &gtk::Entry,
     hz: &gtk::SpinButton,
@@ -233,12 +455,16 @@ fn agregar_fila_almacenamiento(
     nombre: String,
     detalle: String,
     activa: bool,
+    expulsable: bool,
     raiz: &Path,
     mensaje: &gtk::Label,
     aviso: &gtk::Revealer,
     boton_aplicar: &gtk::Button,
     ocupado: &Rc<Cell<bool>>,
     actualizando: &Rc<Cell<bool>>,
+    selector_destino: &gtk::DropDown,
+    destinos_transferencia: &Rc<RefCell<Vec<String>>>,
+    controles: &[gtk::Widget],
 ) {
     let fila = adw::SwitchRow::builder()
         .title(nombre.as_str())
@@ -246,23 +472,33 @@ fn agregar_fila_almacenamiento(
         .build();
     fila.set_active(activa);
 
+    // La misma fila tiene dos acciones distintas: guardar la preferencia y,
+    // cuando es USB, expulsarla. Cada cierre recibe sus propias referencias.
     let raiz = raiz.to_path_buf();
     let mensaje = mensaje.clone();
     let aviso = aviso.clone();
     let boton_aplicar = boton_aplicar.clone();
     let ocupado = Rc::clone(ocupado);
-    let actualizando = Rc::clone(actualizando);
+
+    let raiz_senal = raiz.clone();
+    let mensaje_senal = mensaje.clone();
+    let aviso_senal = aviso.clone();
+    let aplicar_senal = boton_aplicar.clone();
+    let ocupado_senal = Rc::clone(&ocupado);
+    let actualizando_senal = Rc::clone(actualizando);
+    let selector_destino_senal = selector_destino.clone();
+    let destinos_senal = Rc::clone(destinos_transferencia);
     let nombre_senal = nombre.clone();
 
     fila.connect_active_notify(move |fila| {
-        if actualizando.get() {
+        if actualizando_senal.get() {
             return;
         }
 
-        let actual = match configuracion::leer(&raiz.join("configuracion.toml")) {
+        let actual = match configuracion::leer(&raiz_senal.join("configuracion.toml")) {
             Ok(configuracion) => configuracion,
             Err(error) => {
-                mensaje.set_text(&error);
+                mensaje_senal.set_text(&error);
                 return;
             }
         };
@@ -277,33 +513,74 @@ fn agregar_fila_almacenamiento(
             disponibles.retain(|unidad| unidad != &nombre_senal);
         }
 
-        match configuracion::cambiar_almacenamiento(&raiz.join("configuracion.toml"), &disponibles)
-        {
-            Ok(true) => mensaje_guardado(
-                &mensaje,
-                &raiz,
-                &aviso,
-                &boton_aplicar,
-                &ocupado,
-                &format!(
-                    "✓ «{}» quedó {} en la configuración. NixOS todavía no cambió.",
-                    nombre_senal,
-                    if fila.is_active() {
-                        "disponible"
-                    } else {
-                        "apagado"
-                    }
-                ),
-            ),
+        match configuracion::cambiar_almacenamiento(
+            &raiz_senal.join("configuracion.toml"),
+            &disponibles,
+        ) {
+            Ok(true) => {
+                mensaje_guardado(
+                    &mensaje_senal,
+                    &raiz_senal,
+                    &aviso_senal,
+                    &aplicar_senal,
+                    &ocupado_senal,
+                    &format!(
+                        "✓ «{}» quedó {} en la configuración. NixOS todavía no cambió.",
+                        nombre_senal,
+                        if fila.is_active() {
+                            "disponible"
+                        } else {
+                            "apagado"
+                        }
+                    ),
+                );
+
+                let _ = actualizar_destinos_transferencia(
+                    &selector_destino_senal,
+                    &destinos_senal,
+                    &raiz_senal,
+                );
+            }
             Ok(false) => {}
             Err(error) => {
-                mensaje.set_text(&error);
-                actualizando.set(true);
+                mensaje_senal.set_text(&error);
+                actualizando_senal.set(true);
                 fila.set_active(!fila.is_active());
-                actualizando.set(false);
+                actualizando_senal.set(false);
             }
         }
     });
+
+    if expulsable {
+        let expulsar = gtk::Button::with_label("Expulsar");
+        expulsar.set_valign(gtk::Align::Center);
+        fila.add_suffix(&expulsar);
+
+        let fila_estado = fila.clone();
+        let detalle_normal = detalle.clone();
+
+        conectar_expulsion(
+            &expulsar,
+            nombre.clone(),
+            &raiz,
+            &mensaje,
+            &aviso,
+            &boton_aplicar,
+            controles,
+            &ocupado,
+            Rc::new(move |resultado| match resultado {
+                Ok(()) => fila_estado
+                    .set_subtitle("Expulsada con seguridad · ya puedes desconectarla físicamente"),
+                Err(error) => {
+                    let resumen = error
+                        .lines()
+                        .next()
+                        .unwrap_or("No pude expulsar la unidad.");
+                    fila_estado.set_subtitle(&format!("{detalle_normal} · {resumen}"));
+                }
+            }),
+        );
+    }
 
     lista.append(&fila);
     filas.borrow_mut().push((nombre, fila));
@@ -320,6 +597,8 @@ fn cargar_almacenamiento(
     ocupado: &Rc<Cell<bool>>,
     actualizando: &Rc<Cell<bool>>,
     controles: &[gtk::Widget],
+    selector_destino: &gtk::DropDown,
+    destinos_transferencia: &Rc<RefCell<Vec<String>>>,
 ) {
     estado.set_text("Comprobando los discos locales…");
 
@@ -338,6 +617,8 @@ fn cargar_almacenamiento(
     let ocupado = Rc::clone(ocupado);
     let actualizando = Rc::clone(actualizando);
     let controles = controles.to_vec();
+    let selector_destino = selector_destino.clone();
+    let destinos_transferencia = Rc::clone(destinos_transferencia);
 
     glib::timeout_add_local(Duration::from_millis(50), move || {
         match recepcion.try_recv() {
@@ -385,18 +666,24 @@ fn cargar_almacenamiento(
                                 );
 
                                 vistas.push(unidad.nombre.clone());
+                                let expulsable = unidad.puede_expulsar();
+
                                 agregar_fila_almacenamiento(
                                     &lista,
                                     &filas,
                                     unidad.nombre,
                                     detalle,
                                     activa,
+                                    expulsable,
                                     &raiz,
                                     &mensaje,
                                     &aviso,
                                     &boton_aplicar,
                                     &ocupado,
                                     &actualizando,
+                                    &selector_destino,
+                                    &destinos_transferencia,
+                                    &controles,
                                 );
                             } else if let Some(problema) = unidad.problema_adopcion() {
                                 let detalle =
@@ -405,6 +692,43 @@ fn cargar_almacenamiento(
                                     .title(unidad.nombre.as_str())
                                     .subtitle(detalle.as_str())
                                     .build();
+
+                                if unidad.puede_expulsar() {
+                                    let expulsar = gtk::Button::with_label("Expulsar");
+                                    expulsar.set_valign(gtk::Align::Center);
+                                    fila.add_suffix(&expulsar);
+
+                                    let fila_estado = fila.clone();
+                                    let detalle_normal = detalle.clone();
+
+                                    conectar_expulsion(
+                                        &expulsar,
+                                        unidad.nombre.clone(),
+                                        &raiz,
+                                        &mensaje,
+                                        &aviso,
+                                        &boton_aplicar,
+                                        &controles,
+                                        &ocupado,
+                                        Rc::new(move |resultado| {
+                                            match resultado {
+                                            Ok(()) => fila_estado.set_subtitle(
+                                                "Expulsada con seguridad · ya puedes desconectarla físicamente",
+                                            ),
+                                            Err(error) => {
+                                                let resumen = error
+                                                    .lines()
+                                                    .next()
+                                                    .unwrap_or("No pude expulsar la unidad.");
+                                                fila_estado.set_subtitle(&format!(
+                                                    "{detalle_normal} · {resumen}"
+                                                ));
+                                            }
+                                        }
+                                        }),
+                                    );
+                                }
+
                                 lista.append(&fila);
                                 vistas.push(unidad.nombre);
                             } else {
@@ -419,6 +743,43 @@ fn cargar_almacenamiento(
                                 let administrar = gtk::Button::with_label("Administrar");
                                 administrar.set_valign(gtk::Align::Center);
                                 fila.add_suffix(&administrar);
+
+                                if unidad.puede_expulsar() {
+                                    let expulsar = gtk::Button::with_label("Expulsar");
+                                    expulsar.set_valign(gtk::Align::Center);
+                                    fila.add_suffix(&expulsar);
+
+                                    let fila_estado = fila.clone();
+                                    let detalle_normal = detalle.clone();
+
+                                    conectar_expulsion(
+                                        &expulsar,
+                                        unidad.nombre.clone(),
+                                        &raiz,
+                                        &mensaje,
+                                        &aviso,
+                                        &boton_aplicar,
+                                        &controles,
+                                        &ocupado,
+                                        Rc::new(move |resultado| {
+                                            match resultado {
+                                            Ok(()) => fila_estado.set_subtitle(
+                                                "Expulsada con seguridad · ya puedes desconectarla físicamente",
+                                            ),
+                                            Err(error) => {
+                                                let resumen = error
+                                                    .lines()
+                                                    .next()
+                                                    .unwrap_or("No pude expulsar la unidad.");
+                                                fila_estado.set_subtitle(&format!(
+                                                    "{detalle_normal} · {resumen}"
+                                                ));
+                                            }
+                                        }
+                                        }),
+                                    );
+                                }
+
                                 lista.append(&fila);
                                 vistas.push(unidad.nombre.clone());
 
@@ -431,6 +792,8 @@ fn cargar_almacenamiento(
                                 let controles_adoptar = controles.clone();
                                 let fila_adoptar = fila.clone();
                                 let boton_adoptar = administrar.clone();
+                                let selector_destino_adoptar = selector_destino.clone();
+                                let destinos_adoptar = Rc::clone(&destinos_transferencia);
 
                                 administrar.connect_clicked(move |_| {
                                     if ocupado_adoptar.get() {
@@ -469,6 +832,9 @@ fn cargar_almacenamiento(
                                     let controles_final = controles_adoptar.clone();
                                     let fila_final = fila_adoptar.clone();
                                     let boton_final = boton_adoptar.clone();
+                                    let selector_destino_final =
+                                        selector_destino_adoptar.clone();
+                                    let destinos_final = Rc::clone(&destinos_adoptar);
 
                                     glib::timeout_add_local(
                                         Duration::from_millis(80),
@@ -495,6 +861,13 @@ fn cargar_almacenamiento(
                                                                 nombre_final
                                                             ),
                                                         );
+
+                                                        let _ =
+                                                            actualizar_destinos_transferencia(
+                                                                &selector_destino_final,
+                                                                &destinos_final,
+                                                                &raiz_final,
+                                                            );
                                                     }
                                                     Ok(false) => {
                                                         fila_final.set_subtitle(
@@ -558,12 +931,16 @@ fn cargar_almacenamiento(
                                     nombre.clone(),
                                     "No está conectado ahora. Tu elección se conserva.".to_string(),
                                     true,
+                                    false,
                                     &raiz,
                                     &mensaje,
                                     &aviso,
                                     &boton_aplicar,
                                     &ocupado,
                                     &actualizando,
+                                    &selector_destino,
+                                    &destinos_transferencia,
+                                    &controles,
                                 );
                             }
                         }
@@ -584,12 +961,16 @@ fn cargar_almacenamiento(
                                 nombre.clone(),
                                 "No pude comprobar si está conectado ahora.".to_string(),
                                 true,
+                                false,
                                 &raiz,
                                 &mensaje,
                                 &aviso,
                                 &boton_aplicar,
                                 &ocupado,
                                 &actualizando,
+                                &selector_destino,
+                                &destinos_transferencia,
+                                &controles,
                             );
                         }
 
@@ -1233,6 +1614,49 @@ fn construir_ventana(aplicacion: &Application) {
     let almacenamiento_caja = gtk::Box::new(gtk::Orientation::Vertical, 8);
     almacenamiento_caja.append(&almacenamiento_lista);
     almacenamiento_caja.append(&almacenamiento_estado);
+
+    let transferencia_titulo = gtk::Label::new(Some("Transferir un archivo"));
+    transferencia_titulo.set_halign(gtk::Align::Start);
+    transferencia_titulo.add_css_class("heading");
+
+    let archivo_transferencia = Rc::new(RefCell::new(None::<PathBuf>));
+    let archivo_transferencia_texto = gtk::Label::new(Some("Ningún archivo elegido"));
+    archivo_transferencia_texto.set_halign(gtk::Align::Start);
+    archivo_transferencia_texto.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
+    archivo_transferencia_texto.add_css_class("dim-label");
+
+    let boton_elegir_archivo = gtk::Button::with_label("Elegir archivo");
+    let selector_destino = gtk::DropDown::from_strings(&["Sin unidades disponibles"]);
+    let destinos_transferencia = Rc::new(RefCell::new(Vec::<String>::new()));
+    let boton_transferir = gtk::Button::with_label("Copiar archivo");
+    boton_transferir.add_css_class("suggested-action");
+
+    let transferencia_progreso = gtk::ProgressBar::new();
+    transferencia_progreso.set_show_text(true);
+    transferencia_progreso.set_text(Some("Sin transferencia en curso"));
+
+    let transferencia_estado = gtk::Label::new(Some(
+        "El nombre final aparecerá solo cuando el archivo esté completo y verificado.",
+    ));
+    transferencia_estado.set_wrap(true);
+    transferencia_estado.set_halign(gtk::Align::Start);
+    transferencia_estado.add_css_class("dim-label");
+
+    let transferencia_botones = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    transferencia_botones.append(&boton_elegir_archivo);
+    transferencia_botones.append(&selector_destino);
+    selector_destino.set_hexpand(true);
+    transferencia_botones.append(&boton_transferir);
+
+    let transferencia_caja = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    transferencia_caja.set_margin_top(10);
+    transferencia_caja.append(&transferencia_titulo);
+    transferencia_caja.append(&archivo_transferencia_texto);
+    transferencia_caja.append(&transferencia_botones);
+    transferencia_caja.append(&transferencia_progreso);
+    transferencia_caja.append(&transferencia_estado);
+
+    almacenamiento_caja.append(&transferencia_caja);
     almacenamiento_grupo.add(&almacenamiento_caja);
     contenido.append(&almacenamiento_grupo);
 
@@ -1439,6 +1863,9 @@ fn construir_ventana(aplicacion: &Application) {
         entrada_hz.clone().upcast(),
         boton_monitor.clone().upcast(),
         almacenamiento_lista.clone().upcast(),
+        boton_elegir_archivo.clone().upcast(),
+        selector_destino.clone().upcast(),
+        boton_transferir.clone().upcast(),
         selector_estilo.clone().upcast(),
         selector_modo.clone().upcast(),
         bluetooth.clone().upcast(),
@@ -1456,6 +1883,80 @@ fn construir_ventana(aplicacion: &Application) {
         boton_aplicar.clone().upcast(),
         boton_volver.clone().upcast(),
     ];
+
+    {
+        let ventana = ventana.clone();
+        let archivo = Rc::clone(&archivo_transferencia);
+        let texto_archivo = archivo_transferencia_texto.clone();
+
+        boton_elegir_archivo.connect_clicked(move |_| {
+            let dialogo = gtk::FileChooserNative::new(
+                Some("Elegir archivo para transferir"),
+                Some(&ventana),
+                gtk::FileChooserAction::Open,
+                Some("Elegir"),
+                Some("Cancelar"),
+            );
+
+            let archivo = Rc::clone(&archivo);
+            let texto_archivo = texto_archivo.clone();
+
+            dialogo.connect_response(move |dialogo, respuesta| {
+                if respuesta == gtk::ResponseType::Accept {
+                    if let Some(ruta) = dialogo.file().and_then(|archivo| archivo.path()) {
+                        texto_archivo.set_text(
+                            &ruta
+                                .file_name()
+                                .map(|nombre| nombre.to_string_lossy().into_owned())
+                                .unwrap_or_else(|| ruta.display().to_string()),
+                        );
+                        *archivo.borrow_mut() = Some(ruta);
+                    }
+                }
+            });
+
+            dialogo.show();
+        });
+    }
+
+    {
+        let archivo = Rc::clone(&archivo_transferencia);
+        let selector = selector_destino.clone();
+        let destinos = Rc::clone(&destinos_transferencia);
+        let raiz = raiz.clone();
+        let progreso = transferencia_progreso.clone();
+        let estado_transferencia = transferencia_estado.clone();
+        let controles = controles.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let aviso = aviso.clone();
+        let boton_aplicar = boton_aplicar.clone();
+
+        boton_transferir.connect_clicked(move |_| {
+            let Some(origen) = archivo.borrow().clone() else {
+                estado_transferencia.set_text("Elige primero el archivo que quieres copiar.");
+                return;
+            };
+
+            let indice = selector.selected() as usize;
+            let Some(unidad) = destinos.borrow().get(indice).cloned() else {
+                estado_transferencia
+                    .set_text("No hay una unidad disponible elegida para recibir el archivo.");
+                return;
+            };
+
+            iniciar_transferencia_gui(
+                origen,
+                unidad,
+                &raiz,
+                &progreso,
+                &estado_transferencia,
+                &controles,
+                &ocupado,
+                &aviso,
+                &boton_aplicar,
+            );
+        });
+    }
 
     {
         let entrada_nombre = entrada_nombre.clone();
@@ -2197,6 +2698,9 @@ fn construir_ventana(aplicacion: &Application) {
         let boton_aplicar = boton_aplicar.clone();
         let ocupado = Rc::clone(&ocupado);
         let actualizando = Rc::clone(&actualizando);
+        let selector_destino = selector_destino.clone();
+        let destinos_transferencia = Rc::clone(&destinos_transferencia);
+        let transferencia_estado = transferencia_estado.clone();
 
         Rc::new(move |_| {
             recargar_controles(
@@ -2231,6 +2735,12 @@ fn construir_ventana(aplicacion: &Application) {
                 &ocupado,
                 &actualizando,
             );
+
+            if let Err(error) =
+                actualizar_destinos_transferencia(&selector_destino, &destinos_transferencia, &raiz)
+            {
+                transferencia_estado.set_text(&error);
+            }
         })
     };
 
@@ -2348,6 +2858,12 @@ fn construir_ventana(aplicacion: &Application) {
         &actualizando,
     );
 
+    if let Err(error) =
+        actualizar_destinos_transferencia(&selector_destino, &destinos_transferencia, &raiz)
+    {
+        transferencia_estado.set_text(&error);
+    }
+
     ventana.present();
 
     cargar_almacenamiento(
@@ -2361,6 +2877,8 @@ fn construir_ventana(aplicacion: &Application) {
         &ocupado,
         &actualizando,
         &controles,
+        &selector_destino,
+        &destinos_transferencia,
     );
 }
 
