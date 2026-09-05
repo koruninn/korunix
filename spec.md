@@ -245,6 +245,8 @@ Nix sigue siendo quien configura NixOS.
 ```text
 GUI → mismo Rust → Nix → NixOS
 CLI → mismo Rust → Nix → NixOS
+
+La interfaz gráfica confirma con acciones normales de la propia interfaz, por ejemplo el botón «Aplicar cambios» o «Volver». No obliga a escribir palabras especiales. La CLI tampoco añade una confirmación textual duplicada después de que la persona ya ejecutó la operación.
 ```
 
 La GUI no implementa NixOS por su cuenta. La CLI tampoco. No usar Rust para reinventar lo que NixOS ya hace bien.
@@ -312,13 +314,13 @@ Apply activa exactamente la generación revisada a la que apunta ese preview, **
 
 Antes de tocar NixOS, Korunix protege la generación activa como `XDG_STATE_HOME/korunix/anterior` mediante una raíz de GC real. Después cruza privilegios con el wrapper real de NixOS (`/run/wrappers/bin/sudo`) y una unidad temporal de systemd. Las rutas de programas críticos se conservan sin resolver sus enlaces simbólicos: herramientas de Nix como `nix-store` y `nix-env` pueden compartir un ejecutable multicall y el nombre con el que se invocan forma parte de su comportamiento.
 
-La versión actual de NixOS exige root incluso para `switch-to-configuration dry-activate`, así que la autorización puede aparecer antes de enseñar la simulación. Esa misma operación privilegiada ejecuta `check`, muestra `dry-activate`, explica kernel/reinicio/sesión/persistencia, espera que la persona escriba `APLICAR` y solo entonces cambia el perfil y activa el preview exacto.
+La versión actual de NixOS exige root incluso para `switch-to-configuration dry-activate`, así que la autorización puede aparecer antes de enseñar la simulación. Esa misma operación privilegiada ejecuta `check`, muestra `dry-activate`, explica kernel/reinicio/sesión/persistencia y aplica exactamente el preview revisado. Ejecutar `korunix aplicar` ya expresa la intención humana de aplicar; si NixOS necesita privilegios, `sudo` es la autorización técnica. No se pide escribir `APLICAR` ni una segunda confirmación equivalente.
 
 Si la activación falla después de empezar el cambio, Korunix intenta volver a la generación protegida como anterior y verifica que vuelva a quedar activa y persistente. Un estado dividido nunca se presenta como éxito.
 
 Rollback es una función normal del producto. `korunix rollback` usa el punto de regreso protegido en `XDG_STATE_HOME/korunix/anterior`, comprueba primero que activa y persistente no estén divididas y no ejecuta `nix build`.
 
-La generación anterior conserva también una copia de la `configuracion.toml` humana asociada. Antes de volver, Korunix ejecuta `check` y `dry-activate`, muestra qué generación quedará activa, si cambia el kernel, si puede requerir volver a iniciar sesión y que la configuración humana volverá con esa generación. Solo después de que la persona escriba `VOLVER` deja exactamente esa generación como persistente, la activa y restaura la copia humana asociada.
+La generación anterior conserva también una copia de la `configuracion.toml` humana asociada. Antes de volver, Korunix ejecuta `check` y `dry-activate`, muestra qué generación quedará activa, si cambia el kernel, si puede requerir volver a iniciar sesión y que la configuración humana volverá con esa generación. Ejecutar `korunix rollback` ya expresa la intención humana de volver; si NixOS necesita privilegios, `sudo` es la autorización técnica. No se pide escribir `VOLVER`. Korunix deja exactamente esa generación como persistente, la activa y restaura la copia humana asociada.
 
 Rollback termina correctamente solo si `activa = persistente = anterior` y `configuracion.toml` vuelve a la copia guardada. Si el sistema ya está en ese punto de regreso, el comando es inocuo y no pide privilegios. Las operaciones largas muestran su fase y no dejan la interfaz muda.
 
