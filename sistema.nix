@@ -790,6 +790,11 @@
 
     exit 1
   '';
+  # DrKonqi pertenece a Plasma. Sus informes siguen disponibles allí, pero no
+  # deben aparecer como notificaciones dentro de Niri, Hyprland o Cinnamon.
+  sesionPlasma = pkgs.writeShellScript "korunix-es-sesion-plasma" ''
+    exec ${config.systemd.package}/bin/systemctl --user --quiet is-active plasma-workspace.target
+  '';
 in {
   imports = [./hardware.nix];
 
@@ -935,6 +940,14 @@ in {
 
   services.xserver.desktopManager.cinnamon.enable = cinnamonActivo;
   services.desktopManager.plasma6.enable = plasmaActivo;
+
+  # Plasma instala su manejador gráfico de fallos aunque también estén
+  # instalados otros escritorios. El servicio solo puede arrancar dentro de
+  # una sesión Plasma; systemd-coredump puede seguir registrando el fallo.
+  systemd.user.services."drkonqi-coredump-launcher@" = lib.mkIf plasmaActivo {
+    overrideStrategy = "asDropin";
+    serviceConfig.ExecCondition = sesionPlasma;
+  };
 
   environment.sessionVariables =
     {
