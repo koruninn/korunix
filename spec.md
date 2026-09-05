@@ -646,7 +646,55 @@ Generación aplicada:
 /nix/store/x8dylkhdlvsx5s3g2i8pj5l3gz02pgbc-nixos-system-korunix-26.11.20260831.34ab990
 ```
 
-El siguiente paso de almacenamiento es permitir adoptar una unidad nueva con una sola decisión humana. Korunix deberá capturar y conservar internamente la identidad técnica necesaria sin pedir UUID, `/dev/...` ni rutas a la persona.
+La adopción segura de unidades nuevas quedó implementada y probada con una DataTraveler que usa Ventoy.
+
+La persona ve:
+
+```text
+DataTraveler 2.0 · 16 GB
+USB · exFAT · Etiqueta: Ventoy
+Administrar
+```
+
+Al pulsar «Administrar», Korunix hace una sola lectura local de la unidad, elige la partición de datos cuando existe una diferencia inequívoca y guarda por dentro la identidad técnica necesaria. En la prueba real, la unidad tenía:
+
+```text
+partición de datos: exFAT · Ventoy · 14,4 GiB
+partición auxiliar: VTOYEFI · 32 MiB
+```
+
+Korunix eligió automáticamente la partición grande. La persona no tuvo que escribir ni elegir UUID, `/dev/sdb1` ni una ruta de montaje.
+
+La identidad técnica temporal comprobada fue:
+
+```text
+UUID: BAF1-579A
+ruta derivada: /mnt/korunix/baf1579a
+```
+
+Esos datos no aparecen en la GUI ni en la salida humana normal. Si dos particiones tienen tamaño importante, Korunix se niega a adivinar. Si dos discos tienen el mismo modelo y capacidad, solo añade un sufijo corto de serie cuando hace falta para distinguirlos; no expone la serie completa de manera normal.
+
+La adopción modifica `configuracion.toml` y `hardware.nix` como una sola operación lógica, valida el resultado con Nix y restaura ambos archivos si la validación falla. No crea preview ni aplica NixOS automáticamente.
+
+La GUI muestra progreso en la propia fila: «Comprobando…» y después «Administrada» o el error correspondiente. Una unidad que Korunix no pueda adoptar de forma segura no recibe un botón que prometa una acción inexistente.
+
+Durante este frente apareció una regresión importante: `lsblk` sin árbol explícito separaba las particiones de su disco padre. Eso hacía aparecer incorrectamente el ADATA del sistema y ocultaba la partición exFAT de Ventoy. Quedó corregido pidiendo el árbol explícitamente. El ADATA que contiene `/`, `/home`, `/nix` y `/boot` vuelve a quedar fuera del almacenamiento adicional.
+
+La prueba real de «Administrar» funcionó. Después se restauraron byte por byte `configuracion.toml` y `hardware.nix`, porque probar la función no significa que la persona haya decidido conservar esa memoria USB. La DataTraveler queda detectada pero no administrada hasta que se elija de nuevo de forma intencional.
+
+Los 94 tests de Rust pasaron en serie antes de la prueba gráfica. Después se verificó la adopción real con Nix, se restauró el estado humano anterior, se construyó un preview completo y Apply activó exactamente ese preview sin reconstruir NixOS.
+
+Código publicado:
+
+```text
+eb40bafe536bf2510ca6b5cbb1227e706d1559e9
+```
+
+Generación aplicada:
+
+```text
+/nix/store/scj9sffw5gnr6zzcag7wyyvqp8ijxbas-nixos-system-korunix-26.11.20260831.34ab990
+```
 
 Se conserva como comportamiento útil:
 
