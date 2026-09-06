@@ -1,4 +1,5 @@
 mod almacenamiento;
+mod aplicaciones;
 #[allow(dead_code)]
 mod configuracion;
 mod transferencias;
@@ -1102,93 +1103,312 @@ fn mensaje_guardado(
     actualizar_estado_preview(raiz, aviso, boton_aplicar, ocupado);
 }
 
-fn limpiar_lista(lista: &gtk::ListBox) {
-    while let Some(hijo) = lista.first_child() {
-        lista.remove(&hijo);
+fn limpiar_caja(caja: &gtk::Box) {
+    while let Some(hijo) = caja.first_child() {
+        caja.remove(&hijo);
     }
 }
 
 fn recargar_aplicaciones(
-    lista: &gtk::ListBox,
+    catalogo: &gtk::Box,
     contador: &gtk::Label,
+    busqueda: &gtk::SearchEntry,
+    seleccionadas: &Rc<RefCell<Vec<String>>>,
     raiz: &Path,
     mensaje: &gtk::Label,
     aviso: &gtk::Revealer,
     boton_aplicar: &gtk::Button,
     ocupado: &Rc<Cell<bool>>,
 ) {
-    limpiar_lista(lista);
+    limpiar_caja(catalogo);
 
-    let configuracion = match configuracion::leer(&raiz.join("configuracion.toml")) {
-        Ok(configuracion) => configuracion,
-        Err(error) => {
-            contador.set_text("No pude leer la lista");
-            mensaje.set_text(&error);
-            return;
-        }
-    };
+    let consulta = busqueda.text().trim().to_string();
+    let instaladas = seleccionadas.borrow().clone();
+    let vistas = aplicaciones::vistas(&instaladas, &consulta);
 
     contador.set_text(&format!(
-        "{} elegidas",
-        configuracion.aplicaciones.instaladas.len()
+        "{} elegidas · {} visibles",
+        instaladas.len(),
+        vistas.len()
     ));
 
-    for nombre in configuracion.aplicaciones.instaladas {
-        let fila = gtk::ListBoxRow::new();
-        let caja = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        caja.set_margin_top(6);
-        caja.set_margin_bottom(6);
-        caja.set_margin_start(10);
-        caja.set_margin_end(8);
+    for &categoria in aplicaciones::categorias() {
+        let grupo = adw::PreferencesGroup::builder().title(categoria).build();
+        let mut cantidad = 0usize;
 
-        let etiqueta = gtk::Label::new(Some(&nombre));
-        etiqueta.set_halign(gtk::Align::Start);
-        etiqueta.set_hexpand(true);
-        etiqueta.set_ellipsize(gtk::pango::EllipsizeMode::End);
+        for vista in vistas.iter().filter(|vista| vista.categoria == categoria) {
+            cantidad += 1;
 
-        let quitar = gtk::Button::with_label("Quitar");
-        quitar.add_css_class("flat");
+            let fila = adw::ActionRow::builder()
+                .title(vista.nombre.as_str())
+                .subtitle(vista.descripcion.as_str())
+                .build();
 
-        caja.append(&etiqueta);
-        caja.append(&quitar);
-        fila.set_child(Some(&caja));
-        lista.append(&fila);
+            let boton = gtk::Button::with_label(if vista.instalada {
+                "Quitar"
+            } else {
+                "Instalar"
+            });
+            boton.set_valign(gtk::Align::Center);
 
-        let lista = lista.clone();
-        let contador = contador.clone();
-        let raiz = raiz.to_path_buf();
-        let mensaje = mensaje.clone();
-        let aviso = aviso.clone();
-        let boton_aplicar = boton_aplicar.clone();
-        let ocupado = Rc::clone(ocupado);
-        let nombre = nombre.clone();
-
-        quitar.connect_clicked(move |_| {
-            match configuracion::quitar_aplicacion(&raiz.join("configuracion.toml"), &nombre) {
-                Ok(true) => {
-                    mensaje_guardado(
-                        &mensaje,
-                        &raiz,
-                        &aviso,
-                        &boton_aplicar,
-                        &ocupado,
-                        &format!("✓ Quité «{nombre}». NixOS todavía no cambió."),
-                    );
-
-                    recargar_aplicaciones(
-                        &lista,
-                        &contador,
-                        &raiz,
-                        &mensaje,
-                        &aviso,
-                        &boton_aplicar,
-                        &ocupado,
-                    );
-                }
-                Ok(false) => mensaje.set_text(&format!("«{nombre}» ya no estaba en la lista.")),
-                Err(error) => mensaje.set_text(&error),
+            if !vista.instalada {
+                boton.add_css_class("suggested-action");
             }
-        });
+
+            fila.add_suffix(&boton);
+            grupo.add(&fila);
+
+            let id = vista.id.clone();
+            let estaba_instalada = vista.instalada;
+            let catalogo = catalogo.clone();
+            let contador = contador.clone();
+            let busqueda = busqueda.clone();
+            let seleccionadas = Rc::clone(seleccionadas);
+            let raiz = raiz.to_path_buf();
+            let mensaje = mensaje.clone();
+            let aviso = aviso.clone();
+            let boton_aplicar = boton_aplicar.clone();
+            let ocupado = Rc::clone(ocupado);
+
+            boton.connect_clicked(move |_| {
+                let resultado = if estaba_instalada {
+                    configuracion::quitar_aplicacion(&raiz.join("configuracion.toml"), &id)
+                } else {
+                    configuracion::agregar_aplicacion(&raiz.join("configuracion.toml"), &id)
+                };
+
+                match resultado {
+                    Ok(true) => {
+                        {
+                            let mut elegidas = seleccionadas.borrow_mut();
+                            if estaba_instalada {
+                                elegidas.retain(|actual| actual != &id);
+                            } else if !elegidas.iter().any(|actual| actual == &id) {
+                                elegidas.push(id.clone());
+                            }
+                        }
+
+                        mensaje_guardado(
+                            &mensaje,
+                            &raiz,
+                            &aviso,
+                            &boton_aplicar,
+                            &ocupado,
+                            &format!(
+                                "✓ {} «{}». NixOS todavía no cambió.",
+                                if estaba_instalada {
+                                    "Quité"
+                                } else {
+                                    "Agregué"
+                                },
+                                id
+                            ),
+                        );
+
+                        recargar_aplicaciones(
+                            &catalogo,
+                            &contador,
+                            &busqueda,
+                            &seleccionadas,
+                            &raiz,
+                            &mensaje,
+                            &aviso,
+                            &boton_aplicar,
+                            &ocupado,
+                        );
+                    }
+                    Ok(false) => recargar_aplicaciones(
+                        &catalogo,
+                        &contador,
+                        &busqueda,
+                        &seleccionadas,
+                        &raiz,
+                        &mensaje,
+                        &aviso,
+                        &boton_aplicar,
+                        &ocupado,
+                    ),
+                    Err(error) => mensaje.set_text(&error),
+                }
+            });
+        }
+
+        if cantidad > 0 {
+            catalogo.append(&grupo);
+        }
+    }
+
+    if !consulta.is_empty() && vistas.is_empty() {
+        let grupo = adw::PreferencesGroup::builder()
+            .title("Fuera del catálogo local")
+            .build();
+
+        let fila = adw::ActionRow::builder()
+            .title(consulta.as_str())
+            .subtitle("No está en el catálogo local. Puedes comprobar explícitamente si existe en Nixpkgs.")
+            .build();
+
+        if aplicaciones::nombre_valido_para_resolver(&consulta) {
+            let boton = gtk::Button::with_label("Comprobar en Nixpkgs");
+            boton.set_valign(gtk::Align::Center);
+            fila.add_suffix(&boton);
+
+            let resuelta = Rc::new(RefCell::new(None::<aplicaciones::AplicacionResuelta>));
+
+            let catalogo_final = catalogo.clone();
+            let contador_final = contador.clone();
+            let busqueda_final = busqueda.clone();
+            let seleccionadas_final = Rc::clone(seleccionadas);
+            let raiz_final = raiz.to_path_buf();
+            let mensaje_final = mensaje.clone();
+            let aviso_final = aviso.clone();
+            let aplicar_final = boton_aplicar.clone();
+            let ocupado_final = Rc::clone(ocupado);
+            let fila_final = fila.clone();
+            let resuelta_final = Rc::clone(&resuelta);
+            let consulta_final = consulta.clone();
+
+            boton.clone().connect_clicked(move |_| {
+                if let Some(encontrada) = resuelta_final.borrow().clone() {
+                    match configuracion::agregar_aplicacion(
+                        &raiz_final.join("configuracion.toml"),
+                        &encontrada.id,
+                    ) {
+                        Ok(true) => {
+                            {
+                                let mut elegidas = seleccionadas_final.borrow_mut();
+                                if !elegidas.iter().any(|actual| actual == &encontrada.id) {
+                                    elegidas.push(encontrada.id.clone());
+                                }
+                            }
+
+                            mensaje_guardado(
+                                &mensaje_final,
+                                &raiz_final,
+                                &aviso_final,
+                                &aplicar_final,
+                                &ocupado_final,
+                                &format!(
+                                    "✓ Agregué «{}». NixOS todavía no cambió.",
+                                    encontrada.id
+                                ),
+                            );
+
+                            busqueda_final.set_text("");
+                            recargar_aplicaciones(
+                                &catalogo_final,
+                                &contador_final,
+                                &busqueda_final,
+                                &seleccionadas_final,
+                                &raiz_final,
+                                &mensaje_final,
+                                &aviso_final,
+                                &aplicar_final,
+                                &ocupado_final,
+                            );
+                        }
+                        Ok(false) => {
+                            busqueda_final.set_text("");
+                            recargar_aplicaciones(
+                                &catalogo_final,
+                                &contador_final,
+                                &busqueda_final,
+                                &seleccionadas_final,
+                                &raiz_final,
+                                &mensaje_final,
+                                &aviso_final,
+                                &aplicar_final,
+                                &ocupado_final,
+                            );
+                        }
+                        Err(error) => mensaje_final.set_text(&error),
+                    }
+
+                    return;
+                }
+
+                let configuracion =
+                    match configuracion::leer(&raiz_final.join("configuracion.toml")) {
+                        Ok(configuracion) => configuracion,
+                        Err(error) => {
+                            mensaje_final.set_text(&error);
+                            return;
+                        }
+                    };
+
+                boton.set_label("Comprobando…");
+                boton.set_sensitive(false);
+                fila_final.set_subtitle(
+                    "Comprobando Nixpkgs en segundo plano. Puedes seguir navegando por Korunix.",
+                );
+
+                let (envio, recepcion) = mpsc::channel();
+                let raiz_trabajo = raiz_final.clone();
+                let canal = configuracion.canal;
+                let nombre = consulta_final.clone();
+
+                thread::spawn(move || {
+                    let _ =
+                        envio.send(aplicaciones::resolver_nixpkgs(&raiz_trabajo, &canal, &nombre));
+                });
+
+                let boton = boton.clone();
+                let fila = fila_final.clone();
+                let resuelta = Rc::clone(&resuelta_final);
+                let mensaje = mensaje_final.clone();
+                let consulta = consulta_final.clone();
+
+                glib::timeout_add_local(Duration::from_millis(80), move || {
+                    match recepcion.try_recv() {
+                        Ok(Ok(Some(encontrada))) => {
+                            fila.set_title(&encontrada.nombre);
+                            fila.set_subtitle(&format!(
+                                "Paquete encontrado en Nixpkgs como «{}».",
+                                encontrada.id
+                            ));
+                            *resuelta.borrow_mut() = Some(encontrada);
+                            boton.set_label("Agregar");
+                            boton.set_sensitive(true);
+                            glib::ControlFlow::Break
+                        }
+                        Ok(Ok(None)) => {
+                            fila.set_subtitle(&format!(
+                                "No encontré «{}» en el Nixpkgs de este canal.",
+                                consulta
+                            ));
+                            boton.set_label("Volver a comprobar");
+                            boton.set_sensitive(true);
+                            glib::ControlFlow::Break
+                        }
+                        Ok(Err(error)) => {
+                            fila.set_subtitle(
+                                error.lines().next().unwrap_or("No pude comprobar Nixpkgs."),
+                            );
+                            mensaje.set_text(&error);
+                            boton.set_label("Reintentar");
+                            boton.set_sensitive(true);
+                            glib::ControlFlow::Break
+                        }
+                        Err(TryRecvError::Empty) => glib::ControlFlow::Continue,
+                        Err(TryRecvError::Disconnected) => {
+                            fila.set_subtitle(
+                                "La comprobación terminó sin respuesta. No doy el paquete por encontrado.",
+                            );
+                            boton.set_label("Reintentar");
+                            boton.set_sensitive(true);
+                            glib::ControlFlow::Break
+                        }
+                    }
+                });
+            });
+        } else {
+            fila.set_subtitle(
+                "Usa un nombre de paquete sin espacios, por ejemplo «karere» o «blender».",
+            );
+        }
+
+        grupo.add(&fila);
+        catalogo.append(&grupo);
     }
 }
 
@@ -1212,45 +1432,6 @@ fn guardar_nombre(
             &format!("✓ El equipo ahora se llama «{nombre}» en la configuración. NixOS todavía no cambió."),
         ),
         Ok(false) => mensaje.set_text("Ese nombre ya estaba guardado."),
-        Err(error) => mensaje.set_text(&error),
-    }
-}
-
-fn agregar_aplicacion(
-    entrada: &gtk::Entry,
-    lista: &gtk::ListBox,
-    contador: &gtk::Label,
-    raiz: &Path,
-    mensaje: &gtk::Label,
-    aviso: &gtk::Revealer,
-    boton_aplicar: &gtk::Button,
-    ocupado: &Rc<Cell<bool>>,
-) {
-    let nombre = entrada.text().to_string();
-
-    match configuracion::agregar_aplicacion(&raiz.join("configuracion.toml"), &nombre) {
-        Ok(true) => {
-            entrada.set_text("");
-            mensaje_guardado(
-                mensaje,
-                raiz,
-                aviso,
-                boton_aplicar,
-                ocupado,
-                &format!("✓ Agregué «{nombre}». NixOS todavía no cambió."),
-            );
-
-            recargar_aplicaciones(
-                lista,
-                contador,
-                raiz,
-                mensaje,
-                aviso,
-                boton_aplicar,
-                ocupado,
-            );
-        }
-        Ok(false) => mensaje.set_text(&format!("«{nombre}» ya estaba elegida.")),
         Err(error) => mensaje.set_text(&error),
     }
 }
@@ -1279,7 +1460,9 @@ fn recargar_controles(
     steam_servidor: &adw::SwitchRow,
     impresion: &adw::SwitchRow,
     virtualizacion: &adw::SwitchRow,
-    lista: &gtk::ListBox,
+    catalogo: &gtk::Box,
+    busqueda: &gtk::SearchEntry,
+    seleccionadas: &Rc<RefCell<Vec<String>>>,
     contador: &gtk::Label,
     mensaje: &gtk::Label,
     aviso: &gtk::Revealer,
@@ -1344,11 +1527,14 @@ fn recargar_controles(
     steam_servidor.set_active(configuracion.steam.servidor_dedicado);
     impresion.set_active(configuracion.impresion.activa);
     virtualizacion.set_active(configuracion.virtualizacion.activa);
+    *seleccionadas.borrow_mut() = configuracion.aplicaciones.instaladas.clone();
     actualizando.set(false);
 
     recargar_aplicaciones(
-        lista,
+        catalogo,
         contador,
+        busqueda,
+        seleccionadas,
         raiz,
         mensaje,
         aviso,
@@ -2148,7 +2334,7 @@ fn construir_ventana(aplicacion: &Application) {
         .build();
 
     let aplicaciones_opciones_grupo = adw::PreferencesGroup::builder()
-        .title("Opciones especiales")
+        .title("Con opciones propias")
         .description(
             "Apagar una función principal conserva sus preferencias internas para cuando vuelva a activarse.",
         )
@@ -2204,41 +2390,31 @@ fn construir_ventana(aplicacion: &Application) {
     aplicaciones_opciones_grupo.add(&steam);
     aplicaciones_opciones_grupo.add(&steam_remote_play);
     aplicaciones_opciones_grupo.add(&steam_servidor);
-    contenido_aplicaciones.append(&aplicaciones_opciones_grupo);
-
-    let aplicaciones_grupo = adw::PreferencesGroup::builder()
-        .title("Agregar aplicación")
+    let aplicaciones_busqueda_grupo = adw::PreferencesGroup::builder()
+        .title("Buscar aplicaciones")
         .description(
-            "Puedes escribir cualquier nombre. El catálogo visual no limita lo que Korunix puede intentar resolver.",
+            "Busca primero en el catálogo local. Nix solo se consulta si pides comprobar un nombre que no aparece.",
         )
         .build();
 
-    let agregar_caja = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    let entrada_aplicacion = gtk::Entry::new();
-    entrada_aplicacion.set_hexpand(true);
-    entrada_aplicacion.set_placeholder_text(Some("por ejemplo, karere"));
-    let boton_agregar = gtk::Button::with_label("Agregar");
-    agregar_caja.append(&entrada_aplicacion);
-    agregar_caja.append(&boton_agregar);
+    let busqueda_aplicaciones = gtk::SearchEntry::new();
+    busqueda_aplicaciones.set_placeholder_text(Some("Buscar por nombre, función o categoría…"));
+    busqueda_aplicaciones.set_hexpand(true);
 
     let contador_aplicaciones = gtk::Label::new(Some("—"));
     contador_aplicaciones.set_halign(gtk::Align::Start);
     contador_aplicaciones.add_css_class("dim-label");
 
-    let lista_aplicaciones = gtk::ListBox::new();
-    lista_aplicaciones.set_selection_mode(gtk::SelectionMode::None);
-    lista_aplicaciones.add_css_class("boxed-list");
+    let busqueda_caja = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    busqueda_caja.append(&busqueda_aplicaciones);
+    busqueda_caja.append(&contador_aplicaciones);
+    aplicaciones_busqueda_grupo.add(&busqueda_caja);
+    contenido_aplicaciones.append(&aplicaciones_busqueda_grupo);
 
-    let aplicaciones_expandir = gtk::Expander::new(Some("Mostrar aplicaciones elegidas"));
-    aplicaciones_expandir.set_child(Some(&lista_aplicaciones));
-
-    let aplicaciones_caja = gtk::Box::new(gtk::Orientation::Vertical, 8);
-    aplicaciones_caja.append(&agregar_caja);
-    aplicaciones_caja.append(&contador_aplicaciones);
-    aplicaciones_caja.append(&aplicaciones_expandir);
-
-    aplicaciones_grupo.add(&aplicaciones_caja);
-    contenido_aplicaciones.append(&aplicaciones_grupo);
+    let catalogo_aplicaciones = gtk::Box::new(gtk::Orientation::Vertical, 18);
+    let seleccionadas_aplicaciones = Rc::new(RefCell::new(Vec::<String>::new()));
+    contenido_aplicaciones.append(&catalogo_aplicaciones);
+    contenido_aplicaciones.append(&aplicaciones_opciones_grupo);
 
     let mensaje_configuracion = gtk::Label::new(None);
     mensaje_configuracion.set_visible(false);
@@ -2397,9 +2573,8 @@ fn construir_ventana(aplicacion: &Application) {
         steam_servidor.clone().upcast(),
         impresion.clone().upcast(),
         virtualizacion.clone().upcast(),
-        entrada_aplicacion.clone().upcast(),
-        boton_agregar.clone().upcast(),
-        lista_aplicaciones.clone().upcast(),
+        busqueda_aplicaciones.clone().upcast(),
+        catalogo_aplicaciones.clone().upcast(),
         boton_preview.clone().upcast(),
         boton_aplicar.clone().upcast(),
         boton_volver.clone().upcast(),
@@ -3142,43 +3317,22 @@ fn construir_ventana(aplicacion: &Application) {
     }
 
     {
-        let entrada = entrada_aplicacion.clone();
-        let lista = lista_aplicaciones.clone();
+        let catalogo = catalogo_aplicaciones.clone();
         let contador = contador_aplicaciones.clone();
+        let busqueda = busqueda_aplicaciones.clone();
+        let seleccionadas = Rc::clone(&seleccionadas_aplicaciones);
         let raiz = raiz.clone();
         let mensaje = mensaje_configuracion.clone();
         let aviso = aviso.clone();
         let boton_aplicar = boton_aplicar.clone();
         let ocupado = Rc::clone(&ocupado);
 
-        boton_agregar.connect_clicked(move |_| {
-            agregar_aplicacion(
-                &entrada,
-                &lista,
+        busqueda_aplicaciones.connect_search_changed(move |_| {
+            recargar_aplicaciones(
+                &catalogo,
                 &contador,
-                &raiz,
-                &mensaje,
-                &aviso,
-                &boton_aplicar,
-                &ocupado,
-            );
-        });
-    }
-
-    {
-        let lista = lista_aplicaciones.clone();
-        let contador = contador_aplicaciones.clone();
-        let raiz = raiz.clone();
-        let mensaje = mensaje_configuracion.clone();
-        let aviso = aviso.clone();
-        let boton_aplicar = boton_aplicar.clone();
-        let ocupado = Rc::clone(&ocupado);
-
-        entrada_aplicacion.connect_activate(move |entrada| {
-            agregar_aplicacion(
-                entrada,
-                &lista,
-                &contador,
+                &busqueda,
+                &seleccionadas,
                 &raiz,
                 &mensaje,
                 &aviso,
@@ -3212,7 +3366,9 @@ fn construir_ventana(aplicacion: &Application) {
         let steam_servidor = steam_servidor.clone();
         let impresion = impresion.clone();
         let virtualizacion = virtualizacion.clone();
-        let lista = lista_aplicaciones.clone();
+        let catalogo = catalogo_aplicaciones.clone();
+        let busqueda = busqueda_aplicaciones.clone();
+        let seleccionadas = Rc::clone(&seleccionadas_aplicaciones);
         let contador = contador_aplicaciones.clone();
         let mensaje = mensaje_configuracion.clone();
         let aviso = aviso.clone();
@@ -3248,7 +3404,9 @@ fn construir_ventana(aplicacion: &Application) {
                 &steam_servidor,
                 &impresion,
                 &virtualizacion,
-                &lista,
+                &catalogo,
+                &busqueda,
+                &seleccionadas,
                 &contador,
                 &mensaje,
                 &aviso,
@@ -3811,7 +3969,9 @@ fn construir_ventana(aplicacion: &Application) {
         &steam_servidor,
         &impresion,
         &virtualizacion,
-        &lista_aplicaciones,
+        &catalogo_aplicaciones,
+        &busqueda_aplicaciones,
+        &seleccionadas_aplicaciones,
         &contador_aplicaciones,
         &mensaje_configuracion,
         &aviso,

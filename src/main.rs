@@ -1,5 +1,6 @@
 mod actualizaciones;
 mod almacenamiento;
+mod aplicaciones;
 mod aplicar;
 mod configuracion;
 mod copias;
@@ -101,6 +102,7 @@ fn ayuda() {
     eprintln!("  korunix virtualizacion [activar|desactivar]");
     eprintln!("  korunix aplicaciones");
     eprintln!("  korunix aplicaciones agregar <nombre>");
+    eprintln!("  korunix aplicaciones resolver <nombre>");
     eprintln!("  korunix aplicaciones quitar <nombre>");
 }
 
@@ -1422,6 +1424,21 @@ fn quitar_aplicacion(raiz: &Path, nombre: &str) {
     }
 }
 
+fn resolver_aplicacion(raiz: &Path, nombre: &str) {
+    let configuracion = configuracion::leer(&raiz.join("configuracion.toml"))
+        .unwrap_or_else(|error| salir_con_error(&error));
+
+    match aplicaciones::resolver_nixpkgs(raiz, &configuracion.canal, nombre) {
+        Ok(Some(resuelta)) => {
+            println!("✓ Encontré «{}» en Nixpkgs.", resuelta.nombre);
+            println!("Nombre que guardará Korunix: {}", resuelta.id);
+            println!("No cambié configuracion.toml ni NixOS.");
+        }
+        Ok(None) => salir_con_error(&format!("No encontré «{nombre}» en Nixpkgs.")),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
 fn main() {
     let argumentos: Vec<String> = env::args().skip(1).collect();
 
@@ -1554,6 +1571,9 @@ fn main() {
         }
         [grupo, accion, nombre] if grupo == "aplicaciones" && accion == "quitar" => {
             quitar_aplicacion(&raiz, nombre)
+        }
+        [grupo, accion, nombre] if grupo == "aplicaciones" && accion == "resolver" => {
+            resolver_aplicacion(&raiz, nombre)
         }
         _ => {
             eprintln!("No entendí esa orden.");
