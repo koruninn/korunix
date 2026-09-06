@@ -298,6 +298,8 @@ Cada área usa la composición que mejor explica su contenido. Aplicaciones se c
 
 La navegación debe seguir siendo cómoda en una ventana angosta. La ventana aparece antes de realizar trabajo secundario; cada área usa primero el estado local disponible y las tareas lentas trabajan en segundo plano. Una página no debe quedar esperando a que termine la carga de otra.
 
+Como referencia visual comprobada, en una ventana normal Korunix usa una barra lateral con las áreas y un buscador de secciones. Al estrechar la ventana, esa barra se oculta y un botón permite abrirla sobre el contenido. El área actual aprovecha entonces todo el ancho disponible. Se rescata este comportamiento de `pruebas`, no su arquitectura interna.
+
 Reorganizar la GUI no autoriza a reimplementar los motores que ya funcionan. Preview, Apply, Rollback, Actualizaciones, almacenamiento y otras funciones cerradas conservan el mismo Rust compartido con la CLI. La interfaz mueve, explica y presenta; no crea una segunda ruta técnica.
 
 Si una salida es importante para entender una tarea, se muestra dentro del área que la produjo. Que un mensaje exista en un TextView lejano o fuera de contexto no cuenta como una experiencia gráfica terminada.
@@ -523,7 +525,7 @@ servidor_dedicado = true
 
 Steam deriva GameMode. Remote Play y servidor dedicado abren sus reglas únicamente cuando Steam está activo y la subopción correspondiente está encendida. Cuando Steam está activo, Korunix deriva también Millennium como detalle técnico. En Niri/Hyprland, Noctalia habilita la plantilla comunitaria `steam`. Millennium y esa plantilla no son preguntas humanas adicionales.
 
-El acceso remoto más amplio puede integrar Sunshine/Moonlight y Tailscale cuando se trabaje ese frente; no es requisito del primer corte desde cero.
+El acceso remoto más amplio usará Sunshine/Moonlight y Tailscale cuando se trabaje ese frente; no es requisito del primer corte desde cero.
 
 ## 14. Hardware y sistema
 
