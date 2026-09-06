@@ -780,6 +780,11 @@ Buscar actualizaciones no modifica NixOS. La GUI muestra primero el estado local
 
 La búsqueda tampoco reescribe `flake.lock`. Korunix pide a Nix un `flake.lock` candidato y lo guarda en su estado local junto con la base exacta desde la que se buscó. Si la búsqueda falla, la última búsqueda válida no se borra. Si `flake.lock` cambia después, esa búsqueda se considera antigua y no se presenta como vigente.
 
+
+El preview de una actualización usa ese `flake.lock` candidato directamente, sin sustituir temporalmente el `flake.lock` del repositorio. Korunix guarda junto al preview tanto el lock base como el lock realmente usado para construir la generación. Si `configuracion.toml` o el lock base cambian después, ese preview queda inválido.
+
+Una generación de actualización no puede pasar por un Apply que ignore el lock con el que fue construida. Hasta que Apply haya verificado y persistido generación + TOML + `flake.lock` como una sola operación recuperable, Korunix la rechaza antes de pedir privilegios. No se permite aplicar una actualización a medias.
+
 No se inventan porcentajes mientras Nix está resolviendo o construyendo. El flujo reutiliza Preview y Apply: buscar o revisar no autoriza a aplicar otra generación distinta, y Apply sigue activando exactamente el preview revisado sin reconstruir.
 
 No inventar porcentajes si Nix no puede ofrecerlos. Sí mostrar fase y actividad.
