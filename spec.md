@@ -724,6 +724,21 @@ También se midió una condición transitoria normal al reconectar: el disco fí
 
 La GUI presenta «Administrar» y «Expulsar» en la DataTraveler, y «Transferir un archivo» con selector de archivo, destino humano y barra de progreso. Las operaciones se ejecutan fuera del hilo de GTK. La prueba visual confirmó que la ventana siguió respondiendo mientras copiaba.
 
+
+La interfaz debe dejar inequívoco que el selector de archivos elige **el archivo de origen** y puede navegar por cualquier ubicación accesible. El selector de unidad elige únicamente **a dónde se copiará**. La presentación humana debe separar:
+
+```text
+Archivo
+[ Elegir archivo ]
+
+Copiar a
+[ unidad de destino ]
+
+[ Copiar archivo ]
+```
+
+No se restringe el selector de archivos al disco elegido como destino.
+
 Los 100 tests de Rust pasaron en serie antes del cierre. El preview completo se revisó y Apply activó exactamente esa generación sin reconstruirla. Después se verificó `activa = persistente = preview` y que no quedaran unidades systemd fallidas.
 
 Código publicado en `desde-cero`:
@@ -740,6 +755,17 @@ Generación aplicada:
 
 La DataTraveler sigue detectada y no administrada; probar expulsión o adopción no convierte una memoria temporal en una decisión humana permanente.
 
+### Pendientes obligatorios antes de cerrar Almacenamiento/Copias
+
+Estos puntos quedan aplazados para no seguir bloqueados visualmente en este frente, pero **no son opcionales** y deben resolverse antes del cierre integral:
+
+- `Ver historial` debe mostrar el contenido claramente dentro de «Copias e historial»;
+- una unidad reconectada debe poder actualizarse sin cerrar y abrir Korunix;
+- una transferencia o expulsión larga no debe deshabilitar controles ajenos sin necesidad;
+- el cierre visual debe comprobar de nuevo que «Transferir un archivo» distingue origen y destino sin ambigüedad.
+
+Nada marcado aquí puede quedar inconcluso al declarar Korunix terminado.
+
 ## 17. Actualizaciones
 
 Korunix administra también las actualizaciones del sistema y soporta canal estable e inestable.
@@ -747,6 +773,11 @@ Korunix administra también las actualizaciones del sistema y soporta canal esta
 La persona elige una vez y Korunix deriva los inputs y detalles relacionados.
 
 Antes de actualizar se explica qué va a cambiar y si el resultado necesita reinicio o volver a iniciar sesión.
+
+
+Buscar actualizaciones no modifica NixOS. La GUI muestra primero el estado local conocido y solo necesita Internet para buscar información nueva. Las tareas de búsqueda, resolución y construcción trabajan fuera del hilo de GTK.
+
+No se inventan porcentajes mientras Nix está resolviendo o construyendo. El flujo reutiliza Preview y Apply: buscar o revisar no autoriza a aplicar otra generación distinta, y Apply sigue activando exactamente el preview revisado sin reconstruir.
 
 No inventar porcentajes si Nix no puede ofrecerlos. Sí mostrar fase y actividad.
 
