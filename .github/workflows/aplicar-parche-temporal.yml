@@ -26,8 +26,8 @@ jobs:
 
       - name: Aplicar el cambio
         run: |
-          git apply --check .github/korunix.patch
-          git apply .github/korunix.patch
+          git apply --recount --check .github/korunix.patch
+          git apply --recount .github/korunix.patch
           rm .github/korunix.patch
 
       - name: Formato e integridad
