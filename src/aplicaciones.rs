@@ -287,6 +287,20 @@ pub fn catalogo() -> &'static [Ficha] {
     CATALOGO
 }
 
+pub fn terminos_busqueda() -> String {
+    let mut terminos = CATALOGO
+        .iter()
+        .flat_map(|ficha| [ficha.id, ficha.nombre, ficha.descripcion, ficha.categoria])
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    terminos.push_str(
+        " sunshine transmisión remoto remota autoinicio steam remote play servidor dedicado gamemode millennium",
+    );
+
+    terminos.to_lowercase()
+}
+
 fn capitalizar(palabra: &str) -> String {
     let mut caracteres = palabra.chars();
     let Some(inicial) = caracteres.next() else {
@@ -469,6 +483,16 @@ in
 #[cfg(test)]
 mod pruebas {
     use super::*;
+
+    #[test]
+    fn la_busqueda_global_conoce_aplicaciones_y_opciones_propias() {
+        let terminos = terminos_busqueda();
+
+        assert!(terminos.contains("firefox"));
+        assert!(terminos.contains("fotografías"));
+        assert!(terminos.contains("steam"));
+        assert!(terminos.contains("sunshine"));
+    }
 
     #[test]
     fn buscar_usa_nombre_descripcion_y_categoria() {

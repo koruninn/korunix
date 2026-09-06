@@ -1726,6 +1726,39 @@ fn crear_pagina_area(titulo: &str, descripcion: &str) -> (gtk::ScrolledWindow, g
     (desplazamiento, contenido)
 }
 
+fn terminos_busqueda_area(nombre: &str) -> String {
+    let terminos = match nombre {
+        "inicio" => {
+            "inicio resumen estado cambios preview aplicar volver generación generacion nixos"
+        }
+        "aplicaciones" => return aplicaciones::terminos_busqueda(),
+        "apariencia" => {
+            "apariencia estilo predeterminado dinámico dinamico everforest claro oscuro automático automatico noctalia"
+        }
+        "sistema" => {
+            "sistema nombre equipo canal estable inestable escritorio principal niri hyprland plasma cinnamon bluetooth impresión impresion virtualización virtualizacion"
+        }
+        "hardware" => {
+            "hardware pantalla monitor resolución resolucion frecuencia hz"
+        }
+        "almacenamiento" => {
+            "almacenamiento disco discos unidad unidades usb montar desmontar expulsar transferencia transferir archivo copiar destino administrar"
+        }
+        "personas" => {
+            "personas usuario usuarios teclado teclados españa espana latinoamérica latinoamerica alt shift idioma idiomas"
+        }
+        "actualizaciones" => {
+            "actualizaciones actualizar buscar revisar aplicar canal revisión revision flake lock preview reinicio sesión sesion"
+        }
+        "copias" => {
+            "copias copia recuperación recuperacion historial crear elegir revisar restaurar restauración restauracion respaldo"
+        }
+        _ => "",
+    };
+
+    terminos.to_string()
+}
+
 fn crear_fila_navegacion(titulo: &str, icono: &str) -> gtk::ListBoxRow {
     let fila = gtk::ListBoxRow::new();
     fila.set_activatable(true);
@@ -1868,7 +1901,8 @@ fn construir_ventana(aplicacion: &Application) {
     barra_lateral.add_top_bar(&cabecera_lateral);
 
     let busqueda_global = gtk::SearchEntry::new();
-    busqueda_global.set_placeholder_text(Some("Buscar una sección…"));
+    busqueda_global.set_placeholder_text(Some("Buscar en Korunix…"));
+    busqueda_global.set_tooltip_text(Some("Buscar ajustes, aplicaciones y áreas"));
     busqueda_global.set_size_request(-1, 38);
     busqueda_global.set_margin_top(12);
     busqueda_global.set_margin_start(12);
@@ -1910,19 +1944,54 @@ fn construir_ventana(aplicacion: &Application) {
         ("copias", "Copias y recuperación", "document-save-symbolic"),
     ];
 
-    let mut filas_busqueda = Vec::new();
-    for (_, titulo, icono) in navegacion {
+    let mut filas_busqueda = Vec::<(gtk::ListBoxRow, String)>::new();
+    for (nombre, titulo, icono) in navegacion {
         let fila = crear_fila_navegacion(titulo, icono);
+        let terminos = format!("{} {}", titulo, terminos_busqueda_area(nombre)).to_lowercase();
+
         lista_navegacion.append(&fila);
-        filas_busqueda.push((fila, titulo.to_string()));
+        filas_busqueda.push((fila, terminos));
     }
 
+    let busqueda_vacia = gtk::Label::new(Some(
+        "No encontré ningún ajuste, aplicación o área con ese nombre.",
+    ));
+    busqueda_vacia.set_wrap(true);
+    busqueda_vacia.set_justify(gtk::Justification::Center);
+    busqueda_vacia.add_css_class("dim-label");
+    busqueda_vacia.set_margin_top(28);
+    busqueda_vacia.set_margin_bottom(28);
+    busqueda_vacia.set_margin_start(18);
+    busqueda_vacia.set_margin_end(18);
+    busqueda_vacia.set_visible(false);
+
     {
-        let filas = filas_busqueda.clone();
+        let lista = lista_navegacion.clone();
+        let filas = Rc::new(filas_busqueda);
+        let vacia = busqueda_vacia.clone();
+
         busqueda_global.connect_search_changed(move |entrada| {
-            let filtro = entrada.text().trim().to_lowercase();
-            for (fila, titulo) in &filas {
-                fila.set_visible(filtro.is_empty() || titulo.to_lowercase().contains(&filtro));
+            let consulta = entrada.text().trim().to_lowercase();
+            let mut primera_visible = None::<gtk::ListBoxRow>;
+
+            for (fila, terminos) in filas.iter() {
+                let visible = consulta.is_empty() || terminos.contains(&consulta);
+                fila.set_visible(visible);
+
+                if visible && primera_visible.is_none() {
+                    primera_visible = Some(fila.clone());
+                }
+            }
+
+            vacia.set_visible(primera_visible.is_none());
+
+            let seleccion_visible = lista
+                .selected_row()
+                .map(|fila| fila.is_visible())
+                .unwrap_or(false);
+
+            if !seleccion_visible {
+                lista.select_row(primera_visible.as_ref());
             }
         });
     }
@@ -1935,6 +2004,7 @@ fn construir_ventana(aplicacion: &Application) {
 
     let contenido_lateral = gtk::Box::new(gtk::Orientation::Vertical, 0);
     contenido_lateral.append(&busqueda_global);
+    contenido_lateral.append(&busqueda_vacia);
     contenido_lateral.append(&desplazamiento_lateral);
     barra_lateral.set_content(Some(&contenido_lateral));
 
@@ -1945,7 +2015,7 @@ fn construir_ventana(aplicacion: &Application) {
     cabecera_contenido.set_show_back_button(false);
 
     let menu_secciones = gtk::Button::from_icon_name("view-list-symbolic");
-    menu_secciones.set_tooltip_text(Some("Mostrar secciones"));
+    menu_secciones.set_tooltip_text(Some("Mostrar áreas"));
     menu_secciones.set_visible(false);
 
     {
@@ -1972,17 +2042,18 @@ fn construir_ventana(aplicacion: &Application) {
     {
         let paginas = paginas.clone();
         let split = split.clone();
+        let pagina_contenido = pagina_contenido.clone();
         let estrecho = Rc::clone(&estrecho);
-        let nombres = [
-            "inicio",
-            "aplicaciones",
-            "apariencia",
-            "sistema",
-            "hardware",
-            "almacenamiento",
-            "personas",
-            "actualizaciones",
-            "copias",
+        let destinos = [
+            ("inicio", "Inicio"),
+            ("aplicaciones", "Aplicaciones"),
+            ("apariencia", "Apariencia"),
+            ("sistema", "Sistema"),
+            ("hardware", "Hardware"),
+            ("almacenamiento", "Almacenamiento"),
+            ("personas", "Personas"),
+            ("actualizaciones", "Actualizaciones"),
+            ("copias", "Copias y recuperación"),
         ];
 
         lista_navegacion.connect_row_selected(move |_, fila| {
@@ -1990,12 +2061,24 @@ fn construir_ventana(aplicacion: &Application) {
                 return;
             };
             let indice = fila.index() as usize;
-            let Some(nombre) = nombres.get(indice) else {
+            let Some((nombre, titulo)) = destinos.get(indice) else {
                 return;
             };
 
             paginas.set_visible_child_name(nombre);
+            pagina_contenido.set_title(titulo);
             if estrecho.get() {
+                split.set_show_sidebar(false);
+            }
+        });
+    }
+
+    {
+        let split = split.clone();
+        let lista = lista_navegacion.clone();
+
+        busqueda_global.connect_activate(move |_| {
+            if lista.selected_row().is_some() && split.is_collapsed() {
                 split.set_show_sidebar(false);
             }
         });
