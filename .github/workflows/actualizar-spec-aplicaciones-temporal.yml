@@ -1,0 +1,55 @@
+name: Actualizar spec de Aplicaciones
+
+on:
+  push:
+    branches:
+      - pruebas
+    paths:
+      - .github/actualizar-spec-aplicaciones
+
+permissions:
+  contents: write
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Registrar la decisión comprobada
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ruta = Path("spec.md")
+          texto = ruta.read_text()
+          ancla = "Reorganizar la GUI no autoriza a reimplementar los motores que ya funcionan."
+          if texto.count(ancla) != 1:
+              raise SystemExit("No encontré una sola vez el punto de inserción del spec.")
+
+          nuevo = (
+              "En Aplicaciones, AppStream es un enriquecimiento local secundario: la página y el catálogo "
+              "curado aparecen primero y la lectura de AppStream empieza después. Una coincidencia fiable puede "
+              "aportar icono y datos humanos a una elección libre; una coincidencia ambigua no reemplaza el nombre "
+              "ni la descripción curados. Si AppStream falla o no tiene una ficha útil, la aplicación sigue visible "
+              "y utilizable. Sunshine y Steam aparecen cada uno como una ficha propia con sus subopciones dentro; "
+              "buscar sus nombres u opciones no debe caer por error en el resolvedor de nombres libres de Nixpkgs.\n\n"
+              + ancla
+          )
+
+          ruta.write_text(texto.replace(ancla, nuevo, 1))
+          PY
+
+          rm -f .github/actualizar-spec-aplicaciones
+          rm -f .github/workflows/actualizar-spec-aplicaciones-temporal.yml
+          git diff --check
+
+      - name: Publicar
+        run: |
+          git config user.name "Korunix"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "define enriquecimiento local de Aplicaciones"
+          git push origin HEAD:pruebas
