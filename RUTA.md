@@ -154,6 +154,52 @@ Al volver a este bloque no se repite el motor ya probado salvo que el cambio pue
 
 ### Gestor humano de actualizaciones
 
+Avance publicado:
+
+```text
+040bf76ae1d8a20fe097a41fe5af901dc578bfe0
+añade búsqueda segura de actualizaciones
+```
+
+Ya funciona:
+
+```text
+estado local
+→ lee canal + revisión actual desde configuracion.toml y flake.lock
+→ funciona sin Internet
+
+buscar
+→ usa nix flake update con un flake.lock candidato fuera del repositorio
+→ compara entradas principales y cambios internos
+→ guarda la búsqueda localmente
+→ si la búsqueda falla conserva la última válida
+→ nunca presenta una búsqueda vieja como vigente
+→ no cambia flake.lock
+→ no cambia NixOS
+```
+
+Validación de este avance:
+
+```text
+112 tests de Rust en paralelo
+nix build del motor
+búsqueda real por Internet
+flake.lock byte por byte intacto
+configuracion.toml intacto
+hardware.nix intacto
+NixOS activo y persistente intactos
+```
+
+Siguiente dentro de este mismo frente:
+
+```text
+candidata guardada
+→ construir Preview con esa candidata
+→ revisar consecuencias
+→ integrar Apply exacto y persistencia de flake.lock
+→ GUI en segundo plano
+```
+
 Objetivo:
 
 ```text
