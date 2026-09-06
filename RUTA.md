@@ -320,25 +320,133 @@ NixOS activo y persistente no cambian durante Buscar
 
 ## Ahora
 
-### Interfaz completa de Aplicaciones con AppStream y caché local
+### Estructura visual por áreas + Aplicaciones como primera página final
 
-Objetivo:
+La experiencia gráfica ya no se amplía como una única página larga. El motor probado se conserva; lo que cambia es cómo se presenta.
+
+Objetivo general:
+
+```text
+abrir Korunix
+→ ver una navegación clara por áreas
+→ entrar a una tarea sin recorrer controles ajenos
+→ cada área usa la composición que mejor explica esa tarea
+→ las lecturas locales aparecen primero
+→ lo lento trabaja en segundo plano
+→ GUI y CLI siguen usando el mismo motor Rust
+```
+
+Estructura visual de referencia:
+
+```text
+General
+  Inicio
+  Aplicaciones
+  Apariencia
+
+Equipo
+  Sistema
+  Hardware
+  Almacenamiento
+  Personas
+
+Mantenimiento
+  Actualizaciones
+  Copias y recuperación
+
+Más adelante
+  Acceso remoto
+```
+
+No es una obligación de crear nueve módulos técnicos ni nueve archivos. Son **áreas visibles para la persona**. El árbol de Rust se divide solo cuando dividirlo mejora de verdad la comprensión.
+
+Cada área puede verse distinta:
+
+```text
+Inicio           → resumen y accesos importantes
+Aplicaciones     → catálogo, búsqueda y fichas
+Apariencia       → previsualización y controles visuales
+Hardware         → dispositivos y estado
+Almacenamiento   → unidades, transferencias y expulsión
+Personas         → perfiles, idiomas y teclados
+Actualizaciones  → estado → buscar → revisar → aplicar
+Copias           → copias, historial, restauración y recuperación
+```
+
+Reglas de migración:
+
+- no reescribir motores cerrados para acomodar la GUI;
+- mover los controles existentes a su área sin cambiar su comportamiento;
+- no duplicar acciones entre páginas salvo que sea un acceso rápido claro;
+- una salida importante aparece dentro del área que la produjo;
+- una operación lenta no congela la navegación;
+- una página no espera a otra página para poder mostrarse;
+- en ventana angosta, la navegación debe seguir siendo cómoda y no convertirse en una barra lateral inútil.
+
+#### Primera página que define el patrón: Aplicaciones
+
+Aplicaciones se implementa ya con la composición final, no como otro bloque añadido a la página larga:
+
+```text
+Aplicaciones
+
+[ Buscar aplicaciones... ]
+
+Instaladas   Todas   Juegos   Multimedia   Oficina   ...
+
+Firefox
+Navegador web
+✓ Instalado
+
+Blender
+Creación 3D
+[ Instalar ]
+
+Karere
+Paquete encontrado en Nix
+[ Instalar ]
+```
+
+Comportamiento:
 
 ```text
 abrir Aplicaciones
-→ mostrar el catálogo local inmediatamente
-→ buscar por nombre y descripción
-→ enseñar nombre bonito, descripción y categoría cuando exista ficha
-→ permitir también nombres libres que Nix pueda resolver
+→ mostrar inmediatamente lo elegido + catálogo/caché local
+→ enriquecer con AppStream local
+→ buscar por nombre y descripción sin nix eval repetido
+→ si el nombre no está en el catálogo, permitir resolverlo explícitamente con Nix
 → agregar o quitar modifica configuracion.toml
+→ las opciones especiales aparecen en la ficha de esa aplicación
 → Preview y Apply siguen siendo los mismos del sistema
 ```
 
-Primera regla: AppStream mejora la presentación y la búsqueda; **no se convierte en una lista blanca**. Una aplicación elegida por la persona no desaparece solo porque no tenga ficha curada.
+AppStream mejora nombre, descripción, icono y categoría. **No es una lista blanca.** Una aplicación elegida por la persona no desaparece por no tener ficha.
+
+La caché local existe para abrir y navegar rápido. No se convierte en una base de datos nueva ni en otra fuente de decisiones humanas.
+
+#### Puerta de este frente
+
+Antes de dar por cerrada esta reorientación:
+
+```text
+navegación real por áreas
+→ Aplicaciones con catálogo local inmediato
+→ búsqueda local instantánea
+→ app curada instalable
+→ app libre resoluble instalable
+→ quitar app
+→ opciones especiales siguen funcionando
+→ Actualizaciones conserva su motor cerrado dentro de su área
+→ ventana angosta usable
+→ tareas lentas no congelan GTK
+→ prueba gráfica real
+```
+
+No se declara cerrada solamente porque la navegación o Aplicaciones compilen.
 
 ## Después
 
-Orden previsto después de Aplicaciones:
+Orden previsto después de la estructura visual + Aplicaciones:
 
 1. detección y adaptación a otros equipos;
 2. ampliar idiomas, teclados, métodos de entrada y Personas;
