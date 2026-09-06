@@ -82,46 +82,103 @@ Estos frentes no se reabren sin una regresión nueva:
 - `fsync` individual sin `sync` global;
 - expulsión segura de USB mediante UDisks2.
 
-## Ahora
+## Avance comprobado sin cierre: Copias → Historial → Restauración
 
-### Copias → Historial → Restauración
+El motor y la ruta gráfica principal ya están muy avanzados, pero este bloque **no está cerrado**. Quedan pendientes obligatorios de experiencia visual que deben resolverse antes del cierre integral.
 
-Diseñar las tres piezas juntas para no crear un formato de copia que después estorbe a Historial o Restauración.
-
-Objetivo humano:
+Ya se comprobó:
 
 ```text
-elegir qué guardar
-→ elegir dónde
-→ Korunix crea una copia reconocible y verificable
-→ Historial muestra qué existe y si está íntegro
-→ Restaurar explica qué recuperará
-→ solo entonces restaura
+Copia portable de Korunix
+→ configuracion.toml + flake.lock + avatares usados
+→ sin hardware, contraseñas, claves privadas ni historial interno
+→ integridad SHA-256
+→ sin sobrescritura silenciosa
+
+Plan de restauración
+→ no modifica archivos
+
+Restaurar
+→ protección automática de lo actual
+→ restaura configuracion.toml + flake.lock + avatares
+→ verifica el resultado
+→ recupera el estado anterior si falla a mitad
+→ no toca hardware.nix
+→ no toca NixOS
+→ registra protección + restauración en Historial
 ```
 
-La primera versión debe seguir estas reglas:
+Validación alcanzada antes de cambiar de frente:
 
-- no pedir UUID, `/dev/...` ni rutas internas cuando Korunix pueda derivarlas;
-- no presentar una copia incompleta como terminada;
-- no sobrescribir silenciosamente;
-- verificar lo guardado;
-- conservar suficiente información para restaurar después;
-- mostrar progreso real cuando sea medible;
+```text
+108 tests de Rust en paralelo
+nix build del motor correcto
+nix build de la interfaz correcto
+prueba CLI real sobre raíz temporal correcta
+prueba GUI real:
+  Crear → Elegir → Revisar Plan → Restaurar
+  Restaurar bloqueado antes del Plan
+  Restaurar habilitado solo después del Plan
+  restauración verificada
+  NixOS intacto
+```
+
+Correcciones que no deben perderse:
+
+- los tests de Historial no comparten `XDG_STATE_HOME`;
+- los tests de Preview protegen comportamiento, no frases exactas;
+- los ejecutables falsos de los tests de Preview se escriben primero con nombre temporal y luego se publican con `rename`, evitando `Text file busy` dentro de Nix;
+- una copia no puede usar un avatar para reemplazar archivos centrales ni atravesar enlaces simbólicos para escribir fuera de Korunix.
+
+### Pendientes obligatorios del cierre integral
+
+No son mejoras opcionales:
+
+- `Ver historial` debe mostrar el contenido claramente dentro de «Copias e historial»;
+- `Transferir un archivo` debe separar claramente **Archivo → Elegir archivo** de **Copiar a → unidad de destino**. El selector de unidad no limita el origen del archivo;
+- una unidad reconectada debe poder actualizarse sin cerrar y abrir Korunix;
+- una transferencia o expulsión larga no debe deshabilitar controles ajenos sin necesidad.
+
+Al volver a este bloque no se repite el motor ya probado salvo que el cambio pueda afectarlo. Se corrige la UX, se hace una prueba gráfica real y recién entonces se mueve el bloque a «Cerrado».
+
+## Ahora
+
+### Gestor humano de actualizaciones
+
+Objetivo:
+
+```text
+ver estado actual
+→ buscar actualizaciones cuando haya conexión
+→ explicar qué cambiaría
+→ indicar reinicio o nueva sesión cuando corresponda
+→ construir un preview completo
+→ aplicar exactamente ese preview
+→ verificar
+```
+
+Primera versión:
+
+- buscar actualizaciones no modifica NixOS;
+- estable/inestable sigue siendo una sola decisión humana;
+- no inventar porcentajes mientras Nix resuelve o construye;
 - no congelar GTK;
-- funcionar offline;
-- no inventar otra base de datos si archivos simples bastan;
-- no confundir este historial de copias con el rollback de generaciones NixOS.
+- reutilizar Preview y Apply existentes;
+- Apply sigue activando exactamente la generación revisada, sin reconstruir;
+- offline muestra el último estado local conocido; Internet solo hace falta para buscar información nueva;
+- antes de implementar se revisa el comportamiento útil del corte `d0b40b682fcc6e70f9181a5b2f4b93175cbbe609` y se rescata solo lo que siga teniendo sentido.
 
 ## Después
 
-Orden previsto después de cerrar Copias/Historial/Restauración:
+Orden previsto después del gestor humano de actualizaciones:
 
-1. gestor humano de actualizaciones;
-2. interfaz completa de Aplicaciones con AppStream y caché local;
-3. detección y adaptación a otros equipos;
-4. ampliar idiomas, teclados, métodos de entrada y Personas;
-5. acceso remoto completo con Sunshine/Moonlight + Tailscale;
-6. accesibilidad, modo compacto y cierre integral.
+1. interfaz completa de Aplicaciones con AppStream y caché local;
+2. detección y adaptación a otros equipos;
+3. ampliar idiomas, teclados, métodos de entrada y Personas;
+4. acceso remoto completo con Sunshine/Moonlight + Tailscale;
+5. accesibilidad y modo compacto;
+6. volver a los pendientes obligatorios de UX acumulados;
+7. puerta final integral: ningún pendiente marcado puede quedar abierto.
 
 El orden puede cambiar si aparece una dependencia real o una decisión humana nueva. Si cambia, se actualiza aquí y en `spec.md` cuando el cambio también afecte al comportamiento esperado.
 
