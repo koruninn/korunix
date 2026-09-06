@@ -322,6 +322,15 @@ NixOS activo y persistente no cambian durante Buscar
 
 ### Estructura visual por áreas + Aplicaciones como primera página final
 
+Primer avance de implementación publicado:
+
+```text
+bf2068c56c9bdec872eb54bf8a2aa4feefaf6f92
+organiza la interfaz por áreas
+```
+
+La página interminable ya se separó en áreas reales con navegación desde Inicio. Los motores existentes no se reescribieron. Este avance **no cierra el frente**: todavía falta convertir Aplicaciones en el catálogo final, comprobar sus búsquedas y fichas, y pasar la puerta gráfica integral del bloque.
+
 La experiencia gráfica ya no se amplía como una única página larga. El motor probado se conserva; lo que cambia es cómo se presenta.
 
 Objetivo general:
