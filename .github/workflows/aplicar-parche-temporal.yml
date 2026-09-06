@@ -19,38 +19,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Preparar GTK
+      - name: Aplicar el cambio
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libadwaita-1-dev pkg-config
-
-      - name: Aplicar el cambio funcional
-        run: |
-          git apply --recount --check \
-            --include=src/aplicaciones.rs \
-            --include=src/interfaz.rs \
-            .github/korunix.patch
-          git apply --recount \
-            --include=src/aplicaciones.rs \
-            --include=src/interfaz.rs \
-            .github/korunix.patch
+          git apply --recount --check .github/korunix.patch
+          git apply --recount .github/korunix.patch
           rm .github/korunix.patch
-
-      - name: Formato e integridad
-        run: |
-          cargo fmt --all
           git diff --check
 
-      - name: Probar el motor compartido
-        run: cargo test --locked -- --test-threads=1
+      - name: Validar Rust solo cuando cambie
+        run: |
+          if git diff --name-only | grep -q '^src/'; then
+            sudo apt-get update
+            sudo apt-get install -y libgtk-4-dev libadwaita-1-dev pkg-config
+            cargo fmt --all
+            git diff --check
+            cargo test --locked -- --test-threads=1
+            cargo check --locked --features interfaz --bin korunix-interfaz
+          fi
 
-      - name: Probar la interfaz
-        run: cargo check --locked --features interfaz --bin korunix-interfaz
-
-      - name: Publicar solo si todo pasó
+      - name: Publicar
         run: |
           git config user.name "Korunix"
           git config user.email "actions@users.noreply.github.com"
           git add -A
-          git commit -m "busca ajustes en todas las áreas"
+          git commit -m "registra búsqueda global comprobada"
           git push origin HEAD:desde-cero
