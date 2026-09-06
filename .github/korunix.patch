@@ -1,7 +1,7 @@
 diff --git a/src/aplicaciones.rs b/src/aplicaciones.rs
 --- a/src/aplicaciones.rs
 +++ b/src/aplicaciones.rs
-@@ -283,6 +283,24 @@ pub fn catalogo() -> &'static [Ficha] {
+@@ -283,6 +283,22 @@ pub fn catalogo() -> &'static [Ficha] {
      CATALOGO
  }
  
@@ -22,11 +22,11 @@ diff --git a/src/aplicaciones.rs b/src/aplicaciones.rs
  fn capitalizar(palabra: &str) -> String {
      let mut caracteres = palabra.chars();
      let Some(inicial) = caracteres.next() else {
-@@ -472,6 +490,16 @@ mod pruebas {
+@@ -472,6 +488,16 @@ mod pruebas {
      use super::*;
  
      #[test]
-+    fn la_busqueda_global_conoce_el_catalogo_y_las_opciones_propias() {
++    fn la_busqueda_global_conoce_aplicaciones_y_opciones_propias() {
 +        let terminos = terminos_busqueda();
 +
 +        assert!(terminos.contains("firefox"));
@@ -230,39 +230,3 @@ diff --git a/src/interfaz.rs b/src/interfaz.rs
  
      if let Some(fila) = lista_navegacion.row_at_index(0) {
          lista_navegacion.select_row(Some(&fila));
-diff --git a/RUTA.md b/RUTA.md
---- a/RUTA.md
-+++ b/RUTA.md
-@@ -240,12 +240,16 @@ La navegación rescata la experiencia visual comprobada en `pruebas` sin copiar
- ```text
- ancho normal
- → barra lateral visible
--→ buscador de secciones
-+→ búsqueda global de ajustes, aplicaciones y áreas
-+→ cada área aporta términos de sus elementos internos
-+→ muestra solo las áreas donde puede estar la coincidencia
-+→ selecciona la primera coincidencia
- → área elegida a la derecha
- 
- ventana angosta
- → la barra lateral se oculta
--→ un botón abre las secciones sobre el contenido
-+→ un botón abre las áreas y la misma búsqueda global sobre el contenido
- → el área actual usa todo el ancho disponible
- ```
-@@ -270,6 +274,17 @@ La prueba de este avance incluye una aplicación curada, una elección libre, r
- resolución real de `karere`, cambio de sección durante la consulta y ventana angosta. El frente **sigue abierto**: falta enriquecer las fichas con AppStream local, integrar las opciones propias dentro de sus fichas finales y pasar la puerta gráfica completa.
- 
-+Corrección rescatada directamente del comportamiento ya comprobado en `pruebas`:
-+
-+```text
-+búsqueda global
-+→ no depende del área que estaba abierta
-+→ busca términos humanos de todas las áreas
-+→ Firefox / fotografías / Steam llevan a Aplicaciones
-+→ Bluetooth / Niri llevan a Sistema
-+→ teclado lleva a Personas
-+→ restaurar lleva a Copias y recuperación
-+```
-+
- La experiencia gráfica ya no se amplía como una única página larga. El motor probado se conserva; lo que cambia es cómo se presenta.
