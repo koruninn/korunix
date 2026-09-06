@@ -298,7 +298,7 @@ Cada área usa la composición que mejor explica su contenido. Aplicaciones se c
 
 La navegación debe seguir siendo cómoda en una ventana angosta. La ventana aparece antes de realizar trabajo secundario; cada área usa primero el estado local disponible y las tareas lentas trabajan en segundo plano. Una página no debe quedar esperando a que termine la carga de otra.
 
-Como referencia visual comprobada, en una ventana normal Korunix usa una barra lateral con las áreas y un buscador de secciones. Al estrechar la ventana, esa barra se oculta y un botón permite abrirla sobre el contenido. El área actual aprovecha entonces todo el ancho disponible. Se rescata este comportamiento de `pruebas`, no su arquitectura interna.
+Como referencia visual y funcional comprobada, en una ventana normal Korunix usa una barra lateral con las áreas y una búsqueda global. Esa búsqueda no depende del área abierta ni se limita al nombre de las áreas: cada área aporta términos humanos de sus elementos internos. Al escribir, Korunix muestra las áreas donde puede estar la coincidencia y selecciona la primera. Aplicaciones conserva además su búsqueda propia para filtrar las fichas del catálogo una vez dentro. Al estrechar la ventana, la barra lateral se oculta y un botón permite abrir las áreas y la misma búsqueda global sobre el contenido. El área actual aprovecha entonces todo el ancho disponible. Se rescata este comportamiento de `pruebas`, no su arquitectura interna.
 
 Reorganizar la GUI no autoriza a reimplementar los motores que ya funcionan. Preview, Apply, Rollback, Actualizaciones, almacenamiento y otras funciones cerradas conservan el mismo Rust compartido con la CLI. La interfaz mueve, explica y presenta; no crea una segunda ruta técnica.
 
