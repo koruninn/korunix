@@ -19,23 +19,71 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Aplicar el cambio
+      - name: Registrar la búsqueda global
         run: |
-          git apply --recount --check .github/korunix.patch
-          git apply --recount .github/korunix.patch
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ruta = Path("RUTA.md")
+          texto = ruta.read_text()
+
+          viejo = '''ancho normal
+          → barra lateral visible
+          → buscador de secciones
+          → área elegida a la derecha
+
+          ventana angosta
+          → la barra lateral se oculta
+          → un botón abre las secciones sobre el contenido
+          → el área actual usa todo el ancho disponible
+          '''
+
+          nuevo = '''ancho normal
+          → barra lateral visible
+          → búsqueda global de ajustes, aplicaciones y áreas
+          → cada área aporta términos de sus elementos internos
+          → muestra solo las áreas donde puede estar la coincidencia
+          → selecciona la primera coincidencia
+          → área elegida a la derecha
+
+          ventana angosta
+          → la barra lateral se oculta
+          → un botón abre las áreas y la misma búsqueda global sobre el contenido
+          → el área actual usa todo el ancho disponible
+          '''
+
+          if texto.count(viejo) != 1:
+              raise SystemExit("No encontré una sola vez el bloque de navegación anterior.")
+          texto = texto.replace(viejo, nuevo, 1)
+
+          ancla = (
+              "La prueba de este avance incluye una aplicación curada, una elección libre, "
+              "resolución real de `karere`, cambio de sección durante la consulta y ventana angosta. "
+              "El frente **sigue abierto**: falta enriquecer las fichas con AppStream local, integrar "
+              "las opciones propias dentro de sus fichas finales y pasar la puerta gráfica completa.\n\n"
+          )
+
+          registro = ancla + (
+              "Corrección rescatada directamente del comportamiento ya comprobado en `pruebas`:\n\n"
+              "```text\n"
+              "búsqueda global\n"
+              "→ no depende del área que estaba abierta\n"
+              "→ busca términos humanos de todas las áreas\n"
+              "→ Firefox / fotografías / Steam llevan a Aplicaciones\n"
+              "→ Bluetooth / Niri llevan a Sistema\n"
+              "→ teclado lleva a Personas\n"
+              "→ restaurar lleva a Copias y recuperación\n"
+              "```\n\n"
+          )
+
+          if texto.count(ancla) != 1:
+              raise SystemExit("No encontré una sola vez el avance actual de Aplicaciones.")
+
+          ruta.write_text(texto.replace(ancla, registro, 1))
+          PY
+
           rm .github/korunix.patch
           git diff --check
-
-      - name: Validar Rust solo cuando cambie
-        run: |
-          if git diff --name-only | grep -q '^src/'; then
-            sudo apt-get update
-            sudo apt-get install -y libgtk-4-dev libadwaita-1-dev pkg-config
-            cargo fmt --all
-            git diff --check
-            cargo test --locked -- --test-threads=1
-            cargo check --locked --features interfaz --bin korunix-interfaz
-          fi
 
       - name: Publicar
         run: |
