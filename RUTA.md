@@ -25,15 +25,15 @@ Al abrir un chat nuevo:
 Último cierre funcional de `desde-cero`:
 
 ```text
-a980aaa4704eace16294d569af00e16bed881b23
-añade transferencias seguras y expulsión
+d010427200e0b7dd35747eccda706cead0715654
+integra actualizaciones en la interfaz
 ```
 
 Spec asociado en `pruebas`:
 
 ```text
-7346cc2e0c68d26200c82e2ee6338a2378d86aab
-registra transferencias y expulsión seguras
+83a334ca5e433bf77610ef7c5b5820753a0d6352
+define experiencia gráfica de actualizaciones
 ```
 
 `main` sigue intacta en:
@@ -51,11 +51,15 @@ Generación activa y persistente:
 Última puerta funcional:
 
 ```text
-100 tests de Rust
-GUI real: transferencia de 256 MiB verificada
-CLI real: transferencia de 64 MiB verificada
-expulsión segura real: probada
-activa = persistente = preview
+115 tests de Rust
+nix build del motor con la suite completa dentro de Nix
+Apply real de actualización: exacto, sin rebuild
+Rollback real: generación + configuracion.toml + flake.lock
+Apply del mismo preview: exacto e inocuo al repetir
+GUI real: estado local al abrir + Buscar en segundo plano
+búsqueda de la GUI parte del flake.lock actual
+cero unidades systemd fallidas
+activa = persistente = generación revisada
 ```
 
 ## Cerrado
@@ -81,6 +85,7 @@ Estos frentes no se reabren sin una regresión nueva:
 - rechazo de sobrescritura silenciosa;
 - `fsync` individual sin `sync` global;
 - expulsión segura de USB mediante UDisks2.
+- gestor humano de actualizaciones con búsqueda, Preview, Apply, Rollback y GUI en segundo plano.
 
 ## Avance comprobado sin cierre: Copias → Historial → Restauración
 
@@ -150,7 +155,7 @@ No son mejoras opcionales:
 
 Al volver a este bloque no se repite el motor ya probado salvo que el cambio pueda afectarlo. Se corrige la UX, se hace una prueba gráfica real y recién entonces se mueve el bloque a «Cerrado».
 
-## Ahora
+## Cierre reciente
 
 ### Gestor humano de actualizaciones
 
@@ -293,17 +298,54 @@ Primera versión:
 - offline muestra el último estado local conocido; Internet solo hace falta para buscar información nueva;
 - antes de implementar se revisa el comportamiento útil del corte `d0b40b682fcc6e70f9181a5b2f4b93175cbbe609` y se rescata solo lo que siga teniendo sentido.
 
+Cuarto avance y cierre publicado:
+
+```text
+d010427200e0b7dd35747eccda706cead0715654
+integra actualizaciones en la interfaz
+```
+
+Puerta gráfica:
+
+```text
+la ventana aparece antes de consultar nada remoto
+estado local visible al abrir
+Aplicar actualización reutiliza el mismo Apply exacto
+Buscar actualizaciones corre en segundo plano
+la búsqueda iniciada desde la GUI queda asociada al flake.lock actual
+NixOS activo y persistente no cambian durante Buscar
+```
+
+**Gestor humano de actualizaciones: cerrado.** No se reabre sin una regresión nueva.
+
+## Ahora
+
+### Interfaz completa de Aplicaciones con AppStream y caché local
+
+Objetivo:
+
+```text
+abrir Aplicaciones
+→ mostrar el catálogo local inmediatamente
+→ buscar por nombre y descripción
+→ enseñar nombre bonito, descripción y categoría cuando exista ficha
+→ permitir también nombres libres que Nix pueda resolver
+→ agregar o quitar modifica configuracion.toml
+→ Preview y Apply siguen siendo los mismos del sistema
+```
+
+Primera regla: AppStream mejora la presentación y la búsqueda; **no se convierte en una lista blanca**. Una aplicación elegida por la persona no desaparece solo porque no tenga ficha curada.
+
 ## Después
 
-Orden previsto después del gestor humano de actualizaciones:
+Orden previsto después de Aplicaciones:
 
-1. interfaz completa de Aplicaciones con AppStream y caché local;
-2. detección y adaptación a otros equipos;
-3. ampliar idiomas, teclados, métodos de entrada y Personas;
-4. acceso remoto completo con Sunshine/Moonlight + Tailscale;
-5. accesibilidad y modo compacto;
-6. volver a los pendientes obligatorios de UX acumulados;
-7. puerta final integral: ningún pendiente marcado puede quedar abierto.
+1. detección y adaptación a otros equipos;
+2. ampliar idiomas, teclados, métodos de entrada y Personas;
+3. acceso remoto completo con Sunshine/Moonlight + Tailscale;
+4. accesibilidad y modo compacto;
+5. volver a los pendientes obligatorios de UX acumulados;
+6. puerta final integral: ningún pendiente marcado puede quedar abierto.
 
 El orden puede cambiar si aparece una dependencia real o una decisión humana nueva. Si cambia, se actualiza aquí y en `spec.md` cuando el cambio también afecte al comportamiento esperado.
 
