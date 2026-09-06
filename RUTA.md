@@ -190,15 +190,38 @@ hardware.nix intacto
 NixOS activo y persistente intactos
 ```
 
-Siguiente dentro de este mismo frente:
+Segundo avance publicado:
+
+```text
+7b41c2490923ec2f609baeabe905793826e3c3dd
+construye preview de actualizaciones
+```
+
+Ya se comprobó además:
 
 ```text
 candidata guardada
-→ construir Preview con esa candidata
-→ revisar consecuencias
-→ integrar Apply exacto y persistencia de flake.lock
-→ GUI en segundo plano
+→ Preview la usa mediante --reference-lock-file
+→ guarda lock base + lock usado junto a la generación
+→ flake.lock real queda intacto
+→ configuracion.toml y hardware.nix quedan intactos
+→ NixOS activo y persistente quedan intactos
+→ si flake.lock cambia después, el preview deja de ser válido
+→ Apply normal rechaza el preview candidato para impedir una aplicación a medias
 ```
+
+La generación candidata quedó construida y protegida como preview real. El siguiente bloque debe conectar **esa misma generación**, sin rebuild, con:
+
+```text
+Apply exacto
+→ persistir el flake.lock usado por ese preview
+→ registrar generación + TOML + lock como estado aplicado
+→ guardar generación + TOML + lock anteriores para rollback
+→ si algo falla, recuperar sistema y lock anteriores
+→ verificar activa = persistente = preview y lock = preview
+```
+
+Después se integra el flujo completo en la GUI en segundo plano.
 
 Objetivo:
 
