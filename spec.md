@@ -696,20 +696,43 @@ Generación aplicada:
 /nix/store/scj9sffw5gnr6zzcag7wyyvqp8ijxbas-nixos-system-korunix-26.11.20260831.34ab990
 ```
 
-Se conserva como comportamiento útil:
+Las transferencias pesadas y la expulsión segura ya quedaron implementadas en este frente. Siguen pendientes dentro de Almacenamiento las copias, el historial y la restauración. El rollback de generaciones de NixOS ya existe como función general de Korunix.
 
-- acceso claro a discos adicionales;
-- transferencias pesadas con progreso;
-- porcentaje, velocidad y ETA cuando sean medibles;
-- persistencia y verificación;
-- evitar `sync` global innecesario;
-- no presentar un archivo incompleto como terminado;
-- no sobrescribir silenciosamente;
-- ofrecer expulsión segura cuando corresponda;
-- copias;
-- historial;
-- restauración;
-- rollback.
+### Transferencias pesadas y expulsión segura probadas
+
+CLI y GUI usan el mismo Rust. La persona elige un archivo y una unidad por su nombre humano; UUID, `/dev/...` y la ruta interna de montaje no se convierten en preguntas.
+
+La primera versión transfiere un archivo normal cada vez hacia una unidad administrada y ya aplicada en la generación activa. Una unidad elegida solo en TOML todavía no puede recibir archivos: primero debe existir su `mount` o `automount` en NixOS. Esto conserva el comportamiento del ST3500413AS de «se monta al usarlo» sin confundir «desmontado ahora» con «no aplicado».
+
+La copia se hace primero bajo un nombre temporal oculto. Korunix escribe por bloques, calcula el progreso con bytes realmente escritos y muestra porcentaje, velocidad y tiempo restante cuando ya puede medirlo de forma razonable. El `100%` se reserva para después de sincronizar el archivo individual, publicar el nombre final y verificar el tamaño. No se ejecuta `sync` ni `syncfs` global.
+
+Si ya existe un archivo con el mismo nombre, Korunix se niega a sobrescribirlo. Un error normal limpia el temporal y nunca presenta el nombre final como si la copia incompleta hubiera terminado.
+
+La prueba real por CLI copió 64 MiB al ST3500413AS, comparó el contenido y observó con `strace` `fsync`/`fdatasync` del archivo sin `sync()` ni `syncfs()`. La prueba gráfica copió 256 MiB, mostró progreso real durante la operación, terminó en `100%` solo al final, verificó contenido idéntico y no dejó residuos parciales.
+
+Las unidades USB muestran «Expulsar» tanto si ya están administradas como si solo están detectadas de forma segura. Korunix reutiliza UDisks2, que ya forma parte del sistema: desmonta las particiones montadas y después pide apagar el dispositivo físico. Si una unidad está ocupada o UDisks devuelve un error, Korunix se detiene y no fuerza la expulsión.
+
+La DataTraveler real se expulsó correctamente: desapareció de `lsblk` y del inventario de Korunix antes de desconectarla físicamente. Después de varias pruebas rápidas, el controlador USB llegó a devolver `error -71` al reenumerarla; eso ocurrió antes de que existiera un dispositivo de bloques y no se trató como un error de Korunix. Tras dejarla desconectada unos segundos volvió a enumerar en el mismo puerto.
+
+También se midió una condición transitoria normal al reconectar: el disco físico puede aparecer alrededor de un segundo antes que `sdb1` y `sdb2`. La lectura local espera una vez a udev y, únicamente si detecta una USB incompleta, da una segunda oportunidad breve antes de hacer una única segunda lectura de `lsblk`. El caso normal sigue usando una sola lectura y la GUI continúa haciéndola fuera del hilo de GTK.
+
+La GUI presenta «Administrar» y «Expulsar» en la DataTraveler, y «Transferir un archivo» con selector de archivo, destino humano y barra de progreso. Las operaciones se ejecutan fuera del hilo de GTK. La prueba visual confirmó que la ventana siguió respondiendo mientras copiaba.
+
+Los 100 tests de Rust pasaron en serie antes del cierre. El preview completo se revisó y Apply activó exactamente esa generación sin reconstruirla. Después se verificó `activa = persistente = preview` y que no quedaran unidades systemd fallidas.
+
+Código publicado en `desde-cero`:
+
+```text
+a980aaa4704eace16294d569af00e16bed881b23
+```
+
+Generación aplicada:
+
+```text
+/nix/store/2f04ngymw4l9i4zdn7lzjrbvd7qgvf8f-nixos-system-korunix-26.11.20260831.34ab990
+```
+
+La DataTraveler sigue detectada y no administrada; probar expulsión o adopción no convierte una memoria temporal en una decisión humana permanente.
 
 ## 17. Actualizaciones
 
