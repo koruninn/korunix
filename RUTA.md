@@ -331,6 +331,29 @@ organiza la interfaz por áreas
 
 La página interminable ya se separó en áreas reales con navegación desde Inicio. Los motores existentes no se reescribieron. Este avance **no cierra el frente**: todavía falta convertir Aplicaciones en el catálogo final, comprobar sus búsquedas y fichas, y pasar la puerta gráfica integral del bloque.
 
+Segundo avance visual validado:
+
+```text
+2bebc03aca5fea796fbf12e0c48963854451412d
+adapta la navegación a ventanas estrechas
+```
+
+La navegación rescata la experiencia visual comprobada en `pruebas` sin copiar su arquitectura interna:
+
+```text
+ancho normal
+→ barra lateral visible
+→ buscador de secciones
+→ área elegida a la derecha
+
+ventana angosta
+→ la barra lateral se oculta
+→ un botón abre las secciones sobre el contenido
+→ el área actual usa todo el ancho disponible
+```
+
+La prueba gráfica real confirmó la transición entre ambos tamaños. Los 115 tests del motor compartido y la compilación GTK también pasaron sobre este mismo cambio. Esto valida la navegación, **no cierra todavía Estructura visual + Aplicaciones**.
+
 La experiencia gráfica ya no se amplía como una única página larga. El motor probado se conserva; lo que cambia es cómo se presenta.
 
 Objetivo general:
