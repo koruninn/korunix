@@ -783,7 +783,11 @@ La búsqueda tampoco reescribe `flake.lock`. Korunix pide a Nix un `flake.lock` 
 
 El preview de una actualización usa ese `flake.lock` candidato directamente, sin sustituir temporalmente el `flake.lock` del repositorio. Korunix guarda junto al preview tanto el lock base como el lock realmente usado para construir la generación. Si `configuracion.toml` o el lock base cambian después, ese preview queda inválido.
 
-Una generación de actualización no puede pasar por un Apply que ignore el lock con el que fue construida. Hasta que Apply haya verificado y persistido generación + TOML + `flake.lock` como una sola operación recuperable, Korunix la rechaza antes de pedir privilegios. No se permite aplicar una actualización a medias.
+Una generación de actualización no puede pasar por un Apply que ignore el lock con el que fue construida. Apply activa exactamente la generación revisada, sin `nix build`, y publica exactamente el `flake.lock` usado por ese preview.
+
+Antes del cambio, Korunix protege como rollback la generación activa, la `configuracion.toml` asociada y el `flake.lock` asociado. Si publicar el lock nuevo falla después de activar la generación, Korunix recupera la generación anterior y conserva el lock anterior. El éxito exige `activa = persistente = preview` y `flake.lock = lock usado por el preview`.
+
+Rollback de una actualización devuelve en conjunto la generación anterior, su `configuracion.toml` y su `flake.lock`. Si existían ediciones locales sin aplicar, se conservan como borradores antes de volver. Un Apply del mismo preview ya aplicado es inocuo y no vuelve a construir.
 
 No se inventan porcentajes mientras Nix está resolviendo o construyendo. El flujo reutiliza Preview y Apply: buscar o revisar no autoriza a aplicar otra generación distinta, y Apply sigue activando exactamente el preview revisado sin reconstruir.
 
