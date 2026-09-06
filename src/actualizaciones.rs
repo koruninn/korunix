@@ -1,4 +1,4 @@
-use crate::{configuracion, preview};
+use crate::{aplicar, configuracion, preview};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -456,6 +456,54 @@ pub fn buscar(raiz: &Path) -> Result<ResultadoBusqueda, String> {
     let estado = carpeta_actualizaciones()?;
     let nix = env::var_os("KORUNIX_NIX_BIN").unwrap_or_else(|| "nix".into());
     buscar_en(raiz, &estado, nix.as_os_str())
+}
+
+pub fn preparar_preview(raiz: &Path) -> Result<(ResultadoBusqueda, preview::Preview), String> {
+    let estado = carpeta_actualizaciones()?;
+    let configuracion = configuracion::leer(&raiz.join("configuracion.toml"))?;
+    let (lock_actual, _) = leer_lock(&raiz.join("flake.lock"), "flake.lock actual")?;
+
+    let guardada = leer_busqueda_guardada(&estado.join(ARCHIVO_BUSQUEDA))?.ok_or_else(|| {
+        "No hay una búsqueda de actualizaciones guardada. Busca primero.".to_string()
+    })?;
+
+    if guardada.base.as_bytes() != lock_actual {
+        return Err(
+            "La búsqueda guardada ya no corresponde a tu flake.lock actual. Busca otra vez."
+                .to_string(),
+        );
+    }
+
+    let base = entender_lock(guardada.base.as_bytes(), "la base de la búsqueda guardada")?;
+    let candidata = entender_lock(
+        guardada.candidata.as_bytes(),
+        "la candidata de la búsqueda guardada",
+    )?;
+    let cambios = comparar(&configuracion.canal, &base, &candidata)?;
+
+    if !cambios.hay_cambios {
+        return Err(
+            "La última búsqueda no encontró novedades. No hace falta construir otro preview."
+                .to_string(),
+        );
+    }
+
+    aplicar::conservar_aplicada_actual(raiz)?;
+
+    let construido = preview::crear_con_lock(raiz, guardada.candidata.as_bytes())?;
+
+    let lock_despues = fs::read(raiz.join("flake.lock")).map_err(|error| {
+        format!("No pude comprobar flake.lock después del preview.\nDetalle: {error}")
+    })?;
+
+    if lock_despues != lock_actual {
+        return Err(
+            "flake.lock cambió mientras se construía el preview de actualización. No voy a considerar válida esa revisión."
+                .to_string(),
+        );
+    }
+
+    Ok((cambios, construido))
 }
 
 #[cfg(test)]

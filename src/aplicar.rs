@@ -432,6 +432,15 @@ fn registrar_raiz(nix_store: &Path, enlace: &Path, generacion: &Path) -> Result<
 
 fn preparar(raiz: &Path) -> Result<Preparado, String> {
     let preview = preview::leer(raiz)?;
+
+    if preview::usa_lock_distinto(raiz)? {
+        return Err(
+            "Este preview pertenece a una actualización y usa un flake.lock candidato.\n\
+             Todavía no voy a aplicarlo con «korunix aplicar»: primero debe quedar conectado al guardado de flake.lock y al rollback exacto."
+                .to_string(),
+        );
+    }
+
     let nix_store = programa_variable(
         "KORUNIX_NIX_STORE_BIN",
         "/run/current-system/sw/bin/nix-store",

@@ -84,6 +84,7 @@ fn ayuda() {
     eprintln!("  korunix historial");
     eprintln!("  korunix actualizaciones");
     eprintln!("  korunix actualizaciones buscar");
+    eprintln!("  korunix actualizaciones preview");
     eprintln!("  korunix canal");
     eprintln!("  korunix canal <estable|inestable>");
     eprintln!("  korunix apariencia");
@@ -1010,6 +1011,59 @@ fn buscar_actualizaciones(raiz: &Path) {
     }
 }
 
+fn preview_actualizaciones(raiz: &Path) {
+    println!("Preparando el preview de la actualización…");
+    println!("La generación se construye con el flake.lock candidato.");
+    println!("flake.lock y NixOS todavía no cambian.");
+
+    match actualizaciones::preparar_preview(raiz) {
+        Ok((cambios, preview)) => {
+            println!();
+            println!("Actualización revisada");
+
+            for cambio in &cambios.cambios_directos {
+                println!(
+                    "  - {}: {} → {}",
+                    cambio.nombre, cambio.antes, cambio.despues
+                );
+            }
+
+            if cambios.cambios_internos > 0 {
+                println!(
+                    "  - Cambios internos de dependencias: {}",
+                    cambios.cambios_internos
+                );
+            }
+
+            println!();
+            println!("✓ Preview completo construido.");
+            println!("Generación: {}", preview.generacion.display());
+
+            let kernel_actual = aplicar::kernel_actual();
+            if let Some(kernel_nuevo) = aplicar::kernel_generacion(&preview.generacion) {
+                println!("Kernel actual:  {kernel_actual}");
+                println!("Kernel nuevo:   {kernel_nuevo}");
+
+                if kernel_nuevo != kernel_actual {
+                    println!("Reinicio: sí, para empezar a usar el kernel nuevo.");
+                } else {
+                    println!("Reinicio: no por cambio de kernel.");
+                }
+            }
+
+            println!(
+                "Sesión: algunos componentes del escritorio pueden completarse al volver a iniciar sesión."
+            );
+            println!("flake.lock no cambió.");
+            println!("NixOS no cambió.");
+            println!(
+                "Apply normal queda bloqueado para este preview hasta conectar el lock candidato con rollback."
+            );
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
 fn mostrar_canal(raiz: &Path) {
     match configuracion::leer(&raiz.join("configuracion.toml")) {
         Ok(configuracion) => println!("Canal: {}", configuracion.canal),
@@ -1465,6 +1519,9 @@ fn main() {
         [comando] if comando == "actualizaciones" => mostrar_actualizaciones(&raiz),
         [grupo, accion] if grupo == "actualizaciones" && accion == "buscar" => {
             buscar_actualizaciones(&raiz)
+        }
+        [grupo, accion] if grupo == "actualizaciones" && accion == "preview" => {
+            preview_actualizaciones(&raiz)
         }
         [comando] if comando == "canal" => mostrar_canal(&raiz),
         [comando, canal] if comando == "canal" => cambiar_canal(&raiz, canal),
