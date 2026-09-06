@@ -325,11 +325,15 @@ fn entender_completa(texto: &str, origen: &str) -> Result<Configuracion, String>
     Ok(configuracion)
 }
 
+pub fn leer_texto(texto: &str, origen: &str) -> Result<Configuracion, String> {
+    entender_completa(texto, origen)
+}
+
 pub fn leer(ruta: &Path) -> Result<Configuracion, String> {
     let texto = fs::read_to_string(ruta)
         .map_err(|error| format!("No pude leer {}.\nDetalle: {error}", ruta.display()))?;
 
-    entender_completa(&texto, &ruta.display().to_string())
+    leer_texto(&texto, &ruta.display().to_string())
 }
 
 fn revisar_cuenta(cuenta: &str) -> Result<(), String> {

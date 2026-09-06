@@ -1,6 +1,7 @@
 mod almacenamiento;
 mod aplicar;
 mod configuracion;
+mod copias;
 mod preview;
 mod rollback;
 mod sistema;
@@ -75,6 +76,11 @@ fn ayuda() {
     eprintln!("  korunix almacenamiento expulsar <nombre>");
     eprintln!("  korunix almacenamiento <nombre> <activar|desactivar>");
     eprintln!("  korunix transferir <archivo> <unidad>");
+    eprintln!("  korunix copias crear <archivo.korunix-copia>");
+    eprintln!("  korunix copias revisar <archivo.korunix-copia>");
+    eprintln!("  korunix copias plan-restaurar <archivo.korunix-copia>");
+    eprintln!("  korunix copias restaurar <archivo.korunix-copia>");
+    eprintln!("  korunix historial");
     eprintln!("  korunix canal");
     eprintln!("  korunix canal <estable|inestable>");
     eprintln!("  korunix apariencia");
@@ -797,6 +803,146 @@ fn transferir_archivo(raiz: &Path, archivo: &str, unidad: &str) {
     }
 }
 
+fn crear_copia_korunix(raiz: &Path, archivo: &str) {
+    let destino = Path::new(archivo);
+
+    println!("Copia de Korunix");
+    println!("Incluye: configuracion.toml, flake.lock y avatares usados.");
+    println!("No incluye: hardware, contraseñas, claves privadas ni Historial.");
+    println!("Destino: {}", destino.display());
+    println!();
+
+    match copias::crear(raiz, destino) {
+        Ok(resumen) => {
+            println!("✓ Copia creada y verificada.");
+            println!("Equipo: {}", resumen.equipo);
+            println!("Tamaño: {}", copias::tamano_humano(resumen.tamano));
+            println!("Recursos personales incluidos: {}", resumen.recursos);
+            println!("Integridad: {}", resumen.sha256);
+            println!("✓ Registrada en Historial.");
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn revisar_copia_korunix(archivo: &str) {
+    let ruta = Path::new(archivo);
+
+    match copias::inspeccionar(ruta) {
+        Ok(resumen) => {
+            println!("Copia de Korunix · verificada");
+            println!("Equipo de origen: {}", resumen.equipo);
+            println!("Creada: {}", copias::cuando_humano(resumen.creada_unix));
+            println!("Tamaño: {}", copias::tamano_humano(resumen.tamano));
+            println!("Avatares incluidos: {}", resumen.recursos);
+            println!("No contiene hardware ni credenciales.");
+            println!("Integridad: {}", resumen.sha256);
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn imprimir_plan_restauracion(plan: &copias::PlanRestauracion) {
+    println!("Plan de restauración");
+    println!("Equipo: {} → {}", plan.equipo_actual, plan.equipo_copia);
+    println!("Canal: {} → {}", plan.canal_actual, plan.canal_copia);
+    println!(
+        "Escritorio principal: {} → {}",
+        plan.escritorio_actual, plan.escritorio_copia
+    );
+    println!(
+        "Personas: {} → {}",
+        plan.personas_actual, plan.personas_copia
+    );
+    println!(
+        "Aplicaciones elegidas: {} → {}",
+        plan.aplicaciones_actual, plan.aplicaciones_copia
+    );
+    println!(
+        "configuracion.toml: {}",
+        if plan.configuracion_cambia {
+            "cambiará"
+        } else {
+            "ya coincide"
+        }
+    );
+    println!(
+        "flake.lock: {}",
+        if plan.flake_lock_cambia {
+            "cambiará"
+        } else {
+            "ya coincide"
+        }
+    );
+    println!(
+        "Avatares: {} incluidos · {} cambiarán",
+        plan.recursos_total, plan.recursos_cambian
+    );
+    println!("Hardware: no se toca.");
+    println!("Contraseñas y claves privadas: no están dentro de la copia.");
+    println!("NixOS: no cambia durante la restauración.");
+    println!("Después: crea un preview para revisar el resultado antes de aplicarlo.");
+}
+
+fn plan_restaurar_copia(raiz: &Path, archivo: &str) {
+    match copias::plan_restauracion(raiz, Path::new(archivo)) {
+        Ok(plan) => imprimir_plan_restauracion(&plan),
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn restaurar_copia_korunix(raiz: &Path, archivo: &str) {
+    let ruta = Path::new(archivo);
+
+    let plan = match copias::plan_restauracion(raiz, ruta) {
+        Ok(plan) => plan,
+        Err(error) => salir_con_error(&error),
+    };
+
+    imprimir_plan_restauracion(&plan);
+    println!();
+
+    if !plan.hay_cambios {
+        println!("Esta copia ya coincide con la configuración actual.");
+        println!("No cambié nada.");
+        return;
+    }
+
+    println!("Protegiendo primero la configuración actual…");
+
+    match copias::restaurar(raiz, ruta) {
+        Ok(resultado) => {
+            println!("✓ Configuración restaurada y verificada.");
+            if resultado.proteccion.is_some() {
+                println!("✓ Korunix guardó una protección automática de lo que tenías antes.");
+            }
+            println!("✓ Restauración registrada en Historial.");
+            println!("NixOS todavía no cambió.");
+            println!("Crea un preview para revisar el sistema que produciría esta configuración.");
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn mostrar_historial_copias() {
+    match copias::historial() {
+        Ok(entradas) if entradas.is_empty() => {
+            println!("Historial");
+            println!("Todavía no hay copias registradas.");
+        }
+        Ok(entradas) => {
+            println!("Historial");
+            for entrada in entradas {
+                println!();
+                println!("{} · {}", entrada.resumen, entrada.cuando);
+                println!("{}", entrada.archivo);
+                println!("{}", entrada.estado);
+            }
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
 fn mostrar_canal(raiz: &Path) {
     match configuracion::leer(&raiz.join("configuracion.toml")) {
         Ok(configuracion) => println!("Canal: {}", configuracion.canal),
@@ -1236,6 +1382,19 @@ fn main() {
         [comando, archivo, unidad] if comando == "transferir" => {
             transferir_archivo(&raiz, archivo, unidad)
         }
+        [grupo, accion, archivo] if grupo == "copias" && accion == "crear" => {
+            crear_copia_korunix(&raiz, archivo)
+        }
+        [grupo, accion, archivo] if grupo == "copias" && accion == "revisar" => {
+            revisar_copia_korunix(archivo)
+        }
+        [grupo, accion, archivo] if grupo == "copias" && accion == "plan-restaurar" => {
+            plan_restaurar_copia(&raiz, archivo)
+        }
+        [grupo, accion, archivo] if grupo == "copias" && accion == "restaurar" => {
+            restaurar_copia_korunix(&raiz, archivo)
+        }
+        [comando] if comando == "historial" => mostrar_historial_copias(),
         [comando] if comando == "canal" => mostrar_canal(&raiz),
         [comando, canal] if comando == "canal" => cambiar_canal(&raiz, canal),
         [comando] if comando == "apariencia" => mostrar_apariencia(&raiz),

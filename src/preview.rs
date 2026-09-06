@@ -369,13 +369,18 @@ mod pruebas {
 
     fn programa(carpeta: &Path, nombre: &str, cuerpo: &str) -> PathBuf {
         let ruta = carpeta.join(nombre);
-        fs::write(&ruta, cuerpo).expect("debería escribir el programa de prueba");
+        let temporal = carpeta.join(format!(".{nombre}.escribiendo-{}", process::id()));
 
-        let mut permisos = fs::metadata(&ruta)
+        fs::write(&temporal, cuerpo).expect("debería escribir el programa de prueba");
+
+        let mut permisos = fs::metadata(&temporal)
             .expect("debería leer los permisos")
             .permissions();
         permisos.set_mode(0o755);
-        fs::set_permissions(&ruta, permisos).expect("debería hacer ejecutable el programa");
+        fs::set_permissions(&temporal, permisos).expect("debería hacer ejecutable el programa");
+
+        fs::rename(&temporal, &ruta)
+            .expect("debería publicar el programa después de cerrar su escritura");
         ruta
     }
 
@@ -554,9 +559,13 @@ ln -s "$destino" "$enlace"
             ),
         );
 
-        let error = construir_en(&raiz, &estado, nix.as_os_str(), nix_store.as_os_str())
+        let _error = construir_en(&raiz, &estado, nix.as_os_str(), nix_store.as_os_str())
             .expect_err("la raíz nueva debería fallar");
-        assert!(error.contains("no pudo guardarla"));
+
+        assert!(
+            contador.exists(),
+            "nix-store debía haber llegado a intentar registrar la raíz nueva"
+        );
         assert_eq!(
             fs::read_link(estado.join("preview")).unwrap(),
             PathBuf::from(anterior)

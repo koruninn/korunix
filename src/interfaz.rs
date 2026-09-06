@@ -64,6 +64,37 @@ fn motor_korunix() -> PathBuf {
     PathBuf::from("korunix")
 }
 
+fn asegurar_extension_copia(ruta: PathBuf) -> PathBuf {
+    let correcta = ruta
+        .file_name()
+        .map(|nombre| nombre.to_string_lossy().ends_with(".korunix-copia"))
+        .unwrap_or(false);
+
+    if correcta {
+        return ruta;
+    }
+
+    let mut nombre = ruta
+        .file_name()
+        .map(|valor| valor.to_os_string())
+        .unwrap_or_else(|| "Copia de Korunix".into());
+    nombre.push(".korunix-copia");
+    ruta.with_file_name(nombre)
+}
+
+fn nombre_archivo_humano(ruta: &Path) -> String {
+    ruta.file_name()
+        .map(|nombre| nombre.to_string_lossy().into_owned())
+        .unwrap_or_else(|| ruta.display().to_string())
+}
+
+fn filtro_copias() -> gtk::FileFilter {
+    let filtro = gtk::FileFilter::new();
+    filtro.set_name(Some("Copias de Korunix"));
+    filtro.add_pattern("*.korunix-copia");
+    filtro
+}
+
 fn autorizador_grafico() -> Option<&'static str> {
     [
         "/run/wrappers/bin/pkexec",
@@ -1663,6 +1694,54 @@ fn construir_ventana(aplicacion: &Application) {
     let filas_almacenamiento: Rc<RefCell<Vec<(String, adw::SwitchRow)>>> =
         Rc::new(RefCell::new(Vec::new()));
 
+    let copias_grupo = adw::PreferencesGroup::builder()
+        .title("Copias e historial")
+        .description(
+            "Una copia de Korunix guarda tus decisiones, flake.lock y los avatares usados. No guarda hardware, contraseñas ni claves privadas.",
+        )
+        .build();
+
+    let copia_seleccionada = Rc::new(RefCell::new(None::<PathBuf>));
+    let copia_revisada = Rc::new(RefCell::new(None::<PathBuf>));
+
+    let copia_estado = gtk::Label::new(Some(
+        "Puedes crear una copia portable o elegir una existente para revisarla antes de restaurar.",
+    ));
+    copia_estado.set_wrap(true);
+    copia_estado.set_halign(gtk::Align::Start);
+    copia_estado.add_css_class("dim-label");
+
+    let copia_archivo = gtk::Label::new(Some("Ninguna copia elegida"));
+    copia_archivo.set_halign(gtk::Align::Start);
+    copia_archivo.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
+    copia_archivo.add_css_class("heading");
+
+    let boton_crear_copia = gtk::Button::with_label("Crear copia de Korunix");
+    let boton_elegir_copia = gtk::Button::with_label("Elegir copia");
+    let boton_revisar_copia = gtk::Button::with_label("Revisar restauración");
+    let boton_restaurar_copia = gtk::Button::with_label("Restaurar esta copia");
+    boton_restaurar_copia.add_css_class("suggested-action");
+    boton_restaurar_copia.set_sensitive(false);
+    let boton_historial = gtk::Button::with_label("Ver historial");
+
+    let copias_botones_primarios = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    copias_botones_primarios.append(&boton_crear_copia);
+    copias_botones_primarios.append(&boton_elegir_copia);
+
+    let copias_botones_restaurar = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    copias_botones_restaurar.append(&boton_revisar_copia);
+    copias_botones_restaurar.append(&boton_restaurar_copia);
+    copias_botones_restaurar.append(&boton_historial);
+
+    let copias_caja = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    copias_caja.append(&copia_estado);
+    copias_caja.append(&copia_archivo);
+    copias_caja.append(&copias_botones_primarios);
+    copias_caja.append(&copias_botones_restaurar);
+
+    copias_grupo.add(&copias_caja);
+    contenido.append(&copias_grupo);
+
     let apariencia_grupo = adw::PreferencesGroup::builder()
         .title("Apariencia")
         .description(
@@ -1866,6 +1945,10 @@ fn construir_ventana(aplicacion: &Application) {
         boton_elegir_archivo.clone().upcast(),
         selector_destino.clone().upcast(),
         boton_transferir.clone().upcast(),
+        boton_crear_copia.clone().upcast(),
+        boton_elegir_copia.clone().upcast(),
+        boton_revisar_copia.clone().upcast(),
+        boton_historial.clone().upcast(),
         selector_estilo.clone().upcast(),
         selector_modo.clone().upcast(),
         bluetooth.clone().upcast(),
@@ -2743,6 +2826,294 @@ fn construir_ventana(aplicacion: &Application) {
             }
         })
     };
+
+    {
+        let ventana = ventana.clone();
+        let raiz = raiz.clone();
+        let motor = motor.clone();
+        let salida = salida.clone();
+        let salida_visible = salida_visible.clone();
+        let estado = estado.clone();
+        let controles = controles.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let seleccionada = Rc::clone(&copia_seleccionada);
+        let revisada = Rc::clone(&copia_revisada);
+        let archivo_texto = copia_archivo.clone();
+        let copia_estado = copia_estado.clone();
+        let boton_restaurar = boton_restaurar_copia.clone();
+
+        boton_crear_copia.connect_clicked(move |_| {
+            if ocupado.get() {
+                return;
+            }
+
+            let dialogo = gtk::FileChooserNative::new(
+                Some("Guardar copia de Korunix"),
+                Some(&ventana),
+                gtk::FileChooserAction::Save,
+                Some("Guardar"),
+                Some("Cancelar"),
+            );
+            dialogo.set_current_name("Copia de Korunix.korunix-copia");
+            dialogo.add_filter(&filtro_copias());
+
+            let raiz = raiz.clone();
+            let motor = motor.clone();
+            let salida = salida.clone();
+            let salida_visible = salida_visible.clone();
+            let estado = estado.clone();
+            let controles = controles.clone();
+            let ocupado = Rc::clone(&ocupado);
+            let seleccionada = Rc::clone(&seleccionada);
+            let revisada = Rc::clone(&revisada);
+            let archivo_texto = archivo_texto.clone();
+            let copia_estado = copia_estado.clone();
+            let boton_restaurar = boton_restaurar.clone();
+
+            dialogo.connect_response(move |dialogo, respuesta| {
+                if respuesta != gtk::ResponseType::Accept {
+                    return;
+                }
+
+                let Some(ruta) = dialogo.file().and_then(|archivo| archivo.path()) else {
+                    copia_estado.set_text("No pude obtener la ruta elegida para la copia.");
+                    return;
+                };
+
+                let ruta = asegurar_extension_copia(ruta);
+                let ruta_texto = ruta.to_string_lossy().into_owned();
+                let ruta_final = ruta.clone();
+                let seleccionada_final = Rc::clone(&seleccionada);
+                let revisada_final = Rc::clone(&revisada);
+                let archivo_final = archivo_texto.clone();
+                let estado_final = copia_estado.clone();
+                let restaurar_final = boton_restaurar.clone();
+
+                let al_terminar: AlTerminar = Rc::new(move |correcto| {
+                    if correcto {
+                        archivo_final.set_text(&nombre_archivo_humano(&ruta_final));
+                        *seleccionada_final.borrow_mut() = Some(ruta_final.clone());
+                        *revisada_final.borrow_mut() = None;
+                        restaurar_final.set_sensitive(false);
+                        estado_final.set_text(
+                            "✓ Copia creada y verificada. Puedes revisarla antes de restaurarla.",
+                        );
+                    }
+                });
+
+                iniciar_operacion(
+                    "Creando una copia portable de Korunix",
+                    &["copias", "crear", &ruta_texto],
+                    false,
+                    &raiz,
+                    &motor,
+                    &salida,
+                    &salida_visible,
+                    &estado,
+                    &controles,
+                    &ocupado,
+                    Some(al_terminar),
+                );
+            });
+
+            dialogo.show();
+        });
+    }
+
+    {
+        let ventana = ventana.clone();
+        let seleccionada = Rc::clone(&copia_seleccionada);
+        let revisada = Rc::clone(&copia_revisada);
+        let archivo_texto = copia_archivo.clone();
+        let copia_estado = copia_estado.clone();
+        let boton_restaurar = boton_restaurar_copia.clone();
+
+        boton_elegir_copia.connect_clicked(move |_| {
+            let dialogo = gtk::FileChooserNative::new(
+                Some("Elegir copia de Korunix"),
+                Some(&ventana),
+                gtk::FileChooserAction::Open,
+                Some("Elegir"),
+                Some("Cancelar"),
+            );
+            dialogo.add_filter(&filtro_copias());
+
+            let seleccionada = Rc::clone(&seleccionada);
+            let revisada = Rc::clone(&revisada);
+            let archivo_texto = archivo_texto.clone();
+            let copia_estado = copia_estado.clone();
+            let boton_restaurar = boton_restaurar.clone();
+
+            dialogo.connect_response(move |dialogo, respuesta| {
+                if respuesta != gtk::ResponseType::Accept {
+                    return;
+                }
+
+                if let Some(ruta) = dialogo.file().and_then(|archivo| archivo.path()) {
+                    archivo_texto.set_text(&nombre_archivo_humano(&ruta));
+                    *seleccionada.borrow_mut() = Some(ruta);
+                    *revisada.borrow_mut() = None;
+                    boton_restaurar.set_sensitive(false);
+                    copia_estado.set_text(
+                        "Copia elegida. Revisa primero qué recuperaría antes de restaurarla.",
+                    );
+                }
+            });
+
+            dialogo.show();
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let motor = motor.clone();
+        let salida = salida.clone();
+        let salida_visible = salida_visible.clone();
+        let estado = estado.clone();
+        let controles = controles.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let seleccionada = Rc::clone(&copia_seleccionada);
+        let revisada = Rc::clone(&copia_revisada);
+        let copia_estado = copia_estado.clone();
+        let boton_restaurar = boton_restaurar_copia.clone();
+
+        boton_revisar_copia.connect_clicked(move |_| {
+            let Some(ruta) = seleccionada.borrow().clone() else {
+                copia_estado.set_text("Elige primero la copia que quieres revisar.");
+                return;
+            };
+
+            *revisada.borrow_mut() = None;
+            boton_restaurar.set_sensitive(false);
+
+            let ruta_texto = ruta.to_string_lossy().into_owned();
+            let ruta_revisada = ruta.clone();
+            let revisada_final = Rc::clone(&revisada);
+            let copia_estado_final = copia_estado.clone();
+            let boton_restaurar_final = boton_restaurar.clone();
+
+            let al_terminar: AlTerminar = Rc::new(move |correcto| {
+                if correcto {
+                    *revisada_final.borrow_mut() = Some(ruta_revisada.clone());
+                    boton_restaurar_final.set_sensitive(true);
+                    copia_estado_final.set_text(
+                        "✓ Plan revisado. «Restaurar esta copia» recuperará exactamente esa copia y protegerá primero lo que tienes ahora.",
+                    );
+                } else {
+                    boton_restaurar_final.set_sensitive(false);
+                    copia_estado_final.set_text(
+                        "No voy a habilitar Restaurar porque la copia o su Plan necesitan revisión.",
+                    );
+                }
+            });
+
+            iniciar_operacion(
+                "Revisando qué recuperaría esta copia",
+                &["copias", "plan-restaurar", &ruta_texto],
+                false,
+                &raiz,
+                &motor,
+                &salida,
+                &salida_visible,
+                &estado,
+                &controles,
+                &ocupado,
+                Some(al_terminar),
+            );
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let motor = motor.clone();
+        let salida = salida.clone();
+        let salida_visible = salida_visible.clone();
+        let estado = estado.clone();
+        let controles = controles.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let seleccionada = Rc::clone(&copia_seleccionada);
+        let revisada = Rc::clone(&copia_revisada);
+        let copia_estado = copia_estado.clone();
+        let boton_restaurar = boton_restaurar_copia.clone();
+        let refrescar = Rc::clone(&refrescar);
+
+        boton_restaurar_copia.connect_clicked(move |_| {
+            if ocupado.get() {
+                return;
+            }
+
+            let Some(ruta) = seleccionada.borrow().clone() else {
+                copia_estado.set_text("Elige primero la copia que quieres restaurar.");
+                boton_restaurar.set_sensitive(false);
+                return;
+            };
+
+            if revisada.borrow().as_ref() != Some(&ruta) {
+                copia_estado.set_text(
+                    "La copia elegida no es la que se revisó. Revisa el Plan otra vez.",
+                );
+                boton_restaurar.set_sensitive(false);
+                return;
+            }
+
+            let ruta_texto = ruta.to_string_lossy().into_owned();
+            let revisada_final = Rc::clone(&revisada);
+            let copia_estado_final = copia_estado.clone();
+            let boton_restaurar_final = boton_restaurar.clone();
+            let refrescar_final = Rc::clone(&refrescar);
+
+            let al_terminar: AlTerminar = Rc::new(move |correcto| {
+                if correcto {
+                    *revisada_final.borrow_mut() = None;
+                    boton_restaurar_final.set_sensitive(false);
+                    copia_estado_final.set_text(
+                        "✓ Restauración terminada. La configuración ya cambió; NixOS todavía no. Crea un preview antes de aplicar.",
+                    );
+                    refrescar_final(true);
+                }
+            });
+
+            iniciar_operacion(
+                "Restaurando la copia revisada",
+                &["copias", "restaurar", &ruta_texto],
+                false,
+                &raiz,
+                &motor,
+                &salida,
+                &salida_visible,
+                &estado,
+                &controles,
+                &ocupado,
+                Some(al_terminar),
+            );
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let motor = motor.clone();
+        let salida = salida.clone();
+        let salida_visible = salida_visible.clone();
+        let estado = estado.clone();
+        let controles = controles.clone();
+        let ocupado = Rc::clone(&ocupado);
+
+        boton_historial.connect_clicked(move |_| {
+            iniciar_operacion(
+                "Leyendo el Historial local",
+                &["historial"],
+                false,
+                &raiz,
+                &motor,
+                &salida,
+                &salida_visible,
+                &estado,
+                &controles,
+                &ocupado,
+                None,
+            );
+        });
+    }
 
     {
         let raiz = raiz.clone();
