@@ -114,6 +114,49 @@ fn configuracion_pendiente(raiz: &Path) -> bool {
     }
 }
 
+fn preview_actualizacion_vigente(raiz: &Path) -> bool {
+    let estado = carpeta_estado();
+
+    let Ok(base) = fs::read(estado.join("preview-flake-base.lock")) else {
+        return false;
+    };
+    let Ok(usado) = fs::read(estado.join("preview-flake-usado.lock")) else {
+        return false;
+    };
+    let Ok(lock_actual) = fs::read(raiz.join("flake.lock")) else {
+        return false;
+    };
+    let Ok(configuracion_actual) = fs::read(raiz.join("configuracion.toml")) else {
+        return false;
+    };
+    let Ok(configuracion_preview) = fs::read(estado.join("preview-configuracion.toml")) else {
+        return false;
+    };
+    let Ok(generacion_texto) = fs::read_to_string(estado.join("preview-generacion")) else {
+        return false;
+    };
+    let Ok(enlace) = fs::read_link(estado.join("preview")) else {
+        return false;
+    };
+
+    let generacion = PathBuf::from(generacion_texto.trim());
+
+    base != usado
+        && (lock_actual == base || lock_actual == usado)
+        && configuracion_actual == configuracion_preview
+        && generacion.is_absolute()
+        && generacion.starts_with("/nix/store")
+        && enlace == generacion
+}
+
+fn actualizar_boton_aplicar_actualizacion(
+    raiz: &Path,
+    boton: &gtk::Button,
+    ocupado: &Rc<Cell<bool>>,
+) {
+    boton.set_sensitive(!ocupado.get() && preview_actualizacion_vigente(raiz));
+}
+
 fn nombre_escritorio(escritorio: &str) -> &str {
     match escritorio {
         "niri" => "Niri",
@@ -1867,6 +1910,53 @@ fn construir_ventana(aplicacion: &Application) {
     mensaje_configuracion.add_css_class("dim-label");
     contenido.append(&mensaje_configuracion);
 
+    let actualizaciones_grupo = adw::PreferencesGroup::builder()
+        .title("Actualizaciones")
+        .description(
+            "Primero ves lo que Korunix ya sabe. Buscar usa Internet y no cambia NixOS. Revisar construye una generación completa. Aplicar usa exactamente esa generación.",
+        )
+        .build();
+
+    let actualizaciones_estado =
+        gtk::Label::new(Some("Leyendo el estado local después de abrir la ventana…"));
+    actualizaciones_estado.set_wrap(true);
+    actualizaciones_estado.set_halign(gtk::Align::Start);
+    actualizaciones_estado.add_css_class("heading");
+
+    let boton_buscar_actualizaciones = gtk::Button::with_label("Buscar actualizaciones");
+    let boton_revisar_actualizacion = gtk::Button::with_label("Revisar actualización");
+    let boton_aplicar_actualizacion = gtk::Button::with_label("Aplicar actualización");
+    boton_aplicar_actualizacion.add_css_class("suggested-action");
+    boton_aplicar_actualizacion.set_sensitive(false);
+
+    let actualizaciones_botones = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    actualizaciones_botones.append(&boton_buscar_actualizaciones);
+    actualizaciones_botones.append(&boton_revisar_actualizacion);
+    actualizaciones_botones.append(&boton_aplicar_actualizacion);
+
+    let actualizaciones_salida = gtk::TextView::new();
+    actualizaciones_salida.set_editable(false);
+    actualizaciones_salida.set_cursor_visible(false);
+    actualizaciones_salida.set_monospace(true);
+    actualizaciones_salida.set_wrap_mode(gtk::WrapMode::WordChar);
+
+    let actualizaciones_desplazamiento = gtk::ScrolledWindow::builder()
+        .min_content_height(180)
+        .child(&actualizaciones_salida)
+        .build();
+    actualizaciones_desplazamiento.add_css_class("card");
+
+    let actualizaciones_salida_visible = gtk::Revealer::new();
+    actualizaciones_salida_visible.set_child(Some(&actualizaciones_desplazamiento));
+
+    let actualizaciones_caja = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    actualizaciones_caja.append(&actualizaciones_estado);
+    actualizaciones_caja.append(&actualizaciones_botones);
+    actualizaciones_caja.append(&actualizaciones_salida_visible);
+
+    actualizaciones_grupo.add(&actualizaciones_caja);
+    contenido.append(&actualizaciones_grupo);
+
     let acciones = adw::PreferencesGroup::builder()
         .title("Cambios del sistema")
         .description(
@@ -1925,6 +2015,7 @@ fn construir_ventana(aplicacion: &Application) {
     ventana.set_content(Some(&vista));
 
     let ocupado = Rc::new(Cell::new(false));
+    let ocupado_actualizaciones = Rc::new(Cell::new(false));
     let actualizando = Rc::new(Cell::new(false));
 
     let controles: Vec<gtk::Widget> = vec![
@@ -1949,6 +2040,9 @@ fn construir_ventana(aplicacion: &Application) {
         boton_elegir_copia.clone().upcast(),
         boton_revisar_copia.clone().upcast(),
         boton_historial.clone().upcast(),
+        boton_buscar_actualizaciones.clone().upcast(),
+        boton_revisar_actualizacion.clone().upcast(),
+        boton_aplicar_actualizacion.clone().upcast(),
         selector_estilo.clone().upcast(),
         selector_modo.clone().upcast(),
         bluetooth.clone().upcast(),
@@ -2828,6 +2922,159 @@ fn construir_ventana(aplicacion: &Application) {
     };
 
     {
+        let raiz = raiz.clone();
+        let motor = motor.clone();
+        let vista = actualizaciones_salida.clone();
+        let salida_visible = actualizaciones_salida_visible.clone();
+        let estado_actualizaciones = actualizaciones_estado.clone();
+        let ocupado_actualizaciones = Rc::clone(&ocupado_actualizaciones);
+        let boton_buscar = boton_buscar_actualizaciones.clone();
+        let boton_revisar = boton_revisar_actualizacion.clone();
+        let boton_aplicar_actualizacion = boton_aplicar_actualizacion.clone();
+        let boton_preview_sistema = boton_preview.clone();
+        let boton_aplicar_sistema = boton_aplicar.clone();
+        let boton_volver_sistema = boton_volver.clone();
+        let selector_canal = selector_canal.clone();
+
+        boton_buscar_actualizaciones.connect_clicked(move |_| {
+            let controles_busqueda: Vec<gtk::Widget> = vec![
+                boton_buscar.clone().upcast(),
+                boton_revisar.clone().upcast(),
+                boton_aplicar_actualizacion.clone().upcast(),
+                boton_preview_sistema.clone().upcast(),
+                boton_aplicar_sistema.clone().upcast(),
+                boton_volver_sistema.clone().upcast(),
+                selector_canal.clone().upcast(),
+            ];
+
+            boton_aplicar_actualizacion.set_sensitive(false);
+
+            let raiz_final = raiz.clone();
+            let boton_final = boton_aplicar_actualizacion.clone();
+            let ocupado_final = Rc::clone(&ocupado_actualizaciones);
+
+            let al_terminar: AlTerminar = Rc::new(move |correcto| {
+                if correcto {
+                    boton_final.set_sensitive(false);
+                } else {
+                    actualizar_boton_aplicar_actualizacion(
+                        &raiz_final,
+                        &boton_final,
+                        &ocupado_final,
+                    );
+                }
+            });
+
+            iniciar_operacion(
+                "Buscando actualizaciones sin cambiar NixOS",
+                &["actualizaciones", "buscar"],
+                false,
+                &raiz,
+                &motor,
+                &vista,
+                &salida_visible,
+                &estado_actualizaciones,
+                &controles_busqueda,
+                &ocupado_actualizaciones,
+                Some(al_terminar),
+            );
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let motor = motor.clone();
+        let vista = actualizaciones_salida.clone();
+        let salida_visible = actualizaciones_salida_visible.clone();
+        let estado_actualizaciones = actualizaciones_estado.clone();
+        let controles = controles.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let boton_aplicar_actualizacion = boton_aplicar_actualizacion.clone();
+        let refrescar = Rc::clone(&refrescar);
+
+        boton_revisar_actualizacion.connect_clicked(move |_| {
+            boton_aplicar_actualizacion.set_sensitive(false);
+
+            let raiz_final = raiz.clone();
+            let boton_final = boton_aplicar_actualizacion.clone();
+            let ocupado_final = Rc::clone(&ocupado);
+            let refrescar_final = Rc::clone(&refrescar);
+
+            let al_terminar: AlTerminar = Rc::new(move |correcto| {
+                refrescar_final(correcto);
+
+                if correcto {
+                    actualizar_boton_aplicar_actualizacion(
+                        &raiz_final,
+                        &boton_final,
+                        &ocupado_final,
+                    );
+                } else {
+                    boton_final.set_sensitive(false);
+                }
+            });
+
+            iniciar_operacion(
+                "Construyendo el preview de la actualización",
+                &["actualizaciones", "preview"],
+                false,
+                &raiz,
+                &motor,
+                &vista,
+                &salida_visible,
+                &estado_actualizaciones,
+                &controles,
+                &ocupado,
+                Some(al_terminar),
+            );
+        });
+    }
+
+    {
+        let raiz = raiz.clone();
+        let motor = motor.clone();
+        let vista = actualizaciones_salida.clone();
+        let salida_visible = actualizaciones_salida_visible.clone();
+        let estado_actualizaciones = actualizaciones_estado.clone();
+        let controles = controles.clone();
+        let ocupado = Rc::clone(&ocupado);
+        let boton_aplicar_actualizacion = boton_aplicar_actualizacion.clone();
+        let refrescar = Rc::clone(&refrescar);
+
+        boton_aplicar_actualizacion
+            .clone()
+            .connect_clicked(move |_| {
+                let raiz_final = raiz.clone();
+                let boton_final = boton_aplicar_actualizacion.clone();
+                let ocupado_final = Rc::clone(&ocupado);
+                let refrescar_final = Rc::clone(&refrescar);
+
+                let al_terminar: AlTerminar = Rc::new(move |correcto| {
+                    refrescar_final(correcto);
+                    actualizar_boton_aplicar_actualizacion(
+                        &raiz_final,
+                        &boton_final,
+                        &ocupado_final,
+                    );
+                });
+
+                iniciar_operacion(
+                    "Aplicando exactamente la actualización revisada",
+                    &["aplicar"],
+                    true,
+                    &raiz,
+                    &motor,
+                    &vista,
+                    &salida_visible,
+                    &estado_actualizaciones,
+                    &controles,
+                    &ocupado,
+                    Some(al_terminar),
+                );
+            });
+    }
+
+    {
         let ventana = ventana.clone();
         let raiz = raiz.clone();
         let motor = motor.clone();
@@ -3236,6 +3483,36 @@ fn construir_ventana(aplicacion: &Application) {
     }
 
     ventana.present();
+
+    {
+        let controles_actualizaciones: Vec<gtk::Widget> = vec![
+            boton_buscar_actualizaciones.clone().upcast(),
+            boton_revisar_actualizacion.clone().upcast(),
+            boton_aplicar_actualizacion.clone().upcast(),
+        ];
+
+        let raiz_final = raiz.clone();
+        let boton_final = boton_aplicar_actualizacion.clone();
+        let ocupado_final = Rc::clone(&ocupado_actualizaciones);
+
+        let al_terminar: AlTerminar = Rc::new(move |_| {
+            actualizar_boton_aplicar_actualizacion(&raiz_final, &boton_final, &ocupado_final);
+        });
+
+        iniciar_operacion(
+            "Leyendo el estado local de Actualizaciones",
+            &["actualizaciones"],
+            false,
+            &raiz,
+            &motor,
+            &actualizaciones_salida,
+            &actualizaciones_salida_visible,
+            &actualizaciones_estado,
+            &controles_actualizaciones,
+            &ocupado_actualizaciones,
+            Some(al_terminar),
+        );
+    }
 
     cargar_almacenamiento(
         &almacenamiento_lista,
