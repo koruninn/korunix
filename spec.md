@@ -115,6 +115,9 @@ instaladas = [
 
 Eso instala esas aplicaciones si pueden resolverse de forma fiable, aunque alguna no tenga ficha curada.
 
+
+En la GUI, Aplicaciones es la primera página que debe adoptar la composición visual final: búsqueda y catálogo local inmediatos, fichas humanas cuando exista información de AppStream y resolución explícita con Nix para nombres libres que no estén en el catálogo. AppStream sirve para enriquecer la presentación; nunca decide por sí solo qué se puede instalar.
+
 La persona no debe editar varios archivos para expresar una sola decisión.
 
 ## 5. TOML es la configuración humana
@@ -283,6 +286,21 @@ No ejecutar `nix eval`, `localectl`, `pgrep` u otros procesos repetidamente al a
 Las tareas lentas no pueden congelar GTK. Las páginas no deben serializarse detrás de una única espera global. Las operaciones remotas, firmware, actualizaciones y otras lecturas lentas trabajan aparte cuando sea posible.
 
 Korunix es offline-first: si una operación puede resolverse con datos locales, Internet no debe ser requisito.
+
+
+### 9.1. La GUI se organiza por áreas, no como una página interminable
+
+La interfaz no debe crecer añadiendo cada función nueva al final de una sola página larga. Korunix se presenta como la configuración normal de una computadora: la persona entra al área relacionada con lo que quiere hacer y ahí encuentra los controles, el estado y los resultados de esa tarea.
+
+La estructura visual de referencia agrupa áreas humanas como Inicio, Aplicaciones, Apariencia, Sistema, Hardware, Almacenamiento, Personas, Actualizaciones y Copias y recuperación. Acceso remoto se incorpora cuando ese frente exista. Esta lista describe navegación visible, no obliga a crear una arquitectura técnica con una capa o archivo por página.
+
+Cada área usa la composición que mejor explica su contenido. Aplicaciones se comporta como catálogo; Hardware como lista de dispositivos; Apariencia puede usar previsualización; Actualizaciones mantiene la secuencia estado → buscar → revisar → aplicar; Copias e historial muestran sus resultados dentro de su propia área. No se fuerza a todas las páginas a verse como la misma colección de grupos y botones.
+
+La navegación debe seguir siendo cómoda en una ventana angosta. La ventana aparece antes de realizar trabajo secundario; cada área usa primero el estado local disponible y las tareas lentas trabajan en segundo plano. Una página no debe quedar esperando a que termine la carga de otra.
+
+Reorganizar la GUI no autoriza a reimplementar los motores que ya funcionan. Preview, Apply, Rollback, Actualizaciones, almacenamiento y otras funciones cerradas conservan el mismo Rust compartido con la CLI. La interfaz mueve, explica y presenta; no crea una segunda ruta técnica.
+
+Si una salida es importante para entender una tarea, se muestra dentro del área que la produjo. Que un mensaje exista en un TextView lejano o fuera de contexto no cuenta como una experiencia gráfica terminada.
 
 ## 10. Errores humanos y seguridad
 
