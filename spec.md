@@ -778,6 +778,11 @@ Antes de actualizar se explica qué va a cambiar y si el resultado necesita rein
 Buscar actualizaciones no modifica NixOS. La GUI muestra primero el estado local conocido y solo necesita Internet para buscar información nueva. Las tareas de búsqueda, resolución y construcción trabajan fuera del hilo de GTK.
 
 
+La sección gráfica de Actualizaciones muestra su salida dentro de la propia sección. Al abrir Korunix lee primero el estado local, sin red. `Buscar actualizaciones` usa el mismo motor Rust de la CLI en segundo plano y no inventa porcentajes. Una búsqueda nueva exige volver a revisar antes de habilitar su aplicación.
+
+`Revisar actualización` construye el preview completo fuera del hilo de GTK. Mientras se construye una generación concreta, Korunix bloquea los controles que podrían cambiar esa configuración a mitad de la construcción. `Aplicar actualización` usa el mismo Apply exacto ya revisado; no existe una ruta de activación aparte para la GUI.
+
+
 La búsqueda tampoco reescribe `flake.lock`. Korunix pide a Nix un `flake.lock` candidato y lo guarda en su estado local junto con la base exacta desde la que se buscó. Si la búsqueda falla, la última búsqueda válida no se borra. Si `flake.lock` cambia después, esa búsqueda se considera antigua y no se presenta como vigente.
 
 
