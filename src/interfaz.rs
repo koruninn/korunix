@@ -1508,6 +1508,90 @@ fn iniciar_operacion(
     });
 }
 
+fn crear_pagina_area(titulo: &str, descripcion: &str) -> (gtk::ScrolledWindow, gtk::Box) {
+    let contenido = gtk::Box::new(gtk::Orientation::Vertical, 18);
+    contenido.set_margin_top(18);
+    contenido.set_margin_bottom(24);
+    contenido.set_margin_start(18);
+    contenido.set_margin_end(18);
+
+    let titulo = gtk::Label::new(Some(titulo));
+    titulo.add_css_class("title-1");
+    titulo.set_halign(gtk::Align::Start);
+
+    let descripcion = gtk::Label::new(Some(descripcion));
+    descripcion.set_wrap(true);
+    descripcion.set_halign(gtk::Align::Start);
+    descripcion.add_css_class("dim-label");
+
+    contenido.append(&titulo);
+    contenido.append(&descripcion);
+
+    let clamp = adw::Clamp::builder()
+        .maximum_size(680)
+        .child(&contenido)
+        .build();
+
+    let desplazamiento = gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .child(&clamp)
+        .build();
+
+    (desplazamiento, contenido)
+}
+
+fn crear_acceso_area(titulo: &str, descripcion: &str) -> gtk::Button {
+    let textos = gtk::Box::new(gtk::Orientation::Vertical, 2);
+    textos.set_hexpand(true);
+
+    let titulo = gtk::Label::new(Some(titulo));
+    titulo.set_halign(gtk::Align::Start);
+    titulo.add_css_class("heading");
+
+    let descripcion = gtk::Label::new(Some(descripcion));
+    descripcion.set_halign(gtk::Align::Start);
+    descripcion.set_wrap(true);
+    descripcion.add_css_class("dim-label");
+
+    textos.append(&titulo);
+    textos.append(&descripcion);
+
+    let flecha = gtk::Image::from_icon_name("go-next-symbolic");
+
+    let caja = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    caja.set_margin_top(8);
+    caja.set_margin_bottom(8);
+    caja.set_margin_start(10);
+    caja.set_margin_end(10);
+    caja.append(&textos);
+    caja.append(&flecha);
+
+    let boton = gtk::Button::new();
+    boton.set_child(Some(&caja));
+    boton.set_hexpand(true);
+    boton.add_css_class("card");
+    boton
+}
+
+fn conectar_acceso_area(
+    boton: &gtk::Button,
+    paginas: &gtk::Stack,
+    titulo_barra: &adw::WindowTitle,
+    boton_inicio: &gtk::Button,
+    nombre: &'static str,
+    titulo: &'static str,
+) {
+    let paginas = paginas.clone();
+    let titulo_barra = titulo_barra.clone();
+    let boton_inicio = boton_inicio.clone();
+
+    boton.connect_clicked(move |_| {
+        paginas.set_visible_child_name(nombre);
+        titulo_barra.set_subtitle(titulo);
+        boton_inicio.set_visible(true);
+    });
+}
+
 fn construir_ventana(aplicacion: &Application) {
     let raiz = raiz_korunix();
     let motor = motor_korunix();
@@ -1520,25 +1604,158 @@ fn construir_ventana(aplicacion: &Application) {
         .build();
 
     let barra = HeaderBar::new();
-    let contenido = gtk::Box::new(gtk::Orientation::Vertical, 18);
-    contenido.set_margin_top(18);
-    contenido.set_margin_bottom(24);
-    contenido.set_margin_start(18);
-    contenido.set_margin_end(18);
 
-    let titulo = gtk::Label::new(Some("Korunix"));
-    titulo.add_css_class("title-1");
-    titulo.set_halign(gtk::Align::Start);
+    let titulo_barra = adw::WindowTitle::new("Korunix", "Inicio");
+    barra.set_title_widget(Some(&titulo_barra));
 
-    let subtitulo = gtk::Label::new(Some(
-        "Lo que cambies aquí se guarda como una decisión humana. NixOS solo cambia después de revisar y aplicar un preview.",
-    ));
-    subtitulo.set_wrap(true);
-    subtitulo.set_halign(gtk::Align::Start);
-    subtitulo.add_css_class("dim-label");
+    let boton_inicio = gtk::Button::builder()
+        .icon_name("go-previous-symbolic")
+        .tooltip_text("Volver a Inicio")
+        .build();
+    boton_inicio.add_css_class("flat");
+    boton_inicio.set_visible(false);
+    barra.pack_start(&boton_inicio);
 
-    contenido.append(&titulo);
-    contenido.append(&subtitulo);
+    let paginas = gtk::Stack::new();
+    paginas.set_transition_type(gtk::StackTransitionType::SlideLeftRight);
+    paginas.set_vhomogeneous(false);
+    paginas.set_hhomogeneous(false);
+    paginas.set_vexpand(true);
+
+    let (pagina_inicio, contenido_inicio) = crear_pagina_area(
+        "Inicio",
+        "Entra directamente al área relacionada con lo que quieres cambiar. Las funciones que ya funcionan conservan el mismo motor de Korunix.",
+    );
+    let (pagina_aplicaciones, contenido_aplicaciones) = crear_pagina_area(
+        "Aplicaciones",
+        "Instala, quita y ajusta aplicaciones sin convertir el catálogo visual en una lista cerrada.",
+    );
+    let (pagina_apariencia, contenido_apariencia) = crear_pagina_area(
+        "Apariencia",
+        "El estilo y el modo siguen siendo decisiones separadas.",
+    );
+    let (pagina_sistema, contenido_sistema) = crear_pagina_area(
+        "Sistema",
+        "Nombre del equipo, canal, escritorios disponibles y funciones generales.",
+    );
+    let (pagina_hardware, contenido_hardware) = crear_pagina_area(
+        "Hardware",
+        "Controles que describen o ajustan el equipo físico sin exponer identificadores técnicos.",
+    );
+    let (pagina_almacenamiento, contenido_almacenamiento) = crear_pagina_area(
+        "Almacenamiento",
+        "Unidades, transferencias y expulsión segura en un solo lugar.",
+    );
+    let (pagina_personas, contenido_personas) = crear_pagina_area(
+        "Personas",
+        "Teclados y preferencias personales sin pedir identificadores técnicos.",
+    );
+    let (pagina_actualizaciones, contenido_actualizaciones) = crear_pagina_area(
+        "Actualizaciones",
+        "Estado local primero; buscar, revisar y aplicar siguen usando el motor ya probado.",
+    );
+    let (pagina_copias, contenido_copias) = crear_pagina_area(
+        "Copias y recuperación",
+        "Copias, historial y restauración sin mezclar estos resultados con otras tareas.",
+    );
+
+    paginas.add_named(&pagina_inicio, Some("inicio"));
+    paginas.add_named(&pagina_aplicaciones, Some("aplicaciones"));
+    paginas.add_named(&pagina_apariencia, Some("apariencia"));
+    paginas.add_named(&pagina_sistema, Some("sistema"));
+    paginas.add_named(&pagina_hardware, Some("hardware"));
+    paginas.add_named(&pagina_almacenamiento, Some("almacenamiento"));
+    paginas.add_named(&pagina_personas, Some("personas"));
+    paginas.add_named(&pagina_actualizaciones, Some("actualizaciones"));
+    paginas.add_named(&pagina_copias, Some("copias"));
+    paginas.set_visible_child_name("inicio");
+
+    let general = adw::PreferencesGroup::builder().title("General").build();
+    let acceso_aplicaciones = crear_acceso_area(
+        "Aplicaciones",
+        "Catálogo, aplicaciones elegidas y opciones especiales.",
+    );
+    let acceso_apariencia = crear_acceso_area(
+        "Apariencia",
+        "Estilo visual y modo claro, oscuro o automático.",
+    );
+    general.add(&acceso_aplicaciones);
+    general.add(&acceso_apariencia);
+    contenido_inicio.append(&general);
+
+    let equipo = adw::PreferencesGroup::builder().title("Equipo").build();
+    let acceso_sistema = crear_acceso_area(
+        "Sistema",
+        "Canal, escritorios, Bluetooth, impresión y virtualización.",
+    );
+    let acceso_hardware = crear_acceso_area(
+        "Hardware",
+        "Pantalla y, más adelante, el resto de dispositivos detectados.",
+    );
+    let acceso_almacenamiento = crear_acceso_area(
+        "Almacenamiento",
+        "Discos, archivos grandes y expulsión segura.",
+    );
+    let acceso_personas = crear_acceso_area(
+        "Personas",
+        "Teclados y preferencias de las personas del equipo.",
+    );
+    equipo.add(&acceso_sistema);
+    equipo.add(&acceso_hardware);
+    equipo.add(&acceso_almacenamiento);
+    equipo.add(&acceso_personas);
+    contenido_inicio.append(&equipo);
+
+    let mantenimiento = adw::PreferencesGroup::builder()
+        .title("Mantenimiento")
+        .build();
+    let acceso_actualizaciones = crear_acceso_area(
+        "Actualizaciones",
+        "Buscar, revisar y aplicar sin cambiar el motor cerrado.",
+    );
+    let acceso_copias = crear_acceso_area(
+        "Copias y recuperación",
+        "Crear copias, revisar restauraciones e historial.",
+    );
+    mantenimiento.add(&acceso_actualizaciones);
+    mantenimiento.add(&acceso_copias);
+    contenido_inicio.append(&mantenimiento);
+
+    for (boton, nombre, titulo) in [
+        (&acceso_aplicaciones, "aplicaciones", "Aplicaciones"),
+        (&acceso_apariencia, "apariencia", "Apariencia"),
+        (&acceso_sistema, "sistema", "Sistema"),
+        (&acceso_hardware, "hardware", "Hardware"),
+        (&acceso_almacenamiento, "almacenamiento", "Almacenamiento"),
+        (&acceso_personas, "personas", "Personas"),
+        (
+            &acceso_actualizaciones,
+            "actualizaciones",
+            "Actualizaciones",
+        ),
+        (&acceso_copias, "copias", "Copias y recuperación"),
+    ] {
+        conectar_acceso_area(
+            boton,
+            &paginas,
+            &titulo_barra,
+            &boton_inicio,
+            nombre,
+            titulo,
+        );
+    }
+
+    {
+        let paginas = paginas.clone();
+        let titulo_barra = titulo_barra.clone();
+        let boton_inicio_senal = boton_inicio.clone();
+
+        boton_inicio.connect_clicked(move |_| {
+            paginas.set_visible_child_name("inicio");
+            titulo_barra.set_subtitle("Inicio");
+            boton_inicio_senal.set_visible(false);
+        });
+    }
 
     let aviso_texto = gtk::Label::new(Some(
         "La configuración y el preview no coinciden. Crea un preview antes de aplicar.",
@@ -1556,7 +1773,6 @@ fn construir_ventana(aplicacion: &Application) {
 
     let aviso = gtk::Revealer::new();
     aviso.set_child(Some(&aviso_caja));
-    contenido.append(&aviso);
 
     let configuracion_grupo = adw::PreferencesGroup::builder()
         .title("Configuración")
@@ -1599,11 +1815,11 @@ fn construir_ventana(aplicacion: &Application) {
     edicion.append(&selector_escritorio);
 
     configuracion_grupo.add(&edicion);
-    contenido.append(&configuracion_grupo);
+    contenido_sistema.append(&configuracion_grupo);
 
-    let equipo_grupo = adw::PreferencesGroup::builder()
-        .title("Sesión y equipo")
-        .description("Aquí eliges qué escritorios quedan disponibles, tus teclados y la pantalla.")
+    let escritorios_grupo = adw::PreferencesGroup::builder()
+        .title("Escritorios")
+        .description("El principal y los disponibles siguen siendo decisiones distintas.")
         .build();
 
     let escritorio_niri = adw::SwitchRow::builder()
@@ -1621,6 +1837,17 @@ fn construir_ventana(aplicacion: &Application) {
         .title("Cinnamon disponible")
         .build();
 
+    escritorios_grupo.add(&escritorio_niri);
+    escritorios_grupo.add(&escritorio_hyprland);
+    escritorios_grupo.add(&escritorio_plasma);
+    escritorios_grupo.add(&escritorio_cinnamon);
+    contenido_sistema.append(&escritorios_grupo);
+
+    let teclados_grupo = adw::PreferencesGroup::builder()
+        .title("Teclados")
+        .description("Las distribuciones humanas quedan separadas de los identificadores XKB.")
+        .build();
+
     let teclado_espana = adw::SwitchRow::builder()
         .title("Teclado de España")
         .subtitle("Incluye la variante con composición usada por Korunix.")
@@ -1635,7 +1862,17 @@ fn construir_ventana(aplicacion: &Application) {
         .subtitle("Alt + Shift")
         .build();
 
-    let monitor_titulo = gtk::Label::new(Some("Pantalla"));
+    teclados_grupo.add(&teclado_espana);
+    teclados_grupo.add(&teclado_latinoamerica);
+    teclados_grupo.add(&cambio_teclado);
+    contenido_personas.append(&teclados_grupo);
+
+    let hardware_grupo = adw::PreferencesGroup::builder()
+        .title("Pantalla")
+        .description("La salida física sigue siendo un hecho detectado; aquí solo aparecen decisiones humanas.")
+        .build();
+
+    let monitor_titulo = gtk::Label::new(Some("Resolución y frecuencia"));
     monitor_titulo.set_halign(gtk::Align::Start);
     monitor_titulo.add_css_class("heading");
 
@@ -1658,15 +1895,8 @@ fn construir_ventana(aplicacion: &Application) {
     monitor_bloque.append(&monitor_titulo);
     monitor_bloque.append(&monitor_caja);
 
-    equipo_grupo.add(&escritorio_niri);
-    equipo_grupo.add(&escritorio_hyprland);
-    equipo_grupo.add(&escritorio_plasma);
-    equipo_grupo.add(&escritorio_cinnamon);
-    equipo_grupo.add(&teclado_espana);
-    equipo_grupo.add(&teclado_latinoamerica);
-    equipo_grupo.add(&cambio_teclado);
-    equipo_grupo.add(&monitor_bloque);
-    contenido.append(&equipo_grupo);
+    hardware_grupo.add(&monitor_bloque);
+    contenido_hardware.append(&hardware_grupo);
 
     let almacenamiento_grupo = adw::PreferencesGroup::builder()
         .title("Almacenamiento")
@@ -1732,7 +1962,7 @@ fn construir_ventana(aplicacion: &Application) {
 
     almacenamiento_caja.append(&transferencia_caja);
     almacenamiento_grupo.add(&almacenamiento_caja);
-    contenido.append(&almacenamiento_grupo);
+    contenido_almacenamiento.append(&almacenamiento_grupo);
 
     let filas_almacenamiento: Rc<RefCell<Vec<(String, adw::SwitchRow)>>> =
         Rc::new(RefCell::new(Vec::new()));
@@ -1783,7 +2013,7 @@ fn construir_ventana(aplicacion: &Application) {
     copias_caja.append(&copias_botones_restaurar);
 
     copias_grupo.add(&copias_caja);
-    contenido.append(&copias_grupo);
+    contenido_copias.append(&copias_grupo);
 
     let apariencia_grupo = adw::PreferencesGroup::builder()
         .title("Apariencia")
@@ -1809,12 +2039,17 @@ fn construir_ventana(aplicacion: &Application) {
     apariencia_caja.append(&modo_titulo);
     apariencia_caja.append(&selector_modo);
     apariencia_grupo.add(&apariencia_caja);
-    contenido.append(&apariencia_grupo);
+    contenido_apariencia.append(&apariencia_grupo);
 
-    let funciones_grupo = adw::PreferencesGroup::builder()
-        .title("Funciones")
+    let sistema_funciones_grupo = adw::PreferencesGroup::builder()
+        .title("Funciones del sistema")
+        .description("Estas capacidades afectan al equipo completo.")
+        .build();
+
+    let aplicaciones_opciones_grupo = adw::PreferencesGroup::builder()
+        .title("Opciones especiales")
         .description(
-            "Apagar una función no borra sus preferencias internas. Solo deja de aplicarlas mientras esté apagada.",
+            "Apagar una función principal conserva sus preferencias internas para cuando vuelva a activarse.",
         )
         .build();
 
@@ -1858,15 +2093,17 @@ fn construir_ventana(aplicacion: &Application) {
         .subtitle("Activa la capacidad de ejecutar máquinas virtuales.")
         .build();
 
-    funciones_grupo.add(&bluetooth);
-    funciones_grupo.add(&sunshine);
-    funciones_grupo.add(&sunshine_autoinicio);
-    funciones_grupo.add(&steam);
-    funciones_grupo.add(&steam_remote_play);
-    funciones_grupo.add(&steam_servidor);
-    funciones_grupo.add(&impresion);
-    funciones_grupo.add(&virtualizacion);
-    contenido.append(&funciones_grupo);
+    sistema_funciones_grupo.add(&bluetooth);
+    sistema_funciones_grupo.add(&impresion);
+    sistema_funciones_grupo.add(&virtualizacion);
+    contenido_sistema.append(&sistema_funciones_grupo);
+
+    aplicaciones_opciones_grupo.add(&sunshine);
+    aplicaciones_opciones_grupo.add(&sunshine_autoinicio);
+    aplicaciones_opciones_grupo.add(&steam);
+    aplicaciones_opciones_grupo.add(&steam_remote_play);
+    aplicaciones_opciones_grupo.add(&steam_servidor);
+    contenido_aplicaciones.append(&aplicaciones_opciones_grupo);
 
     let aplicaciones_grupo = adw::PreferencesGroup::builder()
         .title("Aplicaciones")
@@ -1900,7 +2137,7 @@ fn construir_ventana(aplicacion: &Application) {
     aplicaciones_caja.append(&aplicaciones_expandir);
 
     aplicaciones_grupo.add(&aplicaciones_caja);
-    contenido.append(&aplicaciones_grupo);
+    contenido_aplicaciones.append(&aplicaciones_grupo);
 
     let mensaje_configuracion = gtk::Label::new(Some(
         "Los cambios de esta sección se guardan enseguida, pero NixOS permanece igual.",
@@ -1908,7 +2145,6 @@ fn construir_ventana(aplicacion: &Application) {
     mensaje_configuracion.set_wrap(true);
     mensaje_configuracion.set_halign(gtk::Align::Start);
     mensaje_configuracion.add_css_class("dim-label");
-    contenido.append(&mensaje_configuracion);
 
     let actualizaciones_grupo = adw::PreferencesGroup::builder()
         .title("Actualizaciones")
@@ -1955,7 +2191,7 @@ fn construir_ventana(aplicacion: &Application) {
     actualizaciones_caja.append(&actualizaciones_salida_visible);
 
     actualizaciones_grupo.add(&actualizaciones_caja);
-    contenido.append(&actualizaciones_grupo);
+    contenido_actualizaciones.append(&actualizaciones_grupo);
 
     let acciones = adw::PreferencesGroup::builder()
         .title("Cambios del sistema")
@@ -1976,12 +2212,12 @@ fn construir_ventana(aplicacion: &Application) {
     caja_acciones.append(&boton_aplicar);
     caja_acciones.append(&boton_volver);
     acciones.add(&caja_acciones);
-    contenido.append(&acciones);
+    contenido_inicio.append(&acciones);
 
     let estado = gtk::Label::new(Some("Listo"));
     estado.set_halign(gtk::Align::Start);
     estado.add_css_class("heading");
-    contenido.append(&estado);
+    contenido_inicio.append(&estado);
 
     let salida = gtk::TextView::new();
     salida.set_editable(false);
@@ -1997,21 +2233,25 @@ fn construir_ventana(aplicacion: &Application) {
 
     let salida_visible = gtk::Revealer::new();
     salida_visible.set_child(Some(&desplazamiento_salida));
-    contenido.append(&salida_visible);
+    contenido_inicio.append(&salida_visible);
 
-    let clamp = adw::Clamp::builder()
-        .maximum_size(680)
-        .child(&contenido)
-        .build();
+    aviso.set_margin_top(10);
+    aviso.set_margin_start(18);
+    aviso.set_margin_end(18);
 
-    let desplazamiento_principal = gtk::ScrolledWindow::builder()
-        .hscrollbar_policy(gtk::PolicyType::Never)
-        .child(&clamp)
-        .build();
+    mensaje_configuracion.set_margin_top(8);
+    mensaje_configuracion.set_margin_bottom(10);
+    mensaje_configuracion.set_margin_start(18);
+    mensaje_configuracion.set_margin_end(18);
+
+    let raiz_visual = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    raiz_visual.append(&aviso);
+    raiz_visual.append(&paginas);
+    raiz_visual.append(&mensaje_configuracion);
 
     let vista = ToolbarView::new();
     vista.add_top_bar(&barra);
-    vista.set_content(Some(&desplazamiento_principal));
+    vista.set_content(Some(&raiz_visual));
     ventana.set_content(Some(&vista));
 
     let ocupado = Rc::new(Cell::new(false));
