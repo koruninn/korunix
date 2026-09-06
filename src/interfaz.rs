@@ -1540,56 +1540,74 @@ fn crear_pagina_area(titulo: &str, descripcion: &str) -> (gtk::ScrolledWindow, g
     (desplazamiento, contenido)
 }
 
-fn crear_acceso_area(titulo: &str, descripcion: &str) -> gtk::Button {
-    let textos = gtk::Box::new(gtk::Orientation::Vertical, 2);
-    textos.set_hexpand(true);
+fn crear_fila_navegacion(titulo: &str, icono: &str) -> gtk::ListBoxRow {
+    let fila = gtk::ListBoxRow::new();
+    fila.set_activatable(true);
+    fila.set_selectable(true);
 
-    let titulo = gtk::Label::new(Some(titulo));
-    titulo.set_halign(gtk::Align::Start);
-    titulo.add_css_class("heading");
-
-    let descripcion = gtk::Label::new(Some(descripcion));
-    descripcion.set_halign(gtk::Align::Start);
-    descripcion.set_wrap(true);
-    descripcion.add_css_class("dim-label");
-
-    textos.append(&titulo);
-    textos.append(&descripcion);
-
-    let flecha = gtk::Image::from_icon_name("go-next-symbolic");
-
-    let caja = gtk::Box::new(gtk::Orientation::Horizontal, 12);
-    caja.set_margin_top(8);
-    caja.set_margin_bottom(8);
+    let caja = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    caja.set_margin_top(9);
+    caja.set_margin_bottom(9);
     caja.set_margin_start(10);
     caja.set_margin_end(10);
-    caja.append(&textos);
-    caja.append(&flecha);
 
-    let boton = gtk::Button::new();
-    boton.set_child(Some(&caja));
-    boton.set_hexpand(true);
-    boton.add_css_class("card");
-    boton
+    let imagen = gtk::Image::from_icon_name(icono);
+    imagen.set_pixel_size(18);
+
+    let etiqueta = gtk::Label::new(Some(titulo));
+    etiqueta.set_halign(gtk::Align::Start);
+    etiqueta.set_hexpand(true);
+
+    caja.append(&imagen);
+    caja.append(&etiqueta);
+    fila.set_child(Some(&caja));
+    fila
 }
 
-fn conectar_acceso_area(
-    boton: &gtk::Button,
-    paginas: &gtk::Stack,
-    titulo_barra: &adw::WindowTitle,
-    boton_inicio: &gtk::Button,
-    nombre: &'static str,
-    titulo: &'static str,
-) {
-    let paginas = paginas.clone();
-    let titulo_barra = titulo_barra.clone();
-    let boton_inicio = boton_inicio.clone();
+fn mosaico_botones(botones: &[&gtk::Button]) -> gtk::FlowBox {
+    let mosaico = gtk::FlowBox::new();
+    mosaico.set_selection_mode(gtk::SelectionMode::None);
+    mosaico.set_homogeneous(true);
+    mosaico.set_min_children_per_line(1);
+    mosaico.set_max_children_per_line(2);
+    mosaico.set_column_spacing(8);
+    mosaico.set_row_spacing(8);
 
-    boton.connect_clicked(move |_| {
-        paginas.set_visible_child_name(nombre);
-        titulo_barra.set_subtitle(titulo);
-        boton_inicio.set_visible(true);
-    });
+    for boton in botones {
+        boton.set_hexpand(true);
+        mosaico.insert(*boton, -1);
+    }
+
+    mosaico
+}
+
+fn resumen_actualizaciones_local(vista: &gtk::TextView) -> String {
+    let buffer = vista.buffer();
+    let inicio = buffer.start_iter();
+    let fin = buffer.end_iter();
+    let texto = buffer.text(&inicio, &fin, false);
+
+    let lineas: Vec<String> = texto
+        .lines()
+        .filter_map(|linea| {
+            let limpia = linea.trim();
+            if limpia.is_empty()
+                || limpia.starts_with("→ ")
+                || limpia == "Actualizaciones"
+                || limpia == "✓ Operación terminada."
+            {
+                None
+            } else {
+                Some(limpia.to_string())
+            }
+        })
+        .collect();
+
+    if lineas.is_empty() {
+        "Estado local disponible.".to_string()
+    } else {
+        lineas.join("\n")
+    }
 }
 
 fn construir_ventana(aplicacion: &Application) {
@@ -1599,65 +1617,44 @@ fn construir_ventana(aplicacion: &Application) {
     let ventana = ApplicationWindow::builder()
         .application(aplicacion)
         .title("Korunix")
-        .default_width(520)
-        .default_height(760)
+        .default_width(980)
+        .default_height(680)
         .build();
 
-    let barra = HeaderBar::new();
-
-    let titulo_barra = adw::WindowTitle::new("Korunix", "Inicio");
-    barra.set_title_widget(Some(&titulo_barra));
-
-    let boton_inicio = gtk::Button::builder()
-        .icon_name("go-previous-symbolic")
-        .tooltip_text("Volver a Inicio")
-        .build();
-    boton_inicio.add_css_class("flat");
-    boton_inicio.set_visible(false);
-    barra.pack_start(&boton_inicio);
+    ventana.set_size_request(360, 520);
 
     let paginas = gtk::Stack::new();
-    paginas.set_transition_type(gtk::StackTransitionType::SlideLeftRight);
+    paginas.set_transition_type(gtk::StackTransitionType::Crossfade);
     paginas.set_vhomogeneous(false);
     paginas.set_hhomogeneous(false);
     paginas.set_vexpand(true);
 
-    let (pagina_inicio, contenido_inicio) = crear_pagina_area(
-        "Inicio",
-        "Entra directamente al área relacionada con lo que quieres cambiar. Las funciones que ya funcionan conservan el mismo motor de Korunix.",
-    );
-    let (pagina_aplicaciones, contenido_aplicaciones) = crear_pagina_area(
-        "Aplicaciones",
-        "Instala, quita y ajusta aplicaciones sin convertir el catálogo visual en una lista cerrada.",
-    );
-    let (pagina_apariencia, contenido_apariencia) = crear_pagina_area(
-        "Apariencia",
-        "El estilo y el modo siguen siendo decisiones separadas.",
-    );
+    let (pagina_inicio, contenido_inicio) =
+        crear_pagina_area("Inicio", "Estado general y cambios del sistema.");
+    let (pagina_aplicaciones, contenido_aplicaciones) =
+        crear_pagina_area("Aplicaciones", "Instala, quita y ajusta aplicaciones.");
+    let (pagina_apariencia, contenido_apariencia) =
+        crear_pagina_area("Apariencia", "Estilo visual y modo de color.");
     let (pagina_sistema, contenido_sistema) = crear_pagina_area(
         "Sistema",
-        "Nombre del equipo, canal, escritorios disponibles y funciones generales.",
+        "Nombre del equipo, canal, escritorios y funciones generales.",
     );
-    let (pagina_hardware, contenido_hardware) = crear_pagina_area(
-        "Hardware",
-        "Controles que describen o ajustan el equipo físico sin exponer identificadores técnicos.",
-    );
+    let (pagina_hardware, contenido_hardware) =
+        crear_pagina_area("Hardware", "Pantalla y dispositivos del equipo.");
     let (pagina_almacenamiento, contenido_almacenamiento) = crear_pagina_area(
         "Almacenamiento",
-        "Unidades, transferencias y expulsión segura en un solo lugar.",
+        "Unidades, transferencias y expulsión segura.",
     );
     let (pagina_personas, contenido_personas) = crear_pagina_area(
         "Personas",
-        "Teclados y preferencias personales sin pedir identificadores técnicos.",
+        "Teclados y preferencias de quienes usan el equipo.",
     );
     let (pagina_actualizaciones, contenido_actualizaciones) = crear_pagina_area(
         "Actualizaciones",
-        "Estado local primero; buscar, revisar y aplicar siguen usando el motor ya probado.",
+        "Estado local, búsqueda, revisión y aplicación.",
     );
-    let (pagina_copias, contenido_copias) = crear_pagina_area(
-        "Copias y recuperación",
-        "Copias, historial y restauración sin mezclar estos resultados con otras tareas.",
-    );
+    let (pagina_copias, contenido_copias) =
+        crear_pagina_area("Copias y recuperación", "Copias, historial y restauración.");
 
     paginas.add_named(&pagina_inicio, Some("inicio"));
     paginas.add_named(&pagina_aplicaciones, Some("aplicaciones"));
@@ -1670,92 +1667,188 @@ fn construir_ventana(aplicacion: &Application) {
     paginas.add_named(&pagina_copias, Some("copias"));
     paginas.set_visible_child_name("inicio");
 
-    let general = adw::PreferencesGroup::builder().title("General").build();
-    let acceso_aplicaciones = crear_acceso_area(
-        "Aplicaciones",
-        "Catálogo, aplicaciones elegidas y opciones especiales.",
-    );
-    let acceso_apariencia = crear_acceso_area(
-        "Apariencia",
-        "Estilo visual y modo claro, oscuro o automático.",
-    );
-    general.add(&acceso_aplicaciones);
-    general.add(&acceso_apariencia);
-    contenido_inicio.append(&general);
+    let split = adw::OverlaySplitView::new();
+    split.set_min_sidebar_width(220.0);
+    split.set_max_sidebar_width(280.0);
+    split.set_sidebar_width_fraction(0.28);
+    split.set_enable_show_gesture(true);
+    split.set_enable_hide_gesture(true);
+    split.set_show_sidebar(true);
 
-    let equipo = adw::PreferencesGroup::builder().title("Equipo").build();
-    let acceso_sistema = crear_acceso_area(
-        "Sistema",
-        "Canal, escritorios, Bluetooth, impresión y virtualización.",
-    );
-    let acceso_hardware = crear_acceso_area(
-        "Hardware",
-        "Pantalla y, más adelante, el resto de dispositivos detectados.",
-    );
-    let acceso_almacenamiento = crear_acceso_area(
-        "Almacenamiento",
-        "Discos, archivos grandes y expulsión segura.",
-    );
-    let acceso_personas = crear_acceso_area(
-        "Personas",
-        "Teclados y preferencias de las personas del equipo.",
-    );
-    equipo.add(&acceso_sistema);
-    equipo.add(&acceso_hardware);
-    equipo.add(&acceso_almacenamiento);
-    equipo.add(&acceso_personas);
-    contenido_inicio.append(&equipo);
+    let barra_lateral = ToolbarView::new();
+    let cabecera_lateral = HeaderBar::new();
+    let titulo_lateral = adw::WindowTitle::new("Korunix", "Configura tu sistema");
+    cabecera_lateral.set_title_widget(Some(&titulo_lateral));
+    barra_lateral.add_top_bar(&cabecera_lateral);
 
-    let mantenimiento = adw::PreferencesGroup::builder()
-        .title("Mantenimiento")
-        .build();
-    let acceso_actualizaciones = crear_acceso_area(
-        "Actualizaciones",
-        "Buscar, revisar y aplicar sin cambiar el motor cerrado.",
-    );
-    let acceso_copias = crear_acceso_area(
-        "Copias y recuperación",
-        "Crear copias, revisar restauraciones e historial.",
-    );
-    mantenimiento.add(&acceso_actualizaciones);
-    mantenimiento.add(&acceso_copias);
-    contenido_inicio.append(&mantenimiento);
+    let busqueda_global = gtk::SearchEntry::new();
+    busqueda_global.set_placeholder_text(Some("Buscar una sección…"));
+    busqueda_global.set_size_request(-1, 38);
+    busqueda_global.set_margin_top(12);
+    busqueda_global.set_margin_start(12);
+    busqueda_global.set_margin_end(12);
 
-    for (boton, nombre, titulo) in [
-        (&acceso_aplicaciones, "aplicaciones", "Aplicaciones"),
-        (&acceso_apariencia, "apariencia", "Apariencia"),
-        (&acceso_sistema, "sistema", "Sistema"),
-        (&acceso_hardware, "hardware", "Hardware"),
-        (&acceso_almacenamiento, "almacenamiento", "Almacenamiento"),
-        (&acceso_personas, "personas", "Personas"),
+    let lista_navegacion = gtk::ListBox::new();
+    lista_navegacion.add_css_class("navigation-sidebar");
+    lista_navegacion.set_selection_mode(gtk::SelectionMode::Single);
+    lista_navegacion.set_margin_top(8);
+    lista_navegacion.set_margin_bottom(12);
+    lista_navegacion.set_margin_start(12);
+    lista_navegacion.set_margin_end(12);
+
+    let navegacion = [
+        ("inicio", "Inicio", "view-grid-symbolic"),
         (
-            &acceso_actualizaciones,
+            "aplicaciones",
+            "Aplicaciones",
+            "system-software-install-symbolic",
+        ),
+        (
+            "apariencia",
+            "Apariencia",
+            "preferences-desktop-appearance-symbolic",
+        ),
+        ("sistema", "Sistema", "preferences-system-symbolic"),
+        ("hardware", "Hardware", "computer-symbolic"),
+        (
+            "almacenamiento",
+            "Almacenamiento",
+            "drive-harddisk-symbolic",
+        ),
+        ("personas", "Personas", "system-users-symbolic"),
+        (
             "actualizaciones",
             "Actualizaciones",
+            "software-update-available-symbolic",
         ),
-        (&acceso_copias, "copias", "Copias y recuperación"),
-    ] {
-        conectar_acceso_area(
-            boton,
-            &paginas,
-            &titulo_barra,
-            &boton_inicio,
-            nombre,
-            titulo,
-        );
+        ("copias", "Copias y recuperación", "document-save-symbolic"),
+    ];
+
+    let mut filas_busqueda = Vec::new();
+    for (_, titulo, icono) in navegacion {
+        let fila = crear_fila_navegacion(titulo, icono);
+        lista_navegacion.append(&fila);
+        filas_busqueda.push((fila, titulo.to_string()));
     }
 
     {
-        let paginas = paginas.clone();
-        let titulo_barra = titulo_barra.clone();
-        let boton_inicio_senal = boton_inicio.clone();
-
-        boton_inicio.connect_clicked(move |_| {
-            paginas.set_visible_child_name("inicio");
-            titulo_barra.set_subtitle("Inicio");
-            boton_inicio_senal.set_visible(false);
+        let filas = filas_busqueda.clone();
+        busqueda_global.connect_search_changed(move |entrada| {
+            let filtro = entrada.text().trim().to_lowercase();
+            for (fila, titulo) in &filas {
+                fila.set_visible(filtro.is_empty() || titulo.to_lowercase().contains(&filtro));
+            }
         });
     }
+
+    let desplazamiento_lateral = gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .vexpand(true)
+        .child(&lista_navegacion)
+        .build();
+
+    let contenido_lateral = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    contenido_lateral.append(&busqueda_global);
+    contenido_lateral.append(&desplazamiento_lateral);
+    barra_lateral.set_content(Some(&contenido_lateral));
+
+    let pagina_lateral = adw::NavigationPage::new(&barra_lateral, "Korunix");
+
+    let barra_contenido = ToolbarView::new();
+    let cabecera_contenido = HeaderBar::new();
+    cabecera_contenido.set_show_back_button(false);
+
+    let menu_secciones = gtk::Button::from_icon_name("view-list-symbolic");
+    menu_secciones.set_tooltip_text(Some("Mostrar secciones"));
+    menu_secciones.set_visible(false);
+
+    {
+        let split = split.clone();
+        menu_secciones.connect_clicked(move |_| {
+            split.set_show_sidebar(true);
+        });
+    }
+
+    cabecera_contenido.pack_start(&menu_secciones);
+    barra_contenido.add_top_bar(&cabecera_contenido);
+
+    let avisos = adw::ToastOverlay::new();
+    avisos.set_vexpand(true);
+    avisos.set_child(Some(&paginas));
+    barra_contenido.set_content(Some(&avisos));
+
+    let pagina_contenido = adw::NavigationPage::new(&barra_contenido, "Inicio");
+    split.set_sidebar(Some(&pagina_lateral));
+    split.set_content(Some(&pagina_contenido));
+
+    let estrecho = Rc::new(Cell::new(false));
+
+    {
+        let paginas = paginas.clone();
+        let split = split.clone();
+        let estrecho = Rc::clone(&estrecho);
+        let nombres = [
+            "inicio",
+            "aplicaciones",
+            "apariencia",
+            "sistema",
+            "hardware",
+            "almacenamiento",
+            "personas",
+            "actualizaciones",
+            "copias",
+        ];
+
+        lista_navegacion.connect_row_selected(move |_, fila| {
+            let Some(fila) = fila else {
+                return;
+            };
+            let indice = fila.index() as usize;
+            let Some(nombre) = nombres.get(indice) else {
+                return;
+            };
+
+            paginas.set_visible_child_name(nombre);
+            if estrecho.get() {
+                split.set_show_sidebar(false);
+            }
+        });
+    }
+
+    if let Some(fila) = lista_navegacion.row_at_index(0) {
+        lista_navegacion.select_row(Some(&fila));
+    }
+
+    let condicion = adw::BreakpointCondition::parse("max-width: 819px")
+        .expect("La condición adaptable de Korunix debe ser válida.");
+    let breakpoint = adw::Breakpoint::new(condicion);
+
+    {
+        let split = split.clone();
+        let menu = menu_secciones.clone();
+        let estrecho = Rc::clone(&estrecho);
+        breakpoint.connect_apply(move |_| {
+            estrecho.set(true);
+            split.set_collapsed(true);
+            split.set_show_sidebar(false);
+            menu.set_visible(true);
+        });
+    }
+
+    {
+        let split = split.clone();
+        let menu = menu_secciones.clone();
+        let estrecho = Rc::clone(&estrecho);
+        breakpoint.connect_unapply(move |_| {
+            estrecho.set(false);
+            split.set_collapsed(false);
+            split.set_show_sidebar(true);
+            menu.set_visible(false);
+        });
+    }
+
+    ventana.add_breakpoint(breakpoint);
+    ventana.set_content(Some(&split));
 
     let aviso_texto = gtk::Label::new(Some(
         "La configuración y el preview no coinciden. Crea un preview antes de aplicar.",
@@ -1876,7 +1969,7 @@ fn construir_ventana(aplicacion: &Application) {
     monitor_titulo.set_halign(gtk::Align::Start);
     monitor_titulo.add_css_class("heading");
 
-    let monitor_caja = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let monitor_caja = gtk::Box::new(gtk::Orientation::Vertical, 8);
 
     let entrada_resolucion = gtk::Entry::new();
     entrada_resolucion.set_hexpand(true);
@@ -1885,11 +1978,16 @@ fn construir_ventana(aplicacion: &Application) {
     let entrada_hz = gtk::SpinButton::with_range(1.0, 1000.0, 1.0);
     entrada_hz.set_numeric(true);
     entrada_hz.set_width_chars(5);
+    entrada_hz.set_hexpand(true);
 
     let boton_monitor = gtk::Button::with_label("Guardar");
+
+    let frecuencia_caja = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    frecuencia_caja.append(&entrada_hz);
+    frecuencia_caja.append(&boton_monitor);
+
     monitor_caja.append(&entrada_resolucion);
-    monitor_caja.append(&entrada_hz);
-    monitor_caja.append(&boton_monitor);
+    monitor_caja.append(&frecuencia_caja);
 
     let monitor_bloque = gtk::Box::new(gtk::Orientation::Vertical, 8);
     monitor_bloque.append(&monitor_titulo);
@@ -1946,17 +2044,27 @@ fn construir_ventana(aplicacion: &Application) {
     transferencia_estado.set_halign(gtk::Align::Start);
     transferencia_estado.add_css_class("dim-label");
 
-    let transferencia_botones = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    transferencia_botones.append(&boton_elegir_archivo);
-    transferencia_botones.append(&selector_destino);
+    let archivo_titulo = gtk::Label::new(Some("Archivo"));
+    archivo_titulo.set_halign(gtk::Align::Start);
+    archivo_titulo.add_css_class("heading");
+
+    let destino_titulo = gtk::Label::new(Some("Copiar a"));
+    destino_titulo.set_halign(gtk::Align::Start);
+    destino_titulo.add_css_class("heading");
+
     selector_destino.set_hexpand(true);
-    transferencia_botones.append(&boton_transferir);
+    boton_elegir_archivo.set_hexpand(true);
+    boton_transferir.set_hexpand(true);
 
     let transferencia_caja = gtk::Box::new(gtk::Orientation::Vertical, 8);
     transferencia_caja.set_margin_top(10);
     transferencia_caja.append(&transferencia_titulo);
+    transferencia_caja.append(&archivo_titulo);
     transferencia_caja.append(&archivo_transferencia_texto);
-    transferencia_caja.append(&transferencia_botones);
+    transferencia_caja.append(&boton_elegir_archivo);
+    transferencia_caja.append(&destino_titulo);
+    transferencia_caja.append(&selector_destino);
+    transferencia_caja.append(&boton_transferir);
     transferencia_caja.append(&transferencia_progreso);
     transferencia_caja.append(&transferencia_estado);
 
@@ -1997,30 +2105,23 @@ fn construir_ventana(aplicacion: &Application) {
     boton_restaurar_copia.set_sensitive(false);
     let boton_historial = gtk::Button::with_label("Ver historial");
 
-    let copias_botones_primarios = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    copias_botones_primarios.append(&boton_crear_copia);
-    copias_botones_primarios.append(&boton_elegir_copia);
-
-    let copias_botones_restaurar = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    copias_botones_restaurar.append(&boton_revisar_copia);
-    copias_botones_restaurar.append(&boton_restaurar_copia);
-    copias_botones_restaurar.append(&boton_historial);
+    let copias_botones = mosaico_botones(&[
+        &boton_crear_copia,
+        &boton_elegir_copia,
+        &boton_revisar_copia,
+        &boton_restaurar_copia,
+        &boton_historial,
+    ]);
 
     let copias_caja = gtk::Box::new(gtk::Orientation::Vertical, 8);
     copias_caja.append(&copia_estado);
     copias_caja.append(&copia_archivo);
-    copias_caja.append(&copias_botones_primarios);
-    copias_caja.append(&copias_botones_restaurar);
+    copias_caja.append(&copias_botones);
 
     copias_grupo.add(&copias_caja);
     contenido_copias.append(&copias_grupo);
 
-    let apariencia_grupo = adw::PreferencesGroup::builder()
-        .title("Apariencia")
-        .description(
-            "El estilo y el modo son decisiones separadas. Noctalia deriva el resto cuando corresponde.",
-        )
-        .build();
+    let apariencia_grupo = adw::PreferencesGroup::new();
 
     let estilo_titulo = gtk::Label::new(Some("Estilo"));
     estilo_titulo.set_halign(gtk::Align::Start);
@@ -2106,7 +2207,7 @@ fn construir_ventana(aplicacion: &Application) {
     contenido_aplicaciones.append(&aplicaciones_opciones_grupo);
 
     let aplicaciones_grupo = adw::PreferencesGroup::builder()
-        .title("Aplicaciones")
+        .title("Agregar aplicación")
         .description(
             "Puedes escribir cualquier nombre. El catálogo visual no limita lo que Korunix puede intentar resolver.",
         )
@@ -2139,19 +2240,20 @@ fn construir_ventana(aplicacion: &Application) {
     aplicaciones_grupo.add(&aplicaciones_caja);
     contenido_aplicaciones.append(&aplicaciones_grupo);
 
-    let mensaje_configuracion = gtk::Label::new(Some(
-        "Los cambios de esta sección se guardan enseguida, pero NixOS permanece igual.",
-    ));
-    mensaje_configuracion.set_wrap(true);
-    mensaje_configuracion.set_halign(gtk::Align::Start);
-    mensaje_configuracion.add_css_class("dim-label");
+    let mensaje_configuracion = gtk::Label::new(None);
+    mensaje_configuracion.set_visible(false);
 
-    let actualizaciones_grupo = adw::PreferencesGroup::builder()
-        .title("Actualizaciones")
-        .description(
-            "Primero ves lo que Korunix ya sabe. Buscar usa Internet y no cambia NixOS. Revisar construye una generación completa. Aplicar usa exactamente esa generación.",
-        )
-        .build();
+    {
+        let avisos = avisos.clone();
+        mensaje_configuracion.connect_notify_local(Some("label"), move |mensaje, _| {
+            let texto = mensaje.label();
+            if !texto.trim().is_empty() {
+                avisos.add_toast(adw::Toast::new(texto.as_str()));
+            }
+        });
+    }
+
+    let actualizaciones_grupo = adw::PreferencesGroup::new();
 
     let actualizaciones_estado =
         gtk::Label::new(Some("Leyendo el estado local después de abrir la ventana…"));
@@ -2165,10 +2267,14 @@ fn construir_ventana(aplicacion: &Application) {
     boton_aplicar_actualizacion.add_css_class("suggested-action");
     boton_aplicar_actualizacion.set_sensitive(false);
 
-    let actualizaciones_botones = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    actualizaciones_botones.append(&boton_buscar_actualizaciones);
-    actualizaciones_botones.append(&boton_revisar_actualizacion);
-    actualizaciones_botones.append(&boton_aplicar_actualizacion);
+    let actualizaciones_botones = mosaico_botones(&[
+        &boton_buscar_actualizaciones,
+        &boton_revisar_actualizacion,
+        &boton_aplicar_actualizacion,
+    ]);
+
+    let boton_detalles_actualizaciones = gtk::ToggleButton::with_label("Ver detalles técnicos");
+    boton_detalles_actualizaciones.add_css_class("flat");
 
     let actualizaciones_salida = gtk::TextView::new();
     actualizaciones_salida.set_editable(false);
@@ -2184,10 +2290,25 @@ fn construir_ventana(aplicacion: &Application) {
 
     let actualizaciones_salida_visible = gtk::Revealer::new();
     actualizaciones_salida_visible.set_child(Some(&actualizaciones_desplazamiento));
+    actualizaciones_salida_visible.set_visible(false);
+
+    {
+        let salida = actualizaciones_salida_visible.clone();
+        boton_detalles_actualizaciones.connect_toggled(move |boton| {
+            let mostrar = boton.is_active();
+            salida.set_visible(mostrar);
+            boton.set_label(if mostrar {
+                "Ocultar detalles técnicos"
+            } else {
+                "Ver detalles técnicos"
+            });
+        });
+    }
 
     let actualizaciones_caja = gtk::Box::new(gtk::Orientation::Vertical, 8);
     actualizaciones_caja.append(&actualizaciones_estado);
     actualizaciones_caja.append(&actualizaciones_botones);
+    actualizaciones_caja.append(&boton_detalles_actualizaciones);
     actualizaciones_caja.append(&actualizaciones_salida_visible);
 
     actualizaciones_grupo.add(&actualizaciones_caja);
@@ -2212,6 +2333,8 @@ fn construir_ventana(aplicacion: &Application) {
     caja_acciones.append(&boton_aplicar);
     caja_acciones.append(&boton_volver);
     acciones.add(&caja_acciones);
+    aviso.set_margin_bottom(4);
+    contenido_inicio.append(&aviso);
     contenido_inicio.append(&acciones);
 
     let estado = gtk::Label::new(Some("Listo"));
@@ -2234,25 +2357,6 @@ fn construir_ventana(aplicacion: &Application) {
     let salida_visible = gtk::Revealer::new();
     salida_visible.set_child(Some(&desplazamiento_salida));
     contenido_inicio.append(&salida_visible);
-
-    aviso.set_margin_top(10);
-    aviso.set_margin_start(18);
-    aviso.set_margin_end(18);
-
-    mensaje_configuracion.set_margin_top(8);
-    mensaje_configuracion.set_margin_bottom(10);
-    mensaje_configuracion.set_margin_start(18);
-    mensaje_configuracion.set_margin_end(18);
-
-    let raiz_visual = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    raiz_visual.append(&aviso);
-    raiz_visual.append(&paginas);
-    raiz_visual.append(&mensaje_configuracion);
-
-    let vista = ToolbarView::new();
-    vista.add_top_bar(&barra);
-    vista.set_content(Some(&raiz_visual));
-    ventana.set_content(Some(&vista));
 
     let ocupado = Rc::new(Cell::new(false));
     let ocupado_actualizaciones = Rc::new(Cell::new(false));
@@ -3734,9 +3838,18 @@ fn construir_ventana(aplicacion: &Application) {
         let raiz_final = raiz.clone();
         let boton_final = boton_aplicar_actualizacion.clone();
         let ocupado_final = Rc::clone(&ocupado_actualizaciones);
+        let vista_final = actualizaciones_salida.clone();
+        let estado_final = actualizaciones_estado.clone();
+        let detalles_final = boton_detalles_actualizaciones.clone();
 
-        let al_terminar: AlTerminar = Rc::new(move |_| {
+        let al_terminar: AlTerminar = Rc::new(move |correcto| {
             actualizar_boton_aplicar_actualizacion(&raiz_final, &boton_final, &ocupado_final);
+            if correcto {
+                estado_final.set_text(&resumen_actualizaciones_local(&vista_final));
+                detalles_final.set_active(false);
+            } else {
+                detalles_final.set_active(true);
+            }
         });
 
         iniciar_operacion(
