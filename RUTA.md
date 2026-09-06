@@ -354,6 +354,28 @@ ventana angosta
 
 La prueba gráfica real confirmó la transición entre ambos tamaños. Los 115 tests del motor compartido y la compilación GTK también pasaron sobre este mismo cambio. Esto valida la navegación, **no cierra todavía Estructura visual + Aplicaciones**.
 
+Tercer avance funcional:
+
+```text
+ebd8da7912e372dffc6493aef4ff72fda0d6aa25
+convierte Aplicaciones en un catálogo local
+```
+
+Ya queda conectado:
+
+```text
+abrir Aplicaciones
+→ catálogo curado local inmediato
+→ las elecciones libres actuales siguen visibles
+→ búsqueda local por nombre, descripción y categoría
+→ instalar o quitar modifica configuracion.toml
+→ un nombre fuera del catálogo se comprueba con Nix solo al pedirlo
+→ esa comprobación trabaja en segundo plano
+→ GUI y CLI usan el mismo resolver Rust
+```
+
+La prueba de este avance incluye una aplicación curada, una elección libre, resolución real de `karere`, cambio de sección durante la consulta y ventana angosta. El frente **sigue abierto**: falta enriquecer las fichas con AppStream local, integrar las opciones propias dentro de sus fichas finales y pasar la puerta gráfica completa.
+
 La experiencia gráfica ya no se amplía como una única página larga. El motor probado se conserva; lo que cambia es cómo se presenta.
 
 Objetivo general:
