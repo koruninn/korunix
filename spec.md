@@ -777,6 +777,9 @@ Antes de actualizar se explica qué va a cambiar y si el resultado necesita rein
 
 Buscar actualizaciones no modifica NixOS. La GUI muestra primero el estado local conocido y solo necesita Internet para buscar información nueva. Las tareas de búsqueda, resolución y construcción trabajan fuera del hilo de GTK.
 
+
+La búsqueda tampoco reescribe `flake.lock`. Korunix pide a Nix un `flake.lock` candidato y lo guarda en su estado local junto con la base exacta desde la que se buscó. Si la búsqueda falla, la última búsqueda válida no se borra. Si `flake.lock` cambia después, esa búsqueda se considera antigua y no se presenta como vigente.
+
 No se inventan porcentajes mientras Nix está resolviendo o construyendo. El flujo reutiliza Preview y Apply: buscar o revisar no autoriza a aplicar otra generación distinta, y Apply sigue activando exactamente el preview revisado sin reconstruir.
 
 No inventar porcentajes si Nix no puede ofrecerlos. Sí mostrar fase y actividad.
