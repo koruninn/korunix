@@ -22,6 +22,8 @@ struct Preparado {
     enlace_anterior: PathBuf,
     configuracion_actual: aplicar::ConfiguracionGeneracion,
     configuracion_anterior: aplicar::ConfiguracionGeneracion,
+    lock_actual: Option<Vec<u8>>,
+    lock_anterior: Option<Vec<u8>>,
     situacion: Situacion,
 }
 
@@ -126,6 +128,8 @@ fn preparar(_raiz: &Path) -> Result<Preparado, String> {
                 generacion: activa,
                 configuracion: Vec::new(),
             },
+            lock_actual: None,
+            lock_anterior: None,
             situacion,
         });
     }
@@ -162,12 +166,17 @@ fn preparar(_raiz: &Path) -> Result<Preparado, String> {
         &configuracion_anterior,
     )?;
 
+    let lock_actual = aplicar::leer_lock_aplicada(&estado)?;
+    let lock_anterior = aplicar::leer_lock_anterior(&estado)?;
+
     Ok(Preparado {
         actual: activa,
         anterior,
         enlace_anterior,
         configuracion_actual,
         configuracion_anterior,
+        lock_actual,
+        lock_anterior,
         situacion,
     })
 }
@@ -195,22 +204,69 @@ fn guardar_borrador_si_hace_falta(
     Ok(Some(borrador))
 }
 
-fn preparar_configuracion_temporal(raiz: &Path, configuracion: &[u8]) -> Result<PathBuf, String> {
-    let destino = raiz.join("configuracion.toml");
-    let temporal = raiz.join(format!(".configuracion-rollback-{}.toml", process::id()));
+fn guardar_borrador_lock_si_hace_falta(
+    raiz: &Path,
+    estado: &Path,
+    aplicado: Option<&[u8]>,
+) -> Result<Option<PathBuf>, String> {
+    let Some(aplicado) = aplicado else {
+        return Ok(None);
+    };
 
-    let _ = fs::remove_file(&temporal);
-    fs::write(&temporal, configuracion).map_err(|error| {
-        format!("No pude preparar la configuración anterior antes de rollback.\nDetalle: {error}")
+    let ruta = raiz.join("flake.lock");
+    let actual =
+        fs::read(&ruta).map_err(|error| format!("No pude leer flake.lock.\nDetalle: {error}"))?;
+
+    if actual == aplicado {
+        return Ok(None);
+    }
+
+    let borrador = estado.join("flake-antes-de-rollback.lock");
+    fs::create_dir_all(estado)
+        .map_err(|error| format!("No pude preparar el estado de Korunix.\nDetalle: {error}"))?;
+    fs::write(&borrador, &actual).map_err(|error| {
+        format!("No pude conservar el flake.lock actual antes de rollback.\nDetalle: {error}")
     })?;
 
-    if let Ok(datos) = fs::metadata(&destino) {
+    Ok(Some(borrador))
+}
+
+fn preparar_archivo_temporal(
+    destino: &Path,
+    contenido: &[u8],
+    etiqueta: &str,
+) -> Result<PathBuf, String> {
+    let carpeta = destino
+        .parent()
+        .ok_or_else(|| format!("{} no tiene carpeta padre.", destino.display()))?;
+    let nombre = destino
+        .file_name()
+        .ok_or_else(|| format!("{} no tiene nombre.", destino.display()))?
+        .to_string_lossy();
+    let temporal = carpeta.join(format!(".{nombre}-{etiqueta}-{}", process::id()));
+
+    let _ = fs::remove_file(&temporal);
+    fs::write(&temporal, contenido).map_err(|error| {
+        format!(
+            "No pude preparar {} antes de rollback.\nDetalle: {error}",
+            destino.display()
+        )
+    })?;
+
+    if let Ok(datos) = fs::metadata(destino) {
         fs::set_permissions(&temporal, datos.permissions()).map_err(|error| {
-            format!("No pude conservar los permisos de configuracion.toml.\nDetalle: {error}")
+            format!(
+                "No pude conservar los permisos de {}.\nDetalle: {error}",
+                destino.display()
+            )
         })?;
     }
 
     Ok(temporal)
+}
+
+fn preparar_configuracion_temporal(raiz: &Path, configuracion: &[u8]) -> Result<PathBuf, String> {
+    preparar_archivo_temporal(&raiz.join("configuracion.toml"), configuracion, "rollback")
 }
 
 fn marcar(ruta: &Path, valor: &str) {
@@ -325,7 +381,7 @@ pub fn ejecutar_como_root(argumentos: &[String]) -> i32 {
         return 90;
     }
 
-    if argumentos.len() != 6 {
+    if argumentos.len() != 10 {
         eprintln!("La llamada interna de rollback está incompleta.");
         return 91;
     }
@@ -336,6 +392,10 @@ pub fn ejecutar_como_root(argumentos: &[String]) -> i32 {
     let resultado = PathBuf::from(&argumentos[3]);
     let configuracion_temporal = PathBuf::from(&argumentos[4]);
     let configuracion_destino = PathBuf::from(&argumentos[5]);
+    let configuracion_origen = PathBuf::from(&argumentos[6]);
+    let lock_temporal = PathBuf::from(&argumentos[7]);
+    let lock_destino = PathBuf::from(&argumentos[8]);
+    let _lock_origen = PathBuf::from(&argumentos[9]);
 
     let activa = match aplicar::destino(Path::new(SISTEMA_ACTIVO)) {
         Ok(ruta) => ruta,
@@ -469,6 +529,30 @@ pub fn ejecutar_como_root(argumentos: &[String]) -> i32 {
         }
     }
 
+    if !lock_temporal.as_os_str().is_empty() {
+        if let Err(error) = fs::rename(&lock_temporal, &lock_destino) {
+            eprintln!(
+                "La generación y configuracion.toml volvieron, pero no pude restaurar flake.lock.\nDetalle: {error}"
+            );
+
+            let _ = fs::rename(&configuracion_origen, &configuracion_destino);
+
+            match recuperar_origen(&origen, &nix_env) {
+                Ok(()) => {
+                    marcar(&resultado, "recuperado");
+                    return 18;
+                }
+                Err(error_recuperacion) => {
+                    eprintln!(
+                        "ERROR CRÍTICO: tampoco pude recuperar la generación de origen.\n{error_recuperacion}"
+                    );
+                    marcar(&resultado, "critico");
+                    return 19;
+                }
+            }
+        }
+    }
+
     println!("✓ Rollback terminó con activa = persistente = anterior.");
     marcar(&resultado, "vuelto");
     0
@@ -505,9 +589,40 @@ pub fn ejecutar(raiz: &Path) -> Result<(), String> {
         );
     }
 
+    let borrador_lock =
+        guardar_borrador_lock_si_hace_falta(raiz, &estado, preparado.lock_actual.as_deref())?;
+
+    if let Some(ruta) = &borrador_lock {
+        println!(
+            "✓ Tu flake.lock actual quedó guardado en {}.",
+            ruta.display()
+        );
+    }
+
     let configuracion_destino = raiz.join("configuracion.toml");
     let configuracion_temporal =
         preparar_configuracion_temporal(raiz, &preparado.configuracion_anterior.configuracion)?;
+    let configuracion_actual_bytes = fs::read(&configuracion_destino).map_err(|error| {
+        format!("No pude leer configuracion.toml antes de rollback.\nDetalle: {error}")
+    })?;
+    let configuracion_origen = preparar_archivo_temporal(
+        &configuracion_destino,
+        &configuracion_actual_bytes,
+        "origen-rollback",
+    )?;
+
+    let lock_destino = raiz.join("flake.lock");
+    let (lock_temporal, lock_origen) = if let Some(lock_anterior) = &preparado.lock_anterior {
+        let lock_actual_bytes = fs::read(&lock_destino).map_err(|error| {
+            format!("No pude leer flake.lock antes de rollback.\nDetalle: {error}")
+        })?;
+        (
+            preparar_archivo_temporal(&lock_destino, lock_anterior, "rollback")?,
+            preparar_archivo_temporal(&lock_destino, &lock_actual_bytes, "origen-rollback")?,
+        )
+    } else {
+        (PathBuf::new(), PathBuf::new())
+    };
 
     let sudo = aplicar::sudo_nixos()?;
     let systemd_run = aplicar::programa_variable(
@@ -552,6 +667,10 @@ pub fn ejecutar(raiz: &Path) -> Result<(), String> {
         .arg(&resultado)
         .arg(&configuracion_temporal)
         .arg(&configuracion_destino)
+        .arg(&configuracion_origen)
+        .arg(&lock_temporal)
+        .arg(&lock_destino)
+        .arg(&lock_origen)
         .status()
         .map_err(|error| format!("No pude iniciar rollback con autorización.\nDetalle: {error}"))?;
 
@@ -561,11 +680,20 @@ pub fn ejecutar(raiz: &Path) -> Result<(), String> {
         .to_string();
     let _ = fs::remove_file(&resultado);
     let _ = fs::remove_file(&configuracion_temporal);
+    let _ = fs::remove_file(&configuracion_origen);
+    let _ = fs::remove_file(&lock_temporal);
+    let _ = fs::remove_file(&lock_origen);
 
     let activa = aplicar::destino(Path::new(SISTEMA_ACTIVO))?;
     let persistente = aplicar::destino(Path::new(PERFIL_SISTEMA))?;
     let configuracion_final = fs::read(&configuracion_destino)
         .map_err(|error| format!("No pude comprobar configuracion.toml.\nDetalle: {error}"))?;
+    let lock_final = fs::read(&lock_destino)
+        .map_err(|error| format!("No pude comprobar flake.lock.\nDetalle: {error}"))?;
+    let lock_correcto = preparado
+        .lock_anterior
+        .as_ref()
+        .is_none_or(|esperado| *esperado == lock_final);
 
     if marca == "cancelado" && activa == preparado.actual && persistente == preparado.actual {
         println!("No se hizo rollback.");
@@ -575,6 +703,7 @@ pub fn ejecutar(raiz: &Path) -> Result<(), String> {
     if activa == preparado.anterior
         && persistente == preparado.anterior
         && configuracion_final == preparado.configuracion_anterior.configuracion
+        && lock_correcto
     {
         if !estado_ejecucion.success() {
             eprintln!(
@@ -591,13 +720,15 @@ pub fn ejecutar(raiz: &Path) -> Result<(), String> {
         return Err(format!(
             "ERROR CRÍTICO: rollback dejó un estado parcial.\n\
              Activa: {}\nPersistente: {}\n\
-             Configuración anterior restaurada: {}\nUnidad: {unidad}",
+             Configuración anterior restaurada: {}\nflake.lock anterior restaurado: {}\nUnidad: {unidad}",
             activa.display(),
             persistente.display(),
-            configuracion_final == preparado.configuracion_anterior.configuracion
+            configuracion_final == preparado.configuracion_anterior.configuracion,
+            lock_correcto
         ));
     }
 
+    aplicar::guardar_lock_aplicada(&estado, preparado.lock_anterior.as_deref())?;
     aplicar::guardar_aplicada(&estado, &preparado.configuracion_anterior)?;
 
     let fallidas_despues = aplicar::unidades_fallidas(&systemctl)?;
@@ -619,6 +750,9 @@ pub fn ejecutar(raiz: &Path) -> Result<(), String> {
     println!("✓ No se reconstruyó NixOS.");
     println!("✓ Activa = persistente = {}", preparado.anterior.display());
     println!("✓ configuracion.toml volvió a la copia humana de esa generación.");
+    if preparado.lock_anterior.is_some() {
+        println!("✓ flake.lock volvió a la copia asociada a esa generación.");
+    }
     println!("✓ No aparecieron nuevas unidades systemd fallidas.");
 
     let kernel_ahora = aplicar::kernel_actual();

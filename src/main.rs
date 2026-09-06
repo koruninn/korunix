@@ -1057,7 +1057,7 @@ fn preview_actualizaciones(raiz: &Path) {
             println!("flake.lock no cambió.");
             println!("NixOS no cambió.");
             println!(
-                "Apply normal queda bloqueado para este preview hasta conectar el lock candidato con rollback."
+                "Este preview ya puede aplicarse exactamente, junto con el flake.lock que usó."
             );
         }
         Err(error) => salir_con_error(&error),

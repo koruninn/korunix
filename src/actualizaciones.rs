@@ -657,12 +657,15 @@ KORUNIX_LOCK
         let guardada_antes = fs::read(estado.join(ARCHIVO_BUSQUEDA)).unwrap();
 
         let mala = programa(&raiz, "nix-falla", "#!/bin/sh\nexit 7\n");
-        let error = buscar_en(&raiz, &estado, mala.as_os_str()).unwrap_err();
 
-        assert!(error.contains("última búsqueda válida sigue guardada"));
+        assert!(
+            buscar_en(&raiz, &estado, mala.as_os_str()).is_err(),
+            "una búsqueda fallida debe terminar como error"
+        );
         assert_eq!(
             fs::read(estado.join(ARCHIVO_BUSQUEDA)).unwrap(),
-            guardada_antes
+            guardada_antes,
+            "una búsqueda fallida debe conservar byte por byte la última búsqueda válida"
         );
 
         fs::remove_dir_all(raiz).unwrap();

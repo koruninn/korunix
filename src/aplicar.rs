@@ -12,8 +12,10 @@ const PERFIL_SISTEMA: &str = "/nix/var/nix/profiles/system";
 const SUDO_NIXOS: &str = "/run/wrappers/bin/sudo";
 const ARCHIVO_APLICADA_GENERACION: &str = "aplicada-generacion";
 const ARCHIVO_APLICADA_CONFIGURACION: &str = "aplicada-configuracion.toml";
+const ARCHIVO_APLICADA_LOCK: &str = "aplicada-flake.lock";
 const ARCHIVO_ANTERIOR_GENERACION: &str = "anterior-generacion";
 const ARCHIVO_ANTERIOR_CONFIGURACION: &str = "anterior-configuracion.toml";
+const ARCHIVO_ANTERIOR_LOCK: &str = "anterior-flake.lock";
 
 #[derive(Debug, PartialEq, Eq)]
 enum Situacion {
@@ -26,6 +28,8 @@ struct Preparado {
     preview: PathBuf,
     anterior: PathBuf,
     enlace_anterior: PathBuf,
+    lock_base: Vec<u8>,
+    lock_usado: Vec<u8>,
     situacion: Situacion,
 }
 
@@ -143,6 +147,59 @@ fn borrar_registro(estado: &Path, tipo: &str) {
     let _ = fs::remove_file(ruta_configuracion);
 }
 
+fn ruta_lock_registro(estado: &Path, tipo: &str) -> PathBuf {
+    estado.join(match tipo {
+        "aplicada" => ARCHIVO_APLICADA_LOCK,
+        "anterior" => ARCHIVO_ANTERIOR_LOCK,
+        _ => unreachable!("tipo de lock interno"),
+    })
+}
+
+fn leer_lock_registro(estado: &Path, tipo: &str) -> Result<Option<Vec<u8>>, String> {
+    let ruta = ruta_lock_registro(estado, tipo);
+
+    match fs::read(&ruta) {
+        Ok(datos) => Ok(Some(datos)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!(
+            "No pude leer el flake.lock {tipo} guardado en {}.\nDetalle: {error}",
+            ruta.display()
+        )),
+    }
+}
+
+fn guardar_lock_registro(estado: &Path, tipo: &str, lock: Option<&[u8]>) -> Result<(), String> {
+    fs::create_dir_all(estado)
+        .map_err(|error| format!("No pude preparar el estado de Korunix.\nDetalle: {error}"))?;
+
+    let ruta = ruta_lock_registro(estado, tipo);
+
+    if let Some(lock) = lock {
+        escribir_atomico(&ruta, lock)
+    } else {
+        match fs::remove_file(&ruta) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(format!(
+                "No pude retirar {}.\nDetalle: {error}",
+                ruta.display()
+            )),
+        }
+    }
+}
+
+pub(crate) fn leer_lock_aplicada(estado: &Path) -> Result<Option<Vec<u8>>, String> {
+    leer_lock_registro(estado, "aplicada")
+}
+
+pub(crate) fn leer_lock_anterior(estado: &Path) -> Result<Option<Vec<u8>>, String> {
+    leer_lock_registro(estado, "anterior")
+}
+
+pub(crate) fn guardar_lock_aplicada(estado: &Path, lock: Option<&[u8]>) -> Result<(), String> {
+    guardar_lock_registro(estado, "aplicada", lock)
+}
+
 pub(crate) fn leer_aplicada(estado: &Path) -> Result<Option<ConfiguracionGeneracion>, String> {
     leer_registro(estado, "aplicada")
 }
@@ -181,6 +238,42 @@ fn preparar_configuracion_anterior(
     Ok(true)
 }
 
+fn preparar_lock_anterior(
+    estado: &Path,
+    generacion_actual: &Path,
+    lock_base: &[u8],
+) -> Result<bool, String> {
+    let Some(aplicada) = leer_aplicada(estado)? else {
+        guardar_lock_registro(estado, "anterior", None)?;
+        return Ok(false);
+    };
+
+    if aplicada.generacion != generacion_actual {
+        return Err(
+            "La generación aplicada guardada no coincide con la activa; no voy a asociarle un flake.lock por adivinación."
+                .to_string(),
+        );
+    }
+
+    let lock_aplicada = match leer_lock_aplicada(estado)? {
+        Some(lock) => lock,
+        None => {
+            guardar_lock_registro(estado, "aplicada", Some(lock_base))?;
+            lock_base.to_vec()
+        }
+    };
+
+    if lock_aplicada != lock_base {
+        return Err(
+            "El flake.lock declarado ya no coincide con el que corresponde a la generación activa. Crea un preview nuevo antes de aplicar."
+                .to_string(),
+        );
+    }
+
+    guardar_lock_registro(estado, "anterior", Some(&lock_aplicada))?;
+    Ok(true)
+}
+
 fn guardar_aplicada_desde_preview(estado: &Path, generacion: &Path) -> Result<(), String> {
     let Some((generacion_preview, configuracion)) = preview::datos_guardados(estado)? else {
         return Err(
@@ -197,6 +290,10 @@ fn guardar_aplicada_desde_preview(estado: &Path, generacion: &Path) -> Result<()
         ));
     }
 
+    let (_, lock_usado) = preview::locks_guardados(estado)?;
+
+    guardar_lock_registro(estado, "aplicada", Some(&lock_usado))?;
+
     guardar_aplicada(
         estado,
         &ConfiguracionGeneracion {
@@ -206,10 +303,22 @@ fn guardar_aplicada_desde_preview(estado: &Path, generacion: &Path) -> Result<()
     )
 }
 
-pub(crate) fn conservar_aplicada_actual(_raiz: &Path) -> Result<(), String> {
+pub(crate) fn conservar_aplicada_actual(raiz: &Path) -> Result<(), String> {
     let estado = preview::carpeta_estado()?;
 
-    if leer_aplicada(&estado)?.is_some() {
+    if let Some(aplicada) = leer_aplicada(&estado)? {
+        if leer_lock_aplicada(&estado)?.is_none() {
+            let activa = destino(Path::new(SISTEMA_ACTIVO))?;
+            let persistente = destino(Path::new(PERFIL_SISTEMA))?;
+
+            if activa == aplicada.generacion && persistente == aplicada.generacion {
+                let lock = fs::read(raiz.join("flake.lock")).map_err(|error| {
+                    format!("No pude leer flake.lock para completar el registro aplicado.\nDetalle: {error}")
+                })?;
+                guardar_lock_registro(&estado, "aplicada", Some(&lock))?;
+            }
+        }
+
         return Ok(());
     }
 
@@ -223,6 +332,15 @@ pub(crate) fn conservar_aplicada_actual(_raiz: &Path) -> Result<(), String> {
     // Solo se recupera esta asociación cuando el preview anterior es exactamente
     // el sistema activo y persistente. No se adivina desde un estado parcial.
     if activa == generacion && persistente == generacion {
+        let lock = preview::locks_guardados(&estado)
+            .ok()
+            .map(|(_, usado)| usado)
+            .unwrap_or_else(|| fs::read(raiz.join("flake.lock")).unwrap_or_default());
+
+        if !lock.is_empty() {
+            guardar_lock_registro(&estado, "aplicada", Some(&lock))?;
+        }
+
         guardar_aplicada(
             &estado,
             &ConfiguracionGeneracion {
@@ -432,14 +550,10 @@ fn registrar_raiz(nix_store: &Path, enlace: &Path, generacion: &Path) -> Result<
 
 fn preparar(raiz: &Path) -> Result<Preparado, String> {
     let preview = preview::leer(raiz)?;
-
-    if preview::usa_lock_distinto(raiz)? {
-        return Err(
-            "Este preview pertenece a una actualización y usa un flake.lock candidato.\n\
-             Todavía no voy a aplicarlo con «korunix aplicar»: primero debe quedar conectado al guardado de flake.lock y al rollback exacto."
-                .to_string(),
-        );
-    }
+    let estado = preview::carpeta_estado()?;
+    let (lock_base, lock_usado) = preview::locks_guardados(&estado)?;
+    let lock_actual = fs::read(raiz.join("flake.lock"))
+        .map_err(|error| format!("No pude leer flake.lock.\nDetalle: {error}"))?;
 
     let nix_store = programa_variable(
         "KORUNIX_NIX_STORE_BIN",
@@ -457,13 +571,31 @@ fn preparar(raiz: &Path) -> Result<Preparado, String> {
     let activa = destino(Path::new(SISTEMA_ACTIVO))?;
     let persistente = destino(Path::new(PERFIL_SISTEMA))?;
     let situacion = clasificar_estado(&activa, &persistente, &preview.generacion)?;
-    let estado = preview::carpeta_estado()?;
+
+    match situacion {
+        Situacion::Listo if lock_actual != lock_base => {
+            return Err(
+                "El sistema todavía no usa este preview, pero flake.lock ya no es su base. No voy a aplicar desde un estado parcial."
+                    .to_string(),
+            );
+        }
+        Situacion::YaAplicado if lock_actual != lock_usado => {
+            return Err(
+                "La generación del preview ya está activa, pero flake.lock no coincide con ella. No voy a presentar ese estado como aplicado."
+                    .to_string(),
+            );
+        }
+        _ => {}
+    }
+
     let enlace_anterior = estado.join("anterior");
 
     Ok(Preparado {
         preview: preview.generacion,
         anterior: activa,
         enlace_anterior,
+        lock_base,
+        lock_usado,
         situacion,
     })
 }
@@ -506,6 +638,36 @@ pub(crate) fn kernel_generacion(generacion: &Path) -> Option<String> {
     }
 
     None
+}
+
+fn preparar_archivo_temporal(
+    destino: &Path,
+    contenido: &[u8],
+    etiqueta: &str,
+) -> Result<PathBuf, String> {
+    let carpeta = destino
+        .parent()
+        .ok_or_else(|| format!("{} no tiene carpeta padre.", destino.display()))?;
+    let nombre = destino
+        .file_name()
+        .ok_or_else(|| format!("{} no tiene nombre de archivo.", destino.display()))?
+        .to_string_lossy();
+    let temporal = carpeta.join(format!(".{nombre}-{etiqueta}-{}", process::id()));
+
+    let _ = fs::remove_file(&temporal);
+    fs::write(&temporal, contenido)
+        .map_err(|error| format!("No pude preparar {}.\nDetalle: {error}", temporal.display()))?;
+
+    if let Ok(datos) = fs::metadata(destino) {
+        fs::set_permissions(&temporal, datos.permissions()).map_err(|error| {
+            format!(
+                "No pude conservar los permisos de {}.\nDetalle: {error}",
+                destino.display()
+            )
+        })?;
+    }
+
+    Ok(temporal)
 }
 
 fn marcar(ruta: &Path, valor: &str) {
@@ -689,7 +851,7 @@ pub fn ejecutar_como_root(argumentos: &[String]) -> i32 {
         return 90;
     }
 
-    if argumentos.len() != 4 {
+    if argumentos.len() != 7 {
         eprintln!("La llamada interna de apply está incompleta.");
         return 91;
     }
@@ -698,6 +860,9 @@ pub fn ejecutar_como_root(argumentos: &[String]) -> i32 {
     let anterior = PathBuf::from(argumentos[1].as_str());
     let nix_env = PathBuf::from(argumentos[2].as_str());
     let resultado = PathBuf::from(argumentos[3].as_str());
+    let lock_nuevo = PathBuf::from(argumentos[4].as_str());
+    let lock_anterior = PathBuf::from(argumentos[5].as_str());
+    let lock_destino = PathBuf::from(argumentos[6].as_str());
 
     let activa = match destino(Path::new(SISTEMA_ACTIVO)) {
         Ok(ruta) => ruta,
@@ -800,6 +965,67 @@ pub fn ejecutar_como_root(argumentos: &[String]) -> i32 {
         Path::new(SISTEMA_ACTIVO),
     ) {
         Ok(()) => {
+            if !lock_nuevo.as_os_str().is_empty() {
+                let lock_nuevo_bytes = match fs::read(&lock_nuevo) {
+                    Ok(datos) => datos,
+                    Err(error) => {
+                        eprintln!("No pude leer el flake.lock nuevo preparado.\nDetalle: {error}");
+                        let _ = recuperar(
+                            &anterior,
+                            &nix_env,
+                            Path::new(PERFIL_SISTEMA),
+                            Path::new(SISTEMA_ACTIVO),
+                        );
+                        marcar(&resultado, "recuperado");
+                        return 16;
+                    }
+                };
+
+                if let Err(error) = fs::rename(&lock_nuevo, &lock_destino) {
+                    eprintln!(
+                        "La generación nueva llegó a activarse, pero no pude publicar flake.lock.\nDetalle: {error}"
+                    );
+                    let _ = recuperar(
+                        &anterior,
+                        &nix_env,
+                        Path::new(PERFIL_SISTEMA),
+                        Path::new(SISTEMA_ACTIVO),
+                    );
+                    marcar(&resultado, "recuperado");
+                    return 16;
+                }
+
+                let lock_final = fs::read(&lock_destino).unwrap_or_default();
+                if lock_final != lock_nuevo_bytes {
+                    eprintln!("flake.lock no quedó byte por byte como el revisado.");
+
+                    if !lock_anterior.as_os_str().is_empty() {
+                        let _ = fs::rename(&lock_anterior, &lock_destino);
+                    }
+
+                    match recuperar(
+                        &anterior,
+                        &nix_env,
+                        Path::new(PERFIL_SISTEMA),
+                        Path::new(SISTEMA_ACTIVO),
+                    ) {
+                        Ok(()) => {
+                            marcar(&resultado, "recuperado");
+                            return 16;
+                        }
+                        Err(error) => {
+                            eprintln!(
+                                "ERROR CRÍTICO: tampoco pude recuperar la generación anterior.\n{error}"
+                            );
+                            marcar(&resultado, "critico");
+                            return 17;
+                        }
+                    }
+                }
+
+                println!("✓ flake.lock quedó exactamente en la versión usada por el preview.");
+            }
+
             println!("✓ Apply terminó con activa = persistente = preview.");
             marcar(&resultado, "aplicado");
             0
@@ -824,11 +1050,13 @@ pub fn ejecutar_como_root(argumentos: &[String]) -> i32 {
 }
 
 pub fn ejecutar(raiz: &Path) -> Result<(), String> {
+    conservar_aplicada_actual(raiz)?;
     let preparado = preparar(raiz)?;
 
     if preparado.situacion == Situacion::YaAplicado {
         println!("✓ Este preview ya está activo y persistente.");
         println!("Generación: {}", preparado.preview.display());
+        println!("✓ flake.lock coincide con el usado por ese preview.");
         println!("No cambié nada.");
         return Ok(());
     }
@@ -845,6 +1073,16 @@ pub fn ejecutar(raiz: &Path) -> Result<(), String> {
         preparado.enlace_anterior.display(),
         preparado.anterior.display()
     );
+
+    let lock_destino = raiz.join("flake.lock");
+    let (lock_nuevo, lock_anterior_temporal) = if preparado.lock_base != preparado.lock_usado {
+        (
+            preparar_archivo_temporal(&lock_destino, &preparado.lock_usado, "actualizacion")?,
+            preparar_archivo_temporal(&lock_destino, &preparado.lock_base, "antes-actualizacion")?,
+        )
+    } else {
+        (PathBuf::new(), PathBuf::new())
+    };
 
     let sudo = sudo_nixos()?;
     let systemd_run = programa_variable(
@@ -863,9 +1101,21 @@ pub fn ejecutar(raiz: &Path) -> Result<(), String> {
     let fallidas_antes = unidades_fallidas(&systemctl)?;
     let estado = preview::carpeta_estado()?;
     let rollback_completo = preparar_configuracion_anterior(&estado, &preparado.anterior)?;
+    let rollback_lock = preparar_lock_anterior(&estado, &preparado.anterior, &preparado.lock_base)?;
 
-    if rollback_completo {
-        println!("✓ La configuración humana anterior también quedó guardada para rollback.");
+    if preparado.lock_base != preparado.lock_usado && (!rollback_completo || !rollback_lock) {
+        return Err(
+            "La actualización está revisada, pero todavía no tengo un rollback completo de generación + configuracion.toml + flake.lock. No voy a aplicarla."
+                .to_string(),
+        );
+    }
+
+    if rollback_completo && rollback_lock {
+        println!(
+            "✓ Generación, configuración humana y flake.lock actuales quedaron guardados para rollback."
+        );
+    } else if rollback_completo {
+        println!("✓ La configuración humana anterior quedó guardada para rollback.");
     } else {
         println!(
             "Aviso: esta generación anterior es previa al registro de configuración humana;              rollback completo todavía no estará disponible para ella."
@@ -896,6 +1146,9 @@ pub fn ejecutar(raiz: &Path) -> Result<(), String> {
         .arg(&preparado.anterior)
         .arg(&nix_env)
         .arg(&resultado)
+        .arg(&lock_nuevo)
+        .arg(&lock_anterior_temporal)
+        .arg(&lock_destino)
         .status()
         .map_err(|error| format!("No pude iniciar apply con autorización.\nDetalle: {error}"))?;
 
@@ -904,23 +1157,34 @@ pub fn ejecutar(raiz: &Path) -> Result<(), String> {
         .trim()
         .to_string();
     let _ = fs::remove_file(&resultado);
+    let _ = fs::remove_file(&lock_nuevo);
+    let _ = fs::remove_file(&lock_anterior_temporal);
 
     let activa = destino(Path::new(SISTEMA_ACTIVO))?;
     let persistente = destino(Path::new(PERFIL_SISTEMA))?;
+    let lock_final = fs::read(&lock_destino).map_err(|error| {
+        format!("No pude comprobar flake.lock después de apply.\nDetalle: {error}")
+    })?;
 
     if marca == "cancelado" && activa == preparado.anterior && persistente == preparado.anterior {
         println!("No se aplicó nada.");
         return Ok(());
     }
 
-    if activa == preparado.preview && persistente == preparado.preview {
+    if activa == preparado.preview
+        && persistente == preparado.preview
+        && lock_final == preparado.lock_usado
+    {
         if !estado_ejecucion.success() {
             eprintln!(
                 "Aviso: la conexión con la unidad devolvió {}, pero el estado final confirma que apply terminó.",
                 estado_ejecucion
             );
         }
-    } else if activa == preparado.anterior && persistente == preparado.anterior {
+    } else if activa == preparado.anterior
+        && persistente == preparado.anterior
+        && lock_final == preparado.lock_base
+    {
         return Err(format!(
             "Apply no se completó. El sistema quedó en la generación anterior.\n\
              Estado interno: {marca}\nUnidad: {unidad}"
@@ -928,9 +1192,10 @@ pub fn ejecutar(raiz: &Path) -> Result<(), String> {
     } else {
         return Err(format!(
             "ERROR CRÍTICO: activa y persistente quedaron en un estado parcial.\n\
-             Activa: {}\nPersistente: {}\nUnidad: {unidad}",
+             Activa: {}\nPersistente: {}\nflake.lock coincide con preview: {}\nUnidad: {unidad}",
             activa.display(),
-            persistente.display()
+            persistente.display(),
+            lock_final == preparado.lock_usado
         ));
     }
 
@@ -966,7 +1231,8 @@ pub fn ejecutar(raiz: &Path) -> Result<(), String> {
     println!("✓ Se aplicó exactamente el preview revisado.");
     println!("✓ No se reconstruyó NixOS.");
     println!("✓ Activa = persistente = {}", preparado.preview.display());
-    println!("✓ La generación anterior sigue protegida para rollback.");
+    println!("✓ flake.lock = el usado para construir ese preview.");
+    println!("✓ La generación, configuracion.toml y flake.lock anteriores siguen protegidos para rollback.");
     println!("✓ No aparecieron nuevas unidades systemd fallidas.");
 
     let kernel_ahora = kernel_actual();
@@ -1179,6 +1445,28 @@ mod pruebas {
         assert!(error.contains("recuperado"));
         assert_eq!(destino(&activa).unwrap(), anterior);
         assert_eq!(destino(&perfil).unwrap(), anterior);
+        let _ = fs::remove_dir_all(carpeta);
+    }
+
+    #[test]
+    fn el_lock_aplicado_y_anterior_se_guardan_por_separado() {
+        let carpeta = temporal("locks-aplicados");
+        fs::create_dir_all(&carpeta).expect("debería crear la prueba");
+
+        guardar_lock_registro(&carpeta, "aplicada", Some(b"lock-nuevo"))
+            .expect("debería guardar aplicado");
+        guardar_lock_registro(&carpeta, "anterior", Some(b"lock-viejo"))
+            .expect("debería guardar anterior");
+
+        assert_eq!(
+            leer_lock_aplicada(&carpeta).unwrap().unwrap(),
+            b"lock-nuevo"
+        );
+        assert_eq!(
+            leer_lock_anterior(&carpeta).unwrap().unwrap(),
+            b"lock-viejo"
+        );
+
         let _ = fs::remove_dir_all(carpeta);
     }
 }

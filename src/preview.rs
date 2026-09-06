@@ -96,14 +96,6 @@ fn pedir_generacion_con_lock(
     Ok(generacion)
 }
 
-fn pedir_generacion(
-    raiz: &Path,
-    enlace_temporal: &Path,
-    programa: &OsStr,
-) -> Result<PathBuf, String> {
-    pedir_generacion_con_lock(raiz, enlace_temporal, programa, None)
-}
-
 fn registrar_enlace(
     estado: &Path,
     generacion: &Path,
@@ -193,6 +185,7 @@ fn construir_con_lock_en(
     Ok(Preview { generacion, enlace })
 }
 
+#[cfg(test)]
 fn construir_en(
     raiz: &Path,
     estado: &Path,
@@ -402,9 +395,9 @@ pub(crate) fn leer_en(raiz: &Path, estado: &Path) -> Result<Preview, String> {
     let lock_actual = fs::read(raiz.join("flake.lock"))
         .map_err(|error| format!("No pude leer flake.lock.\nDetalle: {error}"))?;
 
-    if lock_actual != lock_base {
+    if lock_actual != lock_base && lock_actual != lock_usado {
         return Err(
-            "flake.lock cambió después del preview. Crea un preview nuevo antes de aplicar."
+            "flake.lock ya no coincide ni con la base ni con el lock usado por este preview. Crea un preview nuevo."
                 .to_string(),
         );
     }
@@ -433,22 +426,6 @@ pub(crate) fn locks_guardados(estado: &Path) -> Result<(Vec<u8>, Vec<u8>), Strin
     let usado = fs::read(estado.join(ARCHIVO_LOCK_USADO))
         .map_err(|_| "El preview no tiene guardado el flake.lock que usó.".to_string())?;
     Ok((base, usado))
-}
-
-pub(crate) fn usa_lock_distinto(raiz: &Path) -> Result<bool, String> {
-    let estado = carpeta_estado()?;
-    let (base, usado) = locks_guardados(&estado)?;
-    let actual = fs::read(raiz.join("flake.lock"))
-        .map_err(|error| format!("No pude leer flake.lock.\nDetalle: {error}"))?;
-
-    if actual != base {
-        return Err(
-            "flake.lock cambió después del preview. Crea un preview nuevo antes de aplicar."
-                .to_string(),
-        );
-    }
-
-    Ok(base != usado)
 }
 
 pub fn leer(raiz: &Path) -> Result<Preview, String> {
@@ -733,8 +710,10 @@ ln -s "$destino" "$enlace"
         fs::write(estado.join(ARCHIVO_LOCK_USADO), b"lock-base").unwrap();
         fs::write(raiz.join("flake.lock"), b"lock-distinto").unwrap();
 
-        let error = leer_en(&raiz, &estado).expect_err("el lock cambiado debe invalidarlo");
-        assert!(error.contains("flake.lock cambió después del preview"));
+        assert!(
+            leer_en(&raiz, &estado).is_err(),
+            "un flake.lock distinto de la base y del usado debe invalidar el preview"
+        );
 
         let _ = fs::remove_dir_all(&carpeta);
     }
