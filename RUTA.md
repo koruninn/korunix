@@ -343,12 +343,15 @@ La navegación rescata la experiencia visual comprobada en `pruebas` sin copiar 
 ```text
 ancho normal
 → barra lateral visible
-→ buscador de secciones
+→ búsqueda global de ajustes, aplicaciones y áreas
+→ cada área aporta términos de sus elementos internos
+→ muestra solo las áreas donde puede estar la coincidencia
+→ selecciona la primera coincidencia
 → área elegida a la derecha
 
 ventana angosta
 → la barra lateral se oculta
-→ un botón abre las secciones sobre el contenido
+→ un botón abre las áreas y la misma búsqueda global sobre el contenido
 → el área actual usa todo el ancho disponible
 ```
 
@@ -375,6 +378,18 @@ abrir Aplicaciones
 ```
 
 La prueba de este avance incluye una aplicación curada, una elección libre, resolución real de `karere`, cambio de sección durante la consulta y ventana angosta. El frente **sigue abierto**: falta enriquecer las fichas con AppStream local, integrar las opciones propias dentro de sus fichas finales y pasar la puerta gráfica completa.
+
+Corrección rescatada directamente del comportamiento ya comprobado en `pruebas`:
+
+```text
+búsqueda global
+→ no depende del área que estaba abierta
+→ busca términos humanos de todas las áreas
+→ Firefox / fotografías / Steam llevan a Aplicaciones
+→ Bluetooth / Niri llevan a Sistema
+→ teclado lleva a Personas
+→ restaurar lleva a Copias y recuperación
+```
 
 La experiencia gráfica ya no se amplía como una única página larga. El motor probado se conserva; lo que cambia es cómo se presenta.
 
