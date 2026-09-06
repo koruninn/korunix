@@ -1,4 +1,5 @@
-use std::collections::HashSet;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -18,6 +19,19 @@ pub struct VistaAplicacion {
     pub categoria: String,
     pub instalada: bool,
     pub curada: bool,
+    pub icono: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PresentacionLocal {
+    pub nombre: Option<String>,
+    pub descripcion: Option<String>,
+    pub icono: Option<String>,
+}
+
+thread_local! {
+    static PRESENTACIONES_LOCALES: RefCell<HashMap<String, PresentacionLocal>> =
+        RefCell::new(HashMap::new());
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -287,6 +301,29 @@ pub fn catalogo() -> &'static [Ficha] {
     CATALOGO
 }
 
+const TERMINOS_SUNSHINE: &str =
+    "sunshine transmisión remoto remota acceso autoinicio iniciar automáticamente";
+const TERMINOS_STEAM: &str = "steam juegos remote play servidor dedicado gamemode millennium";
+
+pub fn coincide_especial(id: &str, consulta: &str) -> bool {
+    let consulta = consulta.trim().to_lowercase();
+    if consulta.is_empty() {
+        return true;
+    }
+
+    let terminos = match id {
+        "sunshine" => TERMINOS_SUNSHINE,
+        "steam" => TERMINOS_STEAM,
+        _ => return false,
+    };
+
+    terminos.contains(&consulta)
+}
+
+pub fn hay_especial(consulta: &str) -> bool {
+    coincide_especial("sunshine", consulta) || coincide_especial("steam", consulta)
+}
+
 pub fn terminos_busqueda() -> String {
     let mut terminos = CATALOGO
         .iter()
@@ -294,11 +331,103 @@ pub fn terminos_busqueda() -> String {
         .collect::<Vec<_>>()
         .join(" ");
 
-    terminos.push_str(
-        " sunshine transmisión remoto remota autoinicio steam remote play servidor dedicado gamemode millennium",
-    );
+    terminos.push(' ');
+    terminos.push_str(TERMINOS_SUNSHINE);
+    terminos.push(' ');
+    terminos.push_str(TERMINOS_STEAM);
 
     terminos.to_lowercase()
+}
+
+pub fn guardar_presentaciones_locales(presentaciones: Vec<(String, PresentacionLocal)>) {
+    PRESENTACIONES_LOCALES.with(|guardadas| {
+        let mut guardadas = guardadas.borrow_mut();
+        guardadas.clear();
+        guardadas.extend(presentaciones);
+    });
+}
+
+fn presentacion_local(id: &str) -> Option<PresentacionLocal> {
+    PRESENTACIONES_LOCALES.with(|guardadas| guardadas.borrow().get(id).cloned())
+}
+
+#[cfg(feature = "interfaz")]
+pub fn leer_appstream_local(ids: &[String]) -> Result<Vec<(String, PresentacionLocal)>, String> {
+    use libappstream::prelude::*;
+
+    let pool = libappstream::Pool::new();
+    pool.set_load_std_data_locations(true);
+    pool.load(None::<&libappstream::gio::Cancellable>)
+        .map_err(|error| format!("No pude leer AppStream local.\nDetalle: {error}"))?;
+
+    let mut resultado = Vec::new();
+
+    for id in ids {
+        let Some(componentes) = pool.search(id) else {
+            continue;
+        };
+
+        let id_desktop = format!("{id}.desktop");
+        let mut mejor: Option<(bool, PresentacionLocal)> = None;
+
+        for indice in 0..componentes.size() {
+            let Some(componente) = componentes.index_safe(indice) else {
+                continue;
+            };
+
+            let paquete_exacto = componente
+                .pkgnames()
+                .iter()
+                .any(|paquete| paquete.as_str() == id);
+            let id_exacto = componente
+                .id()
+                .as_deref()
+                .map(|actual| actual == id || actual == id_desktop)
+                .unwrap_or(false);
+
+            if !paquete_exacto && !id_exacto {
+                continue;
+            }
+
+            let icono = componente
+                .icon_stock()
+                .and_then(|icono| icono.name())
+                .map(|nombre| nombre.to_string());
+
+            // Los textos del catálogo curado ya están escritos en español.
+            // Nombre y descripción de AppStream solo se guardan cuando el
+            // paquete coincide exactamente; una coincidencia por .desktop
+            // puede aportar icono, pero no reemplaza texto humano fiable.
+            let presentacion = PresentacionLocal {
+                nombre: paquete_exacto
+                    .then(|| componente.name().map(|valor| valor.to_string()))
+                    .flatten(),
+                descripcion: paquete_exacto
+                    .then(|| componente.summary().map(|valor| valor.to_string()))
+                    .flatten(),
+                icono,
+            };
+
+            let reemplazar = mejor
+                .as_ref()
+                .map(|(era_paquete, _)| paquete_exacto && !*era_paquete)
+                .unwrap_or(true);
+
+            if reemplazar {
+                mejor = Some((paquete_exacto, presentacion));
+            }
+
+            if paquete_exacto {
+                break;
+            }
+        }
+
+        if let Some((_, presentacion)) = mejor {
+            resultado.push((id.clone(), presentacion));
+        }
+    }
+
+    Ok(resultado)
 }
 
 fn capitalizar(palabra: &str) -> String {
@@ -332,13 +461,17 @@ pub fn vistas(instaladas: &[String], consulta: &str) -> Vec<VistaAplicacion> {
 
     let mut resultado = CATALOGO
         .iter()
-        .map(|ficha| VistaAplicacion {
-            id: ficha.id.to_string(),
-            nombre: ficha.nombre.to_string(),
-            descripcion: ficha.descripcion.to_string(),
-            categoria: ficha.categoria.to_string(),
-            instalada: instaladas_set.contains(ficha.id),
-            curada: true,
+        .map(|ficha| {
+            let local = presentacion_local(ficha.id);
+            VistaAplicacion {
+                id: ficha.id.to_string(),
+                nombre: ficha.nombre.to_string(),
+                descripcion: ficha.descripcion.to_string(),
+                categoria: ficha.categoria.to_string(),
+                instalada: instaladas_set.contains(ficha.id),
+                curada: true,
+                icono: local.and_then(|presentacion| presentacion.icono),
+            }
         })
         .collect::<Vec<_>>();
 
@@ -347,15 +480,24 @@ pub fn vistas(instaladas: &[String], consulta: &str) -> Vec<VistaAplicacion> {
             continue;
         }
 
+        let local = presentacion_local(id);
         resultado.push(VistaAplicacion {
             id: id.clone(),
-            nombre: nombre_desde_id(id),
-            descripcion:
-                "Aplicación elegida. Korunix conserva tu elección aunque no tenga ficha curada."
-                    .to_string(),
+            nombre: local
+                .as_ref()
+                .and_then(|presentacion| presentacion.nombre.clone())
+                .unwrap_or_else(|| nombre_desde_id(id)),
+            descripcion: local
+                .as_ref()
+                .and_then(|presentacion| presentacion.descripcion.clone())
+                .unwrap_or_else(|| {
+                    "Aplicación elegida. Korunix conserva tu elección aunque no tenga ficha curada."
+                        .to_string()
+                }),
             categoria: "Otras elegidas".to_string(),
             instalada: true,
             curada: false,
+            icono: local.and_then(|presentacion| presentacion.icono),
         });
     }
 
@@ -492,6 +634,13 @@ mod pruebas {
         assert!(terminos.contains("fotografías"));
         assert!(terminos.contains("steam"));
         assert!(terminos.contains("sunshine"));
+    }
+
+    #[test]
+    fn las_opciones_propias_participan_en_la_busqueda_local() {
+        assert!(coincide_especial("steam", "remote play"));
+        assert!(coincide_especial("sunshine", "remoto"));
+        assert!(!hay_especial("karere"));
     }
 
     #[test]

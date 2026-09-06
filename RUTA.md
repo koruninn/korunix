@@ -391,6 +391,20 @@ búsqueda global
 → restaurar lleva a Copias y recuperación
 ```
 
+Cuarto avance funcional preparado:
+
+```text
+Aplicaciones
+→ abre con el catálogo curado sin esperar AppStream
+→ AppStream local se lee después, fuera del arranque visible
+→ una coincidencia fiable puede aportar icono y datos humanos a elecciones libres
+→ una coincidencia ambigua nunca reemplaza la ficha curada
+→ Sunshine y Steam tienen cada uno su propia ficha con sus subopciones
+→ buscar Steam o Sunshine no dispara una resolución Nixpkgs equivocada
+```
+
+Este avance necesita todavía la revisión gráfica real antes de cerrar el frente.
+
 La experiencia gráfica ya no se amplía como una única página larga. El motor probado se conserva; lo que cambia es cómo se presenta.
 
 Objetivo general:

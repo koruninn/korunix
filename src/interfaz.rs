@@ -1144,6 +1144,13 @@ fn recargar_aplicaciones(
                 .subtitle(vista.descripcion.as_str())
                 .build();
 
+            if let Some(icono) = vista.icono.as_deref() {
+                let imagen = gtk::Image::from_icon_name(icono);
+                imagen.set_pixel_size(32);
+                imagen.set_valign(gtk::Align::Center);
+                fila.add_prefix(&imagen);
+            }
+
             let boton = gtk::Button::with_label(if vista.instalada {
                 "Quitar"
             } else {
@@ -1238,7 +1245,7 @@ fn recargar_aplicaciones(
         }
     }
 
-    if !consulta.is_empty() && vistas.is_empty() {
+    if !consulta.is_empty() && vistas.is_empty() && !aplicaciones::hay_especial(&consulta) {
         let grupo = adw::PreferencesGroup::builder()
             .title("Fuera del catálogo local")
             .build();
@@ -2416,10 +2423,17 @@ fn construir_ventana(aplicacion: &Application) {
         .description("Estas capacidades afectan al equipo completo.")
         .build();
 
-    let aplicaciones_opciones_grupo = adw::PreferencesGroup::builder()
-        .title("Con opciones propias")
+    let sunshine_grupo = adw::PreferencesGroup::builder()
+        .title("Sunshine")
         .description(
-            "Apagar una función principal conserva sus preferencias internas para cuando vuelva a activarse.",
+            "Acceso y transmisión remota. Sus preferencias internas se conservan aunque lo apagues.",
+        )
+        .build();
+
+    let steam_grupo = adw::PreferencesGroup::builder()
+        .title("Steam")
+        .description(
+            "Juegos y transmisión. Korunix deriva GameMode, Millennium y las reglas necesarias.",
         )
         .build();
 
@@ -2429,8 +2443,8 @@ fn construir_ventana(aplicacion: &Application) {
         .build();
 
     let sunshine = adw::SwitchRow::builder()
-        .title("Sunshine")
-        .subtitle("Acceso y transmisión remota.")
+        .title("Activar Sunshine")
+        .subtitle("Deja disponible el servidor de transmisión remota.")
         .build();
 
     let sunshine_autoinicio = adw::SwitchRow::builder()
@@ -2439,8 +2453,8 @@ fn construir_ventana(aplicacion: &Application) {
         .build();
 
     let steam = adw::SwitchRow::builder()
-        .title("Steam")
-        .subtitle("Korunix deriva GameMode, Millennium y la integración visual.")
+        .title("Activar Steam")
+        .subtitle("Instala Steam y deja sus opciones propias en esta misma ficha.")
         .build();
 
     let steam_remote_play = adw::SwitchRow::builder()
@@ -2468,11 +2482,11 @@ fn construir_ventana(aplicacion: &Application) {
     sistema_funciones_grupo.add(&virtualizacion);
     contenido_sistema.append(&sistema_funciones_grupo);
 
-    aplicaciones_opciones_grupo.add(&sunshine);
-    aplicaciones_opciones_grupo.add(&sunshine_autoinicio);
-    aplicaciones_opciones_grupo.add(&steam);
-    aplicaciones_opciones_grupo.add(&steam_remote_play);
-    aplicaciones_opciones_grupo.add(&steam_servidor);
+    sunshine_grupo.add(&sunshine);
+    sunshine_grupo.add(&sunshine_autoinicio);
+    steam_grupo.add(&steam);
+    steam_grupo.add(&steam_remote_play);
+    steam_grupo.add(&steam_servidor);
     let aplicaciones_busqueda_grupo = adw::PreferencesGroup::builder()
         .title("Buscar aplicaciones")
         .description(
@@ -2497,7 +2511,8 @@ fn construir_ventana(aplicacion: &Application) {
     let catalogo_aplicaciones = gtk::Box::new(gtk::Orientation::Vertical, 18);
     let seleccionadas_aplicaciones = Rc::new(RefCell::new(Vec::<String>::new()));
     contenido_aplicaciones.append(&catalogo_aplicaciones);
-    contenido_aplicaciones.append(&aplicaciones_opciones_grupo);
+    contenido_aplicaciones.append(&sunshine_grupo);
+    contenido_aplicaciones.append(&steam_grupo);
 
     let mensaje_configuracion = gtk::Label::new(None);
     mensaje_configuracion.set_visible(false);
@@ -3409,8 +3424,14 @@ fn construir_ventana(aplicacion: &Application) {
         let aviso = aviso.clone();
         let boton_aplicar = boton_aplicar.clone();
         let ocupado = Rc::clone(&ocupado);
+        let sunshine_grupo = sunshine_grupo.clone();
+        let steam_grupo = steam_grupo.clone();
 
-        busqueda_aplicaciones.connect_search_changed(move |_| {
+        busqueda_aplicaciones.connect_search_changed(move |entrada| {
+            let consulta = entrada.text();
+            sunshine_grupo.set_visible(aplicaciones::coincide_especial("sunshine", &consulta));
+            steam_grupo.set_visible(aplicaciones::coincide_especial("steam", &consulta));
+
             recargar_aplicaciones(
                 &catalogo,
                 &contador,
@@ -4070,6 +4091,57 @@ fn construir_ventana(aplicacion: &Application) {
     }
 
     ventana.present();
+
+    // AppStream es un enriquecimiento local y secundario. La ventana y el
+    // catálogo curado ya están disponibles cuando empieza esta lectura.
+    {
+        let mut ids = aplicaciones::catalogo()
+            .iter()
+            .map(|ficha| ficha.id.to_string())
+            .collect::<Vec<_>>();
+        for id in seleccionadas_aplicaciones.borrow().iter() {
+            if !ids.iter().any(|actual| actual == id) {
+                ids.push(id.clone());
+            }
+        }
+
+        let (envio, recepcion) = mpsc::channel();
+        thread::spawn(move || {
+            let _ = envio.send(aplicaciones::leer_appstream_local(&ids));
+        });
+
+        let catalogo = catalogo_aplicaciones.clone();
+        let contador = contador_aplicaciones.clone();
+        let busqueda = busqueda_aplicaciones.clone();
+        let seleccionadas = Rc::clone(&seleccionadas_aplicaciones);
+        let raiz_appstream = raiz.clone();
+        let mensaje = mensaje_configuracion.clone();
+        let aviso_appstream = aviso.clone();
+        let aplicar = boton_aplicar.clone();
+        let ocupado_appstream = Rc::clone(&ocupado);
+
+        glib::timeout_add_local(Duration::from_millis(80), move || {
+            match recepcion.try_recv() {
+                Ok(Ok(presentaciones)) => {
+                    aplicaciones::guardar_presentaciones_locales(presentaciones);
+                    recargar_aplicaciones(
+                        &catalogo,
+                        &contador,
+                        &busqueda,
+                        &seleccionadas,
+                        &raiz_appstream,
+                        &mensaje,
+                        &aviso_appstream,
+                        &aplicar,
+                        &ocupado_appstream,
+                    );
+                    glib::ControlFlow::Break
+                }
+                Ok(Err(_)) | Err(TryRecvError::Disconnected) => glib::ControlFlow::Break,
+                Err(TryRecvError::Empty) => glib::ControlFlow::Continue,
+            }
+        });
+    }
 
     {
         let controles_actualizaciones: Vec<gtk::Widget> = vec![

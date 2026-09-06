@@ -392,6 +392,7 @@
       ];
 
       buildInputs = [
+        pkgs.appstream
         pkgs.gtk4
         pkgs.libadwaita
       ];
