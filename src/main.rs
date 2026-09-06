@@ -1,3 +1,4 @@
+mod actualizaciones;
 mod almacenamiento;
 mod aplicar;
 mod configuracion;
@@ -81,6 +82,8 @@ fn ayuda() {
     eprintln!("  korunix copias plan-restaurar <archivo.korunix-copia>");
     eprintln!("  korunix copias restaurar <archivo.korunix-copia>");
     eprintln!("  korunix historial");
+    eprintln!("  korunix actualizaciones");
+    eprintln!("  korunix actualizaciones buscar");
     eprintln!("  korunix canal");
     eprintln!("  korunix canal <estable|inestable>");
     eprintln!("  korunix apariencia");
@@ -943,6 +946,70 @@ fn mostrar_historial_copias() {
     }
 }
 
+fn imprimir_busqueda_actualizaciones(busqueda: &actualizaciones::ResultadoBusqueda) {
+    if !busqueda.hay_cambios {
+        println!("✓ No encontré novedades respecto a tu flake.lock actual.");
+        return;
+    }
+
+    println!("Hay novedades disponibles.");
+
+    for cambio in &busqueda.cambios_directos {
+        println!(
+            "  - {}: {} → {}",
+            cambio.nombre, cambio.antes, cambio.despues
+        );
+    }
+
+    if busqueda.cambios_internos > 0 {
+        println!(
+            "  - Cambios internos de dependencias: {}",
+            busqueda.cambios_internos
+        );
+    }
+}
+
+fn mostrar_actualizaciones(raiz: &Path) {
+    match actualizaciones::estado(raiz) {
+        Ok(estado) => {
+            println!("Actualizaciones");
+            println!("Canal: {}", estado.canal);
+            println!("Paquetes de NixOS actuales: {}", estado.revision_actual);
+
+            if estado.busqueda_antigua {
+                println!("Última búsqueda: ya no corresponde al flake.lock actual.");
+                println!("Busca otra vez antes de revisar novedades.");
+            } else if let Some(busqueda) = estado.busqueda {
+                print!("Última búsqueda: ");
+                imprimir_busqueda_actualizaciones(&busqueda);
+            } else {
+                println!("Última búsqueda: ninguna guardada.");
+            }
+
+            println!("NixOS no cambió.");
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
+fn buscar_actualizaciones(raiz: &Path) {
+    println!("Buscando actualizaciones…");
+    println!("Esta búsqueda consulta Internet, pero no cambia flake.lock ni NixOS.");
+
+    match actualizaciones::buscar(raiz) {
+        Ok(busqueda) => {
+            println!();
+            println!("Resultado de la búsqueda");
+            println!("Canal: {}", busqueda.canal);
+            imprimir_busqueda_actualizaciones(&busqueda);
+            println!("La búsqueda quedó guardada localmente para poder continuar después.");
+            println!("flake.lock no cambió.");
+            println!("NixOS no cambió.");
+        }
+        Err(error) => salir_con_error(&error),
+    }
+}
+
 fn mostrar_canal(raiz: &Path) {
     match configuracion::leer(&raiz.join("configuracion.toml")) {
         Ok(configuracion) => println!("Canal: {}", configuracion.canal),
@@ -1395,6 +1462,10 @@ fn main() {
             restaurar_copia_korunix(&raiz, archivo)
         }
         [comando] if comando == "historial" => mostrar_historial_copias(),
+        [comando] if comando == "actualizaciones" => mostrar_actualizaciones(&raiz),
+        [grupo, accion] if grupo == "actualizaciones" && accion == "buscar" => {
+            buscar_actualizaciones(&raiz)
+        }
         [comando] if comando == "canal" => mostrar_canal(&raiz),
         [comando, canal] if comando == "canal" => cambiar_canal(&raiz, canal),
         [comando] if comando == "apariencia" => mostrar_apariencia(&raiz),
