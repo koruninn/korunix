@@ -84,6 +84,15 @@ Estos frentes no se reabren sin una regresión nueva:
 
 ## Avance comprobado sin cierre: Copias → Historial → Restauración
 
+Avance funcional publicado en `desde-cero`:
+
+```text
+7e8d8881a7937e185c337cc2004f9f4e04d27ab5
+avanza copias historial y restauración
+```
+
+Este commit conserva el motor y la ruta gráfica principal ya probados. **No cierra el bloque**: los pendientes obligatorios de UX listados más abajo siguen abiertos hasta la puerta final.
+
 El motor y la ruta gráfica principal ya están muy avanzados, pero este bloque **no está cerrado**. Quedan pendientes obligatorios de experiencia visual que deben resolverse antes del cierre integral.
 
 Ya se comprobó:
