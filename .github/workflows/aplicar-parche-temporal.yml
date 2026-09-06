@@ -24,10 +24,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev libadwaita-1-dev pkg-config
 
-      - name: Aplicar el cambio
+      - name: Aplicar el cambio funcional
         run: |
-          git apply --recount --check .github/korunix.patch
-          git apply --recount .github/korunix.patch
+          git apply --recount --check \
+            --include=src/aplicaciones.rs \
+            --include=src/interfaz.rs \
+            .github/korunix.patch
+          git apply --recount \
+            --include=src/aplicaciones.rs \
+            --include=src/interfaz.rs \
+            .github/korunix.patch
           rm .github/korunix.patch
 
       - name: Formato e integridad
