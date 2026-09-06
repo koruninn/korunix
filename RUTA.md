@@ -45,7 +45,7 @@ cc2ff5ba028e49258be0b6dfb6eb4ba4ad8dfb6d
 Generación activa y persistente:
 
 ```text
-/nix/store/2f04ngymw4l9i4zdn7lzjrbvd7qgvf8f-nixos-system-korunix-26.11.20260831.34ab990
+/nix/store/6px8pcvsjfqr7r8vs6d0i3i3n30bk6jp-nixos-system-korunix-26.11.20260905.c043004
 ```
 
 Última puerta funcional:
@@ -210,18 +210,65 @@ candidata guardada
 → Apply normal rechaza el preview candidato para impedir una aplicación a medias
 ```
 
-La generación candidata quedó construida y protegida como preview real. El siguiente bloque debe conectar **esa misma generación**, sin rebuild, con:
+Tercer avance publicado:
 
 ```text
-Apply exacto
-→ persistir el flake.lock usado por ese preview
-→ registrar generación + TOML + lock como estado aplicado
-→ guardar generación + TOML + lock anteriores para rollback
-→ si algo falla, recuperar sistema y lock anteriores
-→ verificar activa = persistente = preview y lock = preview
+4cafd043ec68b2d4d91b5bce1fc1b03d0a730550
+aplica actualizaciones con rollback exacto
 ```
 
-Después se integra el flujo completo en la GUI en segundo plano.
+El ciclo completo ya quedó conectado:
+
+```text
+Preview candidato
+→ Apply activa exactamente esa generación, sin rebuild
+→ publica exactamente el flake.lock usado por el Preview
+→ guarda generación + configuracion.toml + flake.lock anteriores
+→ Rollback devuelve las tres piezas
+→ Apply del mismo Preview puede repetirse
+```
+
+Validación real:
+
+```text
+Apply candidato real
+→ activa = persistente = preview
+→ flake.lock = lock del preview
+
+Rollback real
+→ activa = persistente = generación anterior
+→ configuracion.toml anterior
+→ flake.lock anterior
+
+Apply real del MISMO preview otra vez
+→ activa = persistente = preview
+→ flake.lock = lock del preview
+
+Apply repetido
+→ inocuo
+
+cero unidades systemd fallidas
+```
+
+Generación activa y persistente después de la prueba:
+
+```text
+/nix/store/6px8pcvsjfqr7r8vs6d0i3i3n30bk6jp-nixos-system-korunix-26.11.20260905.c043004
+```
+
+Siguiente dentro de Actualizaciones:
+
+```text
+GUI
+→ estado local inmediato
+→ Buscar en segundo plano
+→ mostrar cambios humanos
+→ Preview en segundo plano
+→ Aplicar usa el mismo Apply exacto
+→ mostrar reinicio / nueva sesión
+```
+
+El bloque de Actualizaciones todavía no se mueve a «Cerrado» hasta probar esa experiencia gráfica.
 
 Objetivo:
 
