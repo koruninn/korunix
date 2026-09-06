@@ -37,6 +37,12 @@ Un cambio válido termina con:
 2. commit;
 3. push a la rama correspondiente.
 
+`desde-cero` mantiene además `RUTA.md` como hoja de continuidad operativa. `spec.md` sigue siendo la guía del comportamiento; `RUTA.md` registra dónde está el trabajo: último cierre funcional, generación aplicada cuando corresponda, validación real, bloque actual, pendientes y siguiente frente.
+
+Todo push a `desde-cero` debe revisar `RUTA.md`. Cuando una publicación cierra o cambia un bloque funcional, la misma publicación actualiza esa hoja para que el estado pueda reconstruirse desde Git aunque se pierda el contexto de un chat. El flujo normal es: código validado → commit funcional → actualización de `RUTA.md` → actualización de `spec.md` si cambió comportamiento → push atómico de `desde-cero` y `pruebas`.
+
+Una decisión humana reciente sigue teniendo prioridad sobre una nota vieja de la hoja de ruta. `RUTA.md` no se usa para reabrir comportamientos que ya quedaron cerrados sin una regresión nueva.
+
 No se declara terminado algo solamente porque compila.
 
 ## 3. Tecnologías base
