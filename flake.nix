@@ -1,8 +1,8 @@
-{
+{ # Descripción del flake
   description = "Korunix";
 
   inputs = {
-    # Core NixOS package repository
+    # Repositorio de paquetes de NixOS
     nixpkgs.url = "nixpkgs/nixos-unstable";
 
     # Anime Game Launcher

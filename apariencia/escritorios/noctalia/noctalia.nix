@@ -5,7 +5,6 @@
   ...
 }: {
   imports = [
-    inputs.noctalia.homeModules.default
     ./ajustes/barra.nix
     ./ajustes/dock.nix
     ./ajustes/bloqueo.nix
