@@ -1,0 +1,43 @@
+{
+  config,
+  inputs,
+  pkgs,
+  ...
+}: {
+  # Lista de paquetes instalados en el perfil del sistema
+  environment.systemPackages = with pkgs; [
+    alacritty
+    android-tools
+    birdfont
+    eog
+    fastfetch
+    figma-linux
+    fontforge
+    git
+    google-chrome
+    heroic
+    inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default
+    just
+    kdePackages.kate
+    kdePackages.kdenlive
+    lutris
+    nautilus
+    nautilus-open-any-terminal
+    onlyoffice-desktopeditors
+    peazip
+    polyglot
+    protonplus
+    rar
+    scrcpy
+    sunshine
+    thunderbird
+    tree
+    unrar
+    valent
+    vesktop
+    vlc
+    vscode
+    wget
+    xwayland-satellite
+  ];
+}
