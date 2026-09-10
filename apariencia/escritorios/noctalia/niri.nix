@@ -3,7 +3,7 @@
   programs.niri.enable = true;
 
   # 2. Inyectar el archivo KDL directamente en la ruta global de configuración de XDG
-  environment.etc."xdg/niri/config.kdl".text = ''
+  environment.etc."niri/config.kdl".text = ''
     // ----------------------------------------
     // ENTRADA (Teclado y Touchpad)
     // ----------------------------------------
