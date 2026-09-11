@@ -18,9 +18,14 @@
 
     find $out/better-lyrics -type f -name '*.js' -exec sed -i \
       -e 's/chrome\\.windows\\.onRemoved\\.addListener/chrome.windows?.onRemoved?.addListener/g' \
-      -e 's/chrome\\.windows\\.remove(/chrome.windows?.remove?(/g' \
-      -e 's/chrome\\.windows\\.create(/chrome.windows?.create?(/g' \
+      -e 's/chrome\\.windows\\.remove(/chrome.windows?.remove?.(/g' \
+      -e 's/chrome\\.windows\\.create(/chrome.windows?.create?.(/g' \
       {} +
+
+    if rg -q 'chrome\\.windows\\.onRemoved\\.addListener' $out/better-lyrics; then
+      echo "Better Lyrics: no se pudo aplicar la compatibilidad con chrome.windows" >&2
+      exit 1
+    fi
   '';
 
   pearDesktop = pkgs.pear-desktop.overrideAttrs (old: {
@@ -28,10 +33,7 @@
       substituteInPlace src/index.ts \
         --replace-fail \
           "  const win = new BrowserWindow(electronWindowSettings);" \
-          "  const win = new BrowserWindow(electronWindowSettings);
-
-  await session.defaultSession.loadExtension(\"${betterLyricsExtensions}/better-lyrics\", {allowFileAccess: true});
-  await session.defaultSession.loadExtension(\"${betterLyricsExtensions}/better-lyrics-shaders\", {allowFileAccess: true});"
+          "  const win = new BrowserWindow(electronWindowSettings);\n\n  await session.defaultSession.loadExtension(\"${betterLyricsExtensions}/better-lyrics\", {allowFileAccess: true});\n  await session.defaultSession.loadExtension(\"${betterLyricsExtensions}/better-lyrics-shaders\", {allowFileAccess: true});"
 
       substituteInPlace src/plugins/do-not-track/index.ts \
         --replace-fail \
