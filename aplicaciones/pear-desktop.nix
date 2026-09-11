@@ -30,19 +30,11 @@
 
   pearDesktop = pkgs.pear-desktop.overrideAttrs (old: {
     postPatch = (old.postPatch or "") + ''
-      python3 - <<'PY'
-from pathlib import Path
-path = Path("src/index.ts")
-text = path.read_text()
-needle = "  const win = new BrowserWindow(electronWindowSettings);"
-insert = '''  const win = new BrowserWindow(electronWindowSettings);
-
-  await session.defaultSession.loadExtension("${betterLyricsExtensions}/better-lyrics", {allowFileAccess: true});
-  await session.defaultSession.loadExtension("${betterLyricsExtensions}/better-lyrics-shaders", {allowFileAccess: true});'''
-if needle not in text:
-    raise SystemExit("Pear Desktop: no se encontró el punto de inserción de extensiones")
-path.write_text(text.replace(needle, insert, 1))
-PY
+      sed -i \
+        '/const win = new BrowserWindow(electronWindowSettings);/a\\
+      await session.defaultSession.loadExtension("${betterLyricsExtensions}/better-lyrics", {allowFileAccess: true});\
+      await session.defaultSession.loadExtension("${betterLyricsExtensions}/better-lyrics-shaders", {allowFileAccess: true});' \
+        src/index.ts
 
       substituteInPlace src/plugins/do-not-track/index.ts \
         --replace-fail \
