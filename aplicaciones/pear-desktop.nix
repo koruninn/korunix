@@ -22,7 +22,10 @@
       substituteInPlace src/index.ts \
         --replace-fail \
           "  const win = new BrowserWindow(electronWindowSettings);" \
-          "  const win = new BrowserWindow(electronWindowSettings);\n\n  await session.defaultSession.loadExtension(\"${betterLyricsExtensions}/better-lyrics\", {allowFileAccess: true});\n  await session.defaultSession.loadExtension(\"${betterLyricsExtensions}/better-lyrics-shaders\", {allowFileAccess: true});"
+          "  const win = new BrowserWindow(electronWindowSettings);
+
+  await session.defaultSession.loadExtension(\"${betterLyricsExtensions}/better-lyrics\", {allowFileAccess: true});
+  await session.defaultSession.loadExtension(\"${betterLyricsExtensions}/better-lyrics-shaders\", {allowFileAccess: true});"
     '';
   });
 in {
