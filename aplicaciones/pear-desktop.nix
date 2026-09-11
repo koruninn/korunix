@@ -15,6 +15,12 @@
     mkdir -p $out/better-lyrics $out/better-lyrics-shaders
     unzip -q ${betterLyrics} -d $out/better-lyrics
     unzip -q ${betterLyricsShaders} -d $out/better-lyrics-shaders
+
+    find $out/better-lyrics -type f -name '*.js' -exec sed -i \
+      -e 's/chrome\\.windows\\.onRemoved\\.addListener/chrome.windows?.onRemoved?.addListener/g' \
+      -e 's/chrome\\.windows\\.remove(/chrome.windows?.remove?(/g' \
+      -e 's/chrome\\.windows\\.create(/chrome.windows?.create?(/g' \
+      {} +
   '';
 
   pearDesktop = pkgs.pear-desktop.overrideAttrs (old: {
