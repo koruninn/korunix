@@ -1,7 +1,7 @@
 {pkgs, ...}: let
   betterLyrics = pkgs.fetchurl {
-    url = "https://github.com/better-lyrics/better-lyrics/releases/download/v2.3.3/chrome-v2.3.3.zip";
-    hash = "sha256-Vt2jVnlpX1ZfDrwHE6eSJb/yxijlfMX7n3yGucEaWZM=";
+    url = "https://github.com/better-lyrics/better-lyrics/releases/download/v2.4.0.7/chrome-v2.4.0.7.zip";
+    hash = "sha256-2J+SGl2WkXk2r9l0cRrL4dZQq8w9wVx5wVfQm3o4m3o=";
   };
 
   betterLyricsShaders = pkgs.fetchurl {
@@ -26,6 +26,16 @@
 
   await session.defaultSession.loadExtension(\"${betterLyricsExtensions}/better-lyrics\", {allowFileAccess: true});
   await session.defaultSession.loadExtension(\"${betterLyricsExtensions}/better-lyrics-shaders\", {allowFileAccess: true});"
+
+      substituteInPlace src/plugins/do-not-track/index.ts \
+        --replace-fail \
+          "    enabled: false," \
+          "    enabled: true,"
+
+      substituteInPlace src/plugins/discord/index.ts \
+        --replace-fail \
+          "    'enabled': false," \
+          "    'enabled': true,"
     '';
   });
 in {
