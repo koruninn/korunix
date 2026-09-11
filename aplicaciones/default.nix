@@ -12,6 +12,7 @@
     ./localsend.nix
     ./obs.nix
     ./paquetes.nix
+    ./pear-desktop.nix
     ./spicetify.nix
     ./steam.nix
   ];
