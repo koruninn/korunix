@@ -6,8 +6,11 @@
 
 let
   noctaliaConfig = pkgs.writeText "noctalia-config.toml" ''
-    [shell]
+    [accessibility]
     ui_scale = 0.9
+    high_contrast = false
+
+    [shell]
     corner_radius_scale = 1.0
     font_family = "sans-serif"
     lang = "es"
@@ -44,22 +47,19 @@ let
     alpha = 0.55
 
     [shell.panel]
-    transparency_mode = "transparent"
+    transparency_mode = "glass"
     borders = true
     shadow = false
-    launcher_placement = "centered"
-    clipboard_placement = "centered"
+    launcher_placement = "floating"
+    clipboard_placement = "floating"
     control_center_placement = "attached"
     wallpaper_placement = "attached"
     session_placement = "attached"
+    launcher_position = "center"
+    clipboard_position = "center"
     floating_offset = 8
     open_near_click_control_center = false
     open_near_click_launcher = false
-    launcher_categories = true
-    launcher_show_icons = true
-    launcher_compact = false
-    launcher_session_search = false
-    launcher_sort_by_usage = true
     open_near_click_clipboard = false
     open_near_click_wallpaper = false
     open_near_click_session = false
@@ -73,11 +73,10 @@ let
 
     [shell.screenshot]
     save_to_file = true
-    filename_pattern = "screenshot_%Y%m%d_%H%M%S"
+    directory = "~/Imágenes/Capturas de pantalla"
+    filename_pattern = "Captura de pantalla %Y-%m-%d %H-%M-%S"
     copy_to_clipboard = true
     freeze_screen = true
-    pipe_to_command = false
-    pipe_command = ""
 
     [bar]
     order = ["default"]
@@ -205,8 +204,6 @@ let
 
     [lockscreen]
     enabled = false
-    fingerprint = false
-    allow_empty_password = false
     blurred_desktop = true
     blur_intensity = 0.5
     tint_intensity = 0.6
@@ -216,10 +213,6 @@ let
     [calendar]
     enabled = true
     refresh_minutes = 15
-
-    [calendar.account.mi_google_cal]
-    type = "google"
-    name = "Google Calendar"
 
     [wallpaper]
     enabled = true
