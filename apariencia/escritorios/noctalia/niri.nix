@@ -255,6 +255,6 @@
 
     spawn-at-startup "noctalia"
     spawn-at-startup "xwayland-satellite"
-    include "/home/koru/.config/niri/noctalia.kdl"
+    include optional=true "~/.config/niri/noctalia.kdl"
   '';
 }
