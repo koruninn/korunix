@@ -31,9 +31,9 @@
   pearDesktop = pkgs.pear-desktop.overrideAttrs (old: {
     postPatch = (old.postPatch or "") + ''
       sed -i \
-        '/const win = new BrowserWindow(electronWindowSettings);/a\\
-      await session.defaultSession.loadExtension("${betterLyricsExtensions}/better-lyrics", {allowFileAccess: true});\
-      await session.defaultSession.loadExtension("${betterLyricsExtensions}/better-lyrics-shaders", {allowFileAccess: true});' \
+        '/const win = new BrowserWindow(electronWindowSettings);/a\
+  await session.defaultSession.loadExtension("${betterLyricsExtensions}/better-lyrics", {allowFileAccess: true});\
+  await session.defaultSession.loadExtension("${betterLyricsExtensions}/better-lyrics-shaders", {allowFileAccess: true});' \
         src/index.ts
 
       substituteInPlace src/plugins/do-not-track/index.ts \
