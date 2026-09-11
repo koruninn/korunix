@@ -16,17 +16,15 @@
     unzip -q ${betterLyrics} -d $out/better-lyrics
     unzip -q ${betterLyricsShaders} -d $out/better-lyrics-shaders
   '';
+
+  pearDesktop = pkgs.pear-desktop.overrideAttrs (old: {
+    postPatch = (old.postPatch or "") + ''
+      substituteInPlace src/index.ts \
+        --replace-fail \
+          "  const win = new BrowserWindow(electronWindowSettings);" \
+          "  const win = new BrowserWindow(electronWindowSettings);\n\n  await session.defaultSession.loadExtension(\"${betterLyricsExtensions}/better-lyrics\", {allowFileAccess: true});\n  await session.defaultSession.loadExtension(\"${betterLyricsExtensions}/better-lyrics-shaders\", {allowFileAccess: true});"
+    '';
+  });
 in {
-  environment.systemPackages = [
-    (pkgs.symlinkJoin {
-      name = "pear-desktop-better-lyrics";
-      paths = [pkgs.pear-desktop];
-      nativeBuildInputs = [pkgs.makeWrapper];
-      postBuild = ''
-        wrapProgram $out/bin/pear-desktop \
-          --add-flags "--load-extension=${betterLyricsExtensions}/better-lyrics" \
-          --add-flags "--load-extension=${betterLyricsExtensions}/better-lyrics-shaders"
-      '';
-    })
-  ];
+  environment.systemPackages = [pearDesktop];
 }
