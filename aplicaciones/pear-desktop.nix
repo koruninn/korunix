@@ -1,7 +1,7 @@
 {pkgs, ...}: let
   betterLyrics = pkgs.fetchurl {
     url = "https://github.com/better-lyrics/better-lyrics/releases/download/v2.4.0.7/chrome-v2.4.0.7.zip";
-    hash = "sha256-2J+SGl2WkXk2r9l0cRrL4dZQq8w9wVx5wVfQm3o4m3o=";
+    hash = "sha256-2PnSGnaQAUDaR9MPzqSZSZnu7vQ7ymrOQJP4Yh1WAyQ=";
   };
 
   betterLyricsShaders = pkgs.fetchurl {
