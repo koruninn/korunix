@@ -10,7 +10,7 @@
   };
 
   betterLyricsExtensions = pkgs.runCommand "pear-desktop-better-lyrics-extensions" {
-    nativeBuildInputs = [pkgs.unzip];
+    nativeBuildInputs = [pkgs.unzip pkgs.ripgrep];
   } ''
     mkdir -p $out/better-lyrics $out/better-lyrics-shaders
     unzip -q ${betterLyrics} -d $out/better-lyrics
@@ -30,10 +30,19 @@
 
   pearDesktop = pkgs.pear-desktop.overrideAttrs (old: {
     postPatch = (old.postPatch or "") + ''
-      substituteInPlace src/index.ts \
-        --replace-fail \
-          "  const win = new BrowserWindow(electronWindowSettings);" \
-          "  const win = new BrowserWindow(electronWindowSettings);\n\n  await session.defaultSession.loadExtension(\"${betterLyricsExtensions}/better-lyrics\", {allowFileAccess: true});\n  await session.defaultSession.loadExtension(\"${betterLyricsExtensions}/better-lyrics-shaders\", {allowFileAccess: true});"
+      python3 - <<'PY'
+from pathlib import Path
+path = Path("src/index.ts")
+text = path.read_text()
+needle = "  const win = new BrowserWindow(electronWindowSettings);"
+insert = '''  const win = new BrowserWindow(electronWindowSettings);
+
+  await session.defaultSession.loadExtension("${betterLyricsExtensions}/better-lyrics", {allowFileAccess: true});
+  await session.defaultSession.loadExtension("${betterLyricsExtensions}/better-lyrics-shaders", {allowFileAccess: true});'''
+if needle not in text:
+    raise SystemExit("Pear Desktop: no se encontró el punto de inserción de extensiones")
+path.write_text(text.replace(needle, insert, 1))
+PY
 
       substituteInPlace src/plugins/do-not-track/index.ts \
         --replace-fail \
