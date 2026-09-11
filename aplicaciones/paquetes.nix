@@ -25,7 +25,6 @@
     nautilus-open-any-terminal
     onlyoffice-desktopeditors
     peazip
-    pear-desktop
     polyglot
     protonplus
     rar
