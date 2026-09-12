@@ -1,4 +1,4 @@
-{ pkgs, ... }: {
+{pkgs, ...}: {
   # 1. Activar el gestor de ventanas Niri (Wayland nativo) a nivel de sistema
   programs.niri.enable = true;
 
@@ -79,10 +79,27 @@
     }
 
     window-rule {
+        prefer-no-csd true
+    }
+    window-rule {
+        clip-to-geometry true
+    }
+
+    window-rule {
         background-effect {
             blur true
             xray false
         }
+    }
+
+    window-rule {
+        match is-active=true
+        opacity 0.85
+    }
+
+    window-rule {
+        match is-active=false
+        opacity 0.50
     }
 
     layer-rule {
@@ -226,7 +243,7 @@
         Mod+Shift+P { power-off-monitors; }
     }
 
-    // Preferencia de iconos exclusiva de la sesión Niri.
+    // Configuración de Noctalia
     spawn-at-startup "dconf" "write" "/org/gnome/desktop/interface/icon-theme" "'Hatter-Slate'"
     spawn-at-startup "noctalia"
     spawn-at-startup "xwayland-satellite"

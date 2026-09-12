@@ -89,11 +89,11 @@
     shadow = false
     contact_shadow = false
     panel_overlap = 1
-    radius = 12
-    radius_top_left = 12
-    radius_top_right = 12
-    radius_bottom_left = 12
-    radius_bottom_right = 12
+    radius = 24
+    radius_top_left = 24
+    radius_top_right = 24
+    radius_bottom_left = 24
+    radius_bottom_right = 24
     margin_ends = 180
     margin_edge = 10
     margin_opposite_edge = 0
@@ -134,11 +134,11 @@
     item_spacing = 6
     background_opacity = 0.50
     shadow = false
-    radius = 16
-    radius_top_left = 16
-    radius_top_right = 16
-    radius_bottom_left = 16
-    radius_bottom_right = 16
+    radius = 24
+    radius_top_left = 24
+    radius_top_right = 24
+    radius_bottom_left = 24
+    radius_bottom_right = 24
     margin_ends = 0
     margin_edge = 8
     show_running = true
@@ -197,7 +197,7 @@
     privacy = true
 
     [lockscreen]
-    enabled = false
+    enabled = true
     blurred_desktop = true
     blur_intensity = 0.5
     tint_intensity = 0.6
