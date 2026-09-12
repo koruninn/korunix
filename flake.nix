@@ -82,8 +82,9 @@
       pkgs = import nixpkgsSeleccionado {
         inherit system;
         config.allowUnfree = true;
+        overlays = [affinity-nix.overlays.default];
       };
-      affinity = affinity-nix.packages.${system}.affinity-v3;
+      affinity = pkgs.affinity-v3;
     in {
       name = nombre;
       value = lib.nixosSystem {
@@ -102,6 +103,7 @@
           inputs.spicetify-nix.nixosModules.default
           {
             networking.hostName = nombre;
+            nixpkgs.overlays = [affinity-nix.overlays.default];
             environment.systemPackages = [
               pkgs.alejandra
               affinity
