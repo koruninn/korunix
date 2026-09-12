@@ -11,7 +11,6 @@
     extraGroups = [ "networkmanager" "wheel" ];
   };
 
-  programs.firefox.enable = true;
   nixpkgs.config.allowUnfree = true;
 
   system.stateVersion = "26.05";
