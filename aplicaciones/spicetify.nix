@@ -6,7 +6,7 @@
 }: let
   spicePkgs = inputs.spicetify-nix.legacyPackages.${pkgs.stdenv.hostPlatform.system};
   extensions = spicePkgs.extensions;
-  defaultTheme = spicePkgs.themes.default;
+  defaultTheme = spicePkgs.themes.text;
 
   runtime = pkgs.writeShellApplication {
     name = "korunix-spotify-runtime";
