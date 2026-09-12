@@ -165,7 +165,6 @@
       "anime-game-launcher",
       "honkers-railway-launcher",
       "vesktop",
-      "affinity.exe",
       "LocalSend",
       "code",
       "com.obsproject.Studio",
