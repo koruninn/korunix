@@ -2,11 +2,10 @@
 
 {
   imports = [
-    ./plasma.nix
     ./noctalia
   ];
 
-  # Servidor X (necesario para compatibilidad de teclado/XWayland)
+  # Servidor X para compatibilidad con aplicaciones y XWayland.
   services.xserver.enable = true;
   services.xserver.xkb = {
     layout = "es";
@@ -14,9 +13,9 @@
   };
   console.keyMap = "es";
 
-  # Gestor de inicio de sesión SDDM
+  # Gestor de inicio de sesión SDDM.
   services.displayManager.sddm = {
-  enable = true;
-  wayland.enable = true; # Ejecuta SDDM nativamente en Wayland
- };
+    enable = true;
+    wayland.enable = true;
+  };
 }
