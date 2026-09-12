@@ -253,6 +253,9 @@
         Mod+Shift+P { power-off-monitors; }
     }
 
+    // Preferencia de iconos exclusiva de la sesión Niri.
+    // Plasma no ejecuta este archivo y conserva su propia configuración.
+    spawn-at-startup "dconf" "write" "/org/gnome/desktop/interface/icon-theme" "'Hatter-Slate'"
     spawn-at-startup "noctalia"
     spawn-at-startup "xwayland-satellite"
     include optional=true "~/.config/niri/noctalia.kdl"
