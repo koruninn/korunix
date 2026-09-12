@@ -3,7 +3,8 @@
   pkgs,
   ...
 }: {
-  imports = [    
+  imports = [
+    ./gtk.nix
     ./escritorios
     ./greeter
   ];
