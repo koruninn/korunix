@@ -154,10 +154,10 @@
     inactive_opacity = 0.85
     show_instance_count = true
     show_dots = true
-    launcher_position = "start"
+    launcher_position = "none"
     launcher_icon = "grid-dots"
     pinned = [
-      "firefox",
+      "zen",
       "org.gnome.Nautilus",
       "spotify",
       "steam",
@@ -245,7 +245,24 @@
       "alacritty",
       "gtk3",
       "gtk4",
-      "niri"
+      "niri",
+      "qt"
+    ]
+    enable_community_templates = true
+    community_ids = [
+      "blender",
+      "darktable",
+      "discord",
+      "gimp",
+      "heroiclauncher",
+      "inkscape",
+      "libreoffice",
+      "obsidian",
+      "prismlauncher",
+      "spicetify",
+      "steam",
+      "vscode",
+      "zen-browser"
     ]
   '';
 in {
