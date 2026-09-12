@@ -17,9 +17,9 @@
     # NixOS stable para los equipos que requieren una base estable.
     nixpkgs-stable.url = "nixpkgs/nixos-26.05";
 
-    # Nixpkgs exacto usado por affinity-nix, para que sus derivaciones
+    # Nixpkgs exacto fijado por affinity-nix para que sus derivaciones
     # coincidan con los artefactos publicados en cache.forall.systems.
-    affinity-nixpkgs.url = "github:NixOS/nixpkgs/ac6b2166e7a9375683b8e98f860f273222337b16";
+    affinity-nixpkgs.url = "github:NixOS/nixpkgs/dc5d91f840324650bac8c379428c7037a416959a";
 
     # Anime Game Launcher
     aagl.url = "github:ezKEa/aagl-gtk-on-nix";
