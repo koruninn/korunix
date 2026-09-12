@@ -4,7 +4,7 @@
   ...
 }: {
   imports = [
-    ./gtk.nix
+    ./hatter.nix
     ./escritorios
     ./greeter
   ];
