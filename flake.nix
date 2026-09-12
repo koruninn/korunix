@@ -17,6 +17,10 @@
     # NixOS stable para los equipos que requieren una base estable.
     nixpkgs-stable.url = "nixpkgs/nixos-26.05";
 
+    # Nixpkgs exacto usado por affinity-nix, para que sus derivaciones
+    # coincidan con los artefactos publicados en cache.forall.systems.
+    affinity-nixpkgs.url = "github:NixOS/nixpkgs/ac6b2166e7a9375683b8e98f860f273222337b16";
+
     # Anime Game Launcher
     aagl.url = "github:ezKEa/aagl-gtk-on-nix";
     aagl.inputs.nixpkgs.follows = "nixpkgs";
@@ -55,6 +59,7 @@
 
   outputs = {
     affinity-nix,
+    affinity-nixpkgs,
     alejandra,
     figma-linux-next,
     nix-flatpak,
@@ -82,9 +87,13 @@
       pkgs = import nixpkgsSeleccionado {
         inherit system;
         config.allowUnfree = true;
+      };
+      affinityPkgs = import affinity-nixpkgs {
+        inherit system;
+        config.allowUnfree = true;
         overlays = [affinity-nix.overlays.default];
       };
-      affinity = pkgs.affinity-v3;
+      affinity = affinityPkgs.affinity-v3;
     in {
       name = nombre;
       value = lib.nixosSystem {
@@ -103,7 +112,6 @@
           inputs.spicetify-nix.nixosModules.default
           {
             networking.hostName = nombre;
-            nixpkgs.overlays = [affinity-nix.overlays.default];
             environment.systemPackages = [
               pkgs.alejandra
               affinity
