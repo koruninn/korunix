@@ -269,6 +269,21 @@ in {
   environment.etc."noctalia/config.toml".source = noctaliaConfig;
 
   system.activationScripts.noctaliaConfig.text = ''
+    # La interfaz de Noctalia guarda sus cambios en settings.toml, que tiene
+    # prioridad sobre config.toml. Eliminamos solo el bloque de plantillas para
+    # que la selección declarativa de Korunix sea la fuente de verdad por defecto.
+    settings_file=${config.users.users.koru.home}/.local/state/noctalia/settings.toml
+    if [ -f "$settings_file" ]; then
+      tmp_file="$settings_file.korunix-tmp"
+      awk '
+        /^\\[theme\\.templates(\\.|)\\]/ { skip=1; next }
+        skip && /^\\[/ { skip=0 }
+        !skip { print }
+      ' "$settings_file" > "$tmp_file"
+      install -m 0644 -o ${config.users.users.koru.name} -g ${config.users.users.koru.group} "$tmp_file" "$settings_file"
+      rm -f "$tmp_file"
+    fi
+
     install -d -m 0755 \
       -o ${config.users.users.koru.name} \
       -g ${config.users.users.koru.group} \
