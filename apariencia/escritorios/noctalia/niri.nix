@@ -2,6 +2,10 @@
   # 1. Activar el gestor de ventanas Niri (Wayland nativo) a nivel de sistema
   programs.niri.enable = true;
 
+  # Niri debe usar la configuración declarativa de Korunix aunque Noctalia cree
+  # una configuración de usuario para sus fragmentos dinámicos.
+  environment.variables.NIRI_CONFIG = "/etc/niri/config.kdl";
+
   # 2. Inyectar el archivo KDL directamente en la ruta global de configuración de XDG
   environment.etc."niri/config.kdl".text = ''
     // ----------------------------------------
