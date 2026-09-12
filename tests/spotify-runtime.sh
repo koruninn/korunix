@@ -53,6 +53,7 @@ bash "$root/aplicaciones/spicetify-runtime.sh" --launch spotify:album:abc
 [[ $(cat "$HOME/launched") == 'spotify:album:abc' ]]
 
 printf 'noctalia-m3-tonal-spot\n' > "$HOME/.config/spicetify/Themes/Comfy/color.ini"
+printf 'personal\n' > "$HOME/.config/spicetify/Themes/Comfy/personal.css"
 bash "$root/aplicaciones/spicetify-runtime.sh" --prepare
 [[ $(wc -l < "$HOME/applies") == 1 ]]
 
@@ -63,6 +64,7 @@ printf 'new-css\n' > "$tmp/comfy2/user.css"
 export KORUNIX_COMFY_SOURCE=$tmp/comfy2
 bash "$root/aplicaciones/spicetify-runtime.sh" --prepare
 [[ $(cat "$HOME/.config/spicetify/Themes/Comfy/color.ini") == 'noctalia-m3-tonal-spot' ]]
+[[ $(cat "$HOME/.config/spicetify/Themes/Comfy/personal.css") == 'personal' ]]
 [[ $(cat "$HOME/.config/spicetify/Themes/Comfy/user.css") == 'new-css' ]]
 [[ $(wc -l < "$HOME/applies") == 2 ]]
 

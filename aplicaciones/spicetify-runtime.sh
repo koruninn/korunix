@@ -52,7 +52,7 @@ if [[ ! -f $marker || $(cat "$marker") != "$version" || ! -x $data_dir/spotify ]
   mv "$stage/spotify.korunix" "$stage/spotify"
 
   # Conservar los colores de Noctalia al actualizar la estructura de Comfy.
-  rsync -rL --delete --exclude=/color.ini "$KORUNIX_COMFY_SOURCE/" "$config_dir/Themes/Comfy/"
+  rsync -rL --exclude=/color.ini "$KORUNIX_COMFY_SOURCE/" "$config_dir/Themes/Comfy/"
   chmod -R u+w "$config_dir/Themes/Comfy"
   if [[ ! -f $config_dir/Themes/Comfy/color.ini ]]; then
     cp "$KORUNIX_COMFY_SOURCE/color.ini" "$config_dir/Themes/Comfy/color.ini"
