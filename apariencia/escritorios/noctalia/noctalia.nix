@@ -283,7 +283,6 @@ in {
           "["*)
             skip_templates=false
             ;;
-            ;;
         esac
         if [ "$skip_templates" = false ]; then
           printf '%s\n' "$line"
