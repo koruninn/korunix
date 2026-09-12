@@ -75,6 +75,7 @@
         config.allowUnfree = true;
         overlays = [ affinity-nix.overlays.default ];
       };
+      affinity = (pkgs.extend affinity-nix.overlays.default).affinity-v3;
     in {
       name = nombre;
       value = lib.nixosSystem {
@@ -96,7 +97,7 @@
             nixpkgs.overlays = [ affinity-nix.overlays.default ];
             environment.systemPackages = [
               pkgs.alejandra
-              pkgs.affinity-v3
+              affinity
             ];
           }
         ];
