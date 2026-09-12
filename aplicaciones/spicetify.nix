@@ -13,6 +13,5 @@ in {
       spicyLyrics
       oneko
     ];
-    theme = spicePkgs.themes.comfy;
   };
 }
