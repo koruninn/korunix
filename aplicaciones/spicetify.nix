@@ -6,17 +6,48 @@
 }: let
   spicePkgs = inputs.spicetify-nix.legacyPackages.${pkgs.stdenv.hostPlatform.system};
   extensions = spicePkgs.extensions;
-  defaultTheme = spicePkgs.themes.text;
+
+  # Cambia solamente esta línea para elegir cualquier tema del catálogo.
+  theme = spicePkgs.themes.text;
+
+  enabledExtensions = [
+    extensions.adblock
+    extensions.spicyLyrics
+    extensions.oneko
+  ] ++ (theme.requiredExtensions or []);
+  asFlag = enabled: if enabled then "1" else "0";
+  extensionManifest = pkgs.writeText "korunix-spicetify-extensions" (
+    lib.concatMapStringsSep "\n"
+      (extension: "${toString extension.src}/${extension.name}\t${extension.name}")
+      enabledExtensions
+    + "\n"
+  );
+  experimentalFeatures = lib.any (extension: extension.experimentalFeatures or false) enabledExtensions;
+  themePatches = pkgs.writeText "korunix-spicetify-patches.ini" (
+    lib.generators.toINI {} {Patch = theme.patches or {};}
+  );
+  themeSetup = pkgs.writeShellScript "korunix-spicetify-theme-setup" (theme.extraCommands or "");
+  themeAdditionalCss = pkgs.writeText "korunix-spicetify-additional.css" (theme.additionalCss or "");
+  paletteFallback = spicePkgs.themes.default.src;
 
   runtime = pkgs.writeShellApplication {
     name = "korunix-spotify-runtime";
-    runtimeInputs = with pkgs; [coreutils gnugrep gnused psmisc rsync util-linux];
+    runtimeInputs = with pkgs; [coreutils gawk gnugrep gnused psmisc rsync util-linux];
     text = ''
       export KORUNIX_SPOTIFY_SOURCE=${lib.escapeShellArg "${pkgs.spotify}/share/spotify"}
-      export KORUNIX_DEFAULT_SOURCE=${lib.escapeShellArg (toString defaultTheme.src)}
-      export KORUNIX_ADBLOCK_SOURCE=${lib.escapeShellArg "${extensions.adblock.src}/${extensions.adblock.name}"}
-      export KORUNIX_LYRICS_SOURCE=${lib.escapeShellArg "${extensions.spicyLyrics.src}/${extensions.spicyLyrics.name}"}
-      export KORUNIX_ONEKO_SOURCE=${lib.escapeShellArg "${extensions.oneko.src}/${extensions.oneko.name}"}
+      export KORUNIX_THEME_NAME=${lib.escapeShellArg theme.name}
+      export KORUNIX_THEME_SOURCE=${lib.escapeShellArg (toString theme.src)}
+      export KORUNIX_THEME_INJECT_CSS=${asFlag (theme.injectCss or true)}
+      export KORUNIX_THEME_INJECT_JS=${asFlag (theme.injectThemeJs or true)}
+      export KORUNIX_THEME_REPLACE_COLORS=${asFlag (theme.replaceColors or true)}
+      export KORUNIX_THEME_OVERWRITE_ASSETS=${asFlag (theme.overwriteAssets or false)}
+      export KORUNIX_THEME_HOME_CONFIG=${asFlag (theme.homeConfig or true)}
+      export KORUNIX_THEME_EXPERIMENTAL_FEATURES=${asFlag experimentalFeatures}
+      export KORUNIX_THEME_EXTENSIONS=${lib.escapeShellArg extensionManifest}
+      export KORUNIX_THEME_PATCHES=${lib.escapeShellArg themePatches}
+      export KORUNIX_THEME_SETUP=${lib.escapeShellArg themeSetup}
+      export KORUNIX_THEME_ADDITIONAL_CSS=${lib.escapeShellArg themeAdditionalCss}
+      export KORUNIX_PALETTE_FALLBACK=${lib.escapeShellArg (toString paletteFallback)}
       export KORUNIX_SPICETIFY_CLI=${lib.escapeShellArg "${pkgs.spicetify-cli}/bin/spicetify"}
       ${builtins.readFile ./spicetify-runtime.sh}
     '';
@@ -47,11 +78,9 @@
     ln -s ${pkgs.spotify}/share/icons "$out/share/icons"
   '';
 in {
-  # Noctalia escribe color.ini en el hogar del usuario; Spicetify lo aplica
-  # a una copia modificable de Spotify preparada desde el paquete Nix.
-  environment.systemPackages = [application];
+  environment.systemPackages = [application] ++ (theme.extraPkgs or []);
   systemd.user.services.korunix-spotify-prepare = {
-    description = "Preparar Spotify con Default y los colores de Noctalia";
+    description = "Preparar Spotify con ${theme.name} y los colores de Noctalia";
     wantedBy = ["default.target"];
     serviceConfig = {
       Type = "oneshot";
