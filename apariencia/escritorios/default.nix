@@ -3,6 +3,7 @@
 {
   imports = [
     ./plasma.nix
+    ./plasma-gtk.nix
     ./noctalia
   ];
 
