@@ -33,10 +33,6 @@
         focus-follows-mouse max-scroll-amount="0%"
     }
 
-    environment {
-        QT_QPA_PLATFORMTHEME "qt6ct"
-    }
-
     output "DP-1" {
         mode "1920x1080@120.000"
         scale 1
@@ -69,7 +65,7 @@
     }
 
     window-rule {
-        match app-id=r#"firefox$"# title="^Picture-in-Picture$"
+        match app-id=r#"zen$"# title="^Picture-in-Picture$"
         open-floating true
     }
 
@@ -81,7 +77,7 @@
     }
 
     layer-rule {
-        match namespace="^noctalia-(bar-[^\"]+|notification|dock|panel|attached-panel|osd)$"
+        match namespace=r#"^noctalia-(bar-[^\"]+|notification|dock|panel|attached-panel|osd)$"#
         background-effect {
             xray false
         }
@@ -153,17 +149,17 @@
         Mod+Shift+L     { focus-monitor-right; }
 
         Mod+Shift+Ctrl+Left  { move-column-to-monitor-left; }
-        Mod+Shift+Ctrl+Down  { move-column-to-monitor-down; }
-        Mod+Shift+Ctrl+Up    { move-column-to-monitor-up; }
+        Mod+Shift+Ctrl+Down  { move-window-down; }
+        Mod+Shift+Ctrl+Up    { move-window-up; }
         Mod+Shift+Ctrl+Right { move-column-to-monitor-right; }
         Mod+Shift+Ctrl+H     { move-column-to-monitor-left; }
-        Mod+Shift+Ctrl+J     { move-column-to-monitor-down; }
-        Mod+Shift+Ctrl+K     { move-column-to-monitor-up; }
+        Mod+Shift+Ctrl+J     { move-window-down; }
+        Mod+Shift+Ctrl+K     { move-window-up; }
         Mod+Shift+Ctrl+L     { move-column-to-monitor-right; }
 
         // Abrir Gestor de Archivos e Internet
         Mod+E { spawn "nautilus"; }
-        Mod+B { spawn "firefox"; }
+        Mod+B { spawn "zen"; }
 
         Mod+Page_Down      { focus-workspace-down; }
         Mod+Page_Up        { focus-workspace-up; }
