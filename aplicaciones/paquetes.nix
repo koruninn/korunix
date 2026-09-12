@@ -4,6 +4,10 @@
   pkgs,
   ...
 }: {
+  # Acceso a dispositivos y medios extraíbles desde aplicaciones GTK.
+  services.gvfs.enable = true;
+  services.udisks2.enable = true;
+
   # Lista de paquetes instalados en el perfil del sistema
   environment.systemPackages = with pkgs; [
     alacritty
