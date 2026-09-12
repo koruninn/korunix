@@ -85,7 +85,6 @@
           ./apariencia
           inputs.aagl.nixosModules.default
           inputs.noctalia.nixosModules.default
-          inputs.spicetify-nix.nixosModules.default
           {
             networking.hostName = nombre;
             environment.systemPackages = [
