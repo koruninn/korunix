@@ -15,12 +15,13 @@ let
     installPhase = ''
       runHook preInstall
       mkdir -p $out/share/icons
+      cp -r Hatter $out/share/icons/
       cp -r Hatter-Slate $out/share/icons/
       runHook postInstall
     '';
 
     meta = {
-      description = "Tema de iconos Hatter Slate";
+      description = "Tema de iconos Hatter con variante Slate";
       homepage = "https://github.com/Mibea/Hatter";
       license = lib.licenses.gpl3Only;
       platforms = lib.platforms.linux;
