@@ -6,17 +6,26 @@
   # una configuración de usuario para sus fragmentos dinámicos.
   environment.variables.NIRI_CONFIG = "/etc/niri/config.kdl";
 
-  # Aislar la sesión Niri de la identidad de escritorio de Plasma. Las
-  # aplicaciones lanzadas desde Niri deben identificarse como una sesión Niri
-  # y no seleccionar automáticamente integraciones visuales de KDE.
-  environment.etc."niri/session-environment.sh".text = ''
-    export XDG_CURRENT_DESKTOP=Niri
-    export XDG_SESSION_DESKTOP=niri
-    export DESKTOP_SESSION=niri
-  '';
-
   # 2. Inyectar el archivo KDL directamente en la ruta global de configuración de XDG
   environment.etc."niri/config.kdl".text = ''
+    // ----------------------------------------
+    // SESIÓN AISLADA DE PLASMA
+    // ----------------------------------------
+    // Estas variables afectan únicamente a los procesos que Niri lanza.
+    // GTK y Qt no deben detectar Plasma como escritorio activo.
+    environment {
+        XDG_CURRENT_DESKTOP "niri"
+        XDG_SESSION_DESKTOP "niri"
+        XDG_SESSION_TYPE "wayland"
+        QT_QPA_PLATFORM "wayland"
+        GDK_BACKEND "wayland"
+        QT_QPA_PLATFORMTHEME null
+        QT_QPA_PLATFORMTHEME_QT6 null
+        KDE_FULL_SESSION null
+        KDE_SESSION_VERSION null
+        KDE_SESSION_UID null
+    }
+
     // ----------------------------------------
     // ENTRADA (Teclado y Touchpad)
     // ----------------------------------------
@@ -25,24 +34,15 @@
             xkb {
                 // Puedes definir reglas, modelo, distribución, variantes u opciones aquí.
             }
-
-            // Activar Bloq Num al arrancar
             numlock
         }
-
         touchpad {
             tap
             natural-scroll
         }
-
         mouse {
-            // Configuraciones de ratón aquí si las necesitas
         }
-
-        // Hace que el ratón salte al centro de las ventanas enfocadas
         warp-mouse-to-focus
-
-        // Seguir el foco con el ratón de forma automática
         focus-follows-mouse max-scroll-amount="0%"
     }
 
@@ -65,7 +65,6 @@
     }
 
     animations {
-        // Configuraciones de animaciones aquí
     }
 
     window-rule {
@@ -104,7 +103,6 @@
     }
 
     binds {
-        // Core Noctalia binds
         Mod+Space { spawn "noctalia" "msg" "panel-toggle" "launcher"; }
         Mod+S { spawn "noctalia" "msg" "panel-toggle" "control-center"; }
         Mod+Comma { spawn "noctalia" "msg" "settings-toggle"; }
