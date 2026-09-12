@@ -22,6 +22,7 @@
     password_style = "default"
     avatar_path = "${./.face}/avatar.jpg"
     settings_show_advanced = false
+    middle_click_opens_widget_settings = true
     show_location = true
     launch_apps_as_systemd_services = false
     screen_time_enabled = false
