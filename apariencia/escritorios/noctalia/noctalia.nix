@@ -20,7 +20,7 @@
     niri_overview_type_to_launch_enabled = false
     polkit_agent = true
     password_style = "default"
-    avatar_path = "${./.face}/avatar.jpg"
+    avatar_path = "${./.face/avatar.jpg}"
     settings_show_advanced = false
     show_location = true
     launch_apps_as_systemd_services = false
@@ -244,8 +244,7 @@
       "alacritty",
       "gtk3",
       "gtk4",
-      "niri",
-      "qt"
+      "niri"
     ]
     enable_community_templates = true
     community_ids = [
