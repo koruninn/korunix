@@ -8,7 +8,7 @@
   extensions = spicePkgs.extensions;
 
   # Cambia solamente esta línea para elegir cualquier tema del catálogo.
-  theme = spicePkgs.themes.text;
+  theme = spicePkgs.themes.defaultDynamic;
 
   enabledExtensions = [
     extensions.adblock
