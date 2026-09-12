@@ -52,8 +52,6 @@
     control_center_placement = "attached"
     wallpaper_placement = "attached"
     session_placement = "attached"
-    launcher_position = "center"
-    clipboard_position = "center"
     floating_offset = 8
     open_near_click_control_center = false
     open_near_click_launcher = false
@@ -275,11 +273,7 @@ in {
     settings_file=${config.users.users.koru.home}/.local/state/noctalia/settings.toml
     if [ -f "$settings_file" ]; then
       tmp_file="$settings_file.korunix-tmp"
-      awk '
-        /^\\[theme\\.templates(\\.|)\\]/ { skip=1; next }
-        skip && /^\\[/ { skip=0 }
-        !skip { print }
-      ' "$settings_file" > "$tmp_file"
+      sed '/^\[theme\.templates\]/,/^\[/ { /^\[theme\.templates\]/d; /^\[/!d; }' "$settings_file" > "$tmp_file"
       install -m 0644 -o ${config.users.users.koru.name} -g ${config.users.users.koru.group} "$tmp_file" "$settings_file"
       rm -f "$tmp_file"
     fi
