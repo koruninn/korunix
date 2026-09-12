@@ -273,7 +273,22 @@ in {
     settings_file=${config.users.users.koru.home}/.local/state/noctalia/settings.toml
     if [ -f "$settings_file" ]; then
       tmp_file="$settings_file.korunix-tmp"
-      sed '/^\[theme\.templates\]/,/^\[/ { /^\[theme\.templates\]/d; /^\[/!d; }' "$settings_file" > "$tmp_file"
+      skip_templates=false
+      while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+          "[theme.templates]")
+            skip_templates=true
+            continue
+            ;;
+          "["*)
+            skip_templates=false
+            ;;
+            ;;
+        esac
+        if [ "$skip_templates" = false ]; then
+          printf '%s\n' "$line"
+        fi
+      done < "$settings_file" > "$tmp_file"
       install -m 0644 -o ${config.users.users.koru.name} -g ${config.users.users.koru.group} "$tmp_file" "$settings_file"
       rm -f "$tmp_file"
     fi
