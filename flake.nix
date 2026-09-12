@@ -66,10 +66,6 @@
         else nixpkgs;
       system = equipo.arquitectura;
       lib = nixpkgsSeleccionado.lib;
-      pkgs = import nixpkgsSeleccionado {
-        inherit system;
-        config.allowUnfree = true;
-      };
     in {
       name = nombre;
       value = lib.nixosSystem {
@@ -81,13 +77,8 @@
         modules = [
           ./equipos/${nombre}
           ./modulos/base
-          ./aplicaciones
-          inputs.aagl.nixosModules.default
           {
             networking.hostName = nombre;
-            environment.systemPackages = [
-              pkgs.alejandra
-            ];
           }
         ];
       };
