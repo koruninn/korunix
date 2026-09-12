@@ -1,9 +1,12 @@
-{ # Descripción del flake
+{
   description = "Korunix";
 
   inputs = {
-    # Repositorio de paquetes de NixOS
+    # NixOS unstable para los equipos que siguen el canal de desarrollo.
     nixpkgs.url = "nixpkgs/nixos-unstable";
+
+    # NixOS stable para los equipos que requieren una base estable.
+    nixpkgs-stable.url = "nixpkgs/nixos-26.05";
 
     # Anime Game Launcher
     aagl.url = "github:ezKEa/aagl-gtk-on-nix";
@@ -43,38 +46,56 @@
     figma-linux-next,
     nix-flatpak,
     nixpkgs,
+    nixpkgs-stable,
     noctalia,
     self,
     spicetify-nix,
     zen-browser,
     ...
   } @ inputs: let
-    system = "x86_64-linux";
-    lib = nixpkgs.lib;
-    pkgs = import nixpkgs {
-      inherit system;
-    };
-  in {
-    # Formateador automático
-    formatter.${system} = pkgs.alejandra;
+    directorios = builtins.readDir ./equipos;
+    equipos = builtins.filter (
+      nombre: directorios.${nombre} == "directory"
+    ) (builtins.attrNames directorios);
 
-    # Configuración del Sistema (NixOS)
-    nixosConfigurations = {
-      korunix = lib.nixosSystem {
+    crearEquipo = nombre: let
+      equipo = import ./equipos/${nombre}/equipo.nix;
+      nixpkgsSeleccionado =
+        if equipo.canal == "stable"
+        then nixpkgs-stable
+        else nixpkgs;
+      system = equipo.arquitectura;
+      lib = nixpkgsSeleccionado.lib;
+      pkgs = import nixpkgsSeleccionado {
         inherit system;
-        specialArgs = {inherit inputs;};
+        config.allowUnfree = true;
+      };
+    in {
+      name = nombre;
+      value = lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit inputs equipo nombre;
+          canal = equipo.canal;
+        };
         modules = [
-          ./equipos/korunix/configuracion.nix
+          ./equipos/${nombre}
+          ./modulos/base
           ./aplicaciones
           ./apariencia
           inputs.aagl.nixosModules.default
-          inputs.noctalia.nixosModules.default          
+          inputs.noctalia.nixosModules.default
           inputs.spicetify-nix.nixosModules.default
           {
-            environment.systemPackages = [alejandra.defaultPackage.${system}];
+            networking.hostName = nombre;
+            environment.systemPackages = [ pkgs.alejandra ];
           }
         ];
       };
     };
+  in {
+    formatter.x86_64-linux = nixpkgs.legacyPackages.x86_64-linux.alejandra;
+
+    nixosConfigurations = builtins.listToAttrs (map crearEquipo equipos);
   };
 }

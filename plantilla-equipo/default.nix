@@ -6,5 +6,6 @@
     ./hardware.nix
     ./personas
     ./servicios
+    ./apariencia
   ];
 }
