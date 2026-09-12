@@ -34,6 +34,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Affinity para Linux
+    affinity-nix.url = "github:mrshmllow/affinity-nix";
+
     # Shell Noctalia
     noctalia = {
       url = "github:noctalia-dev/noctalia/";
@@ -42,6 +45,7 @@
   };
 
   outputs = {
+    affinity-nix,
     alejandra,
     figma-linux-next,
     nix-flatpak,
@@ -88,7 +92,11 @@
           inputs.spicetify-nix.nixosModules.default
           {
             networking.hostName = nombre;
-            environment.systemPackages = [ pkgs.alejandra ];
+            nixpkgs.overlays = [ affinity-nix.overlays.default ];
+            environment.systemPackages = [
+              pkgs.alejandra
+              pkgs.affinity-v3
+            ];
           }
         ];
       };
