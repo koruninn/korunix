@@ -73,6 +73,7 @@
       pkgs = import nixpkgsSeleccionado {
         inherit system;
         config.allowUnfree = true;
+        overlays = [ affinity-nix.overlays.default ];
       };
     in {
       name = nombre;
