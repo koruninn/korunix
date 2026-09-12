@@ -17,5 +17,5 @@
     # Boot silencioso estilo consola/Steam Deck
   boot.kernelParams = ["quiet" "splash" "boot.shell_on_fail"];
   boot.plymouth.enable = true;
-};
+}
 

@@ -14,7 +14,7 @@ prefs_file=${XDG_CONFIG_HOME:-$HOME/.config}/spotify/prefs
 marker=$state_dir/spotify-source
 export SPICETIFY_CONFIG=$config_dir
 
-mkdir -p "$state_dir" "$config_dir/Themes/Comfy" "$config_dir/Extensions" "$(dirname "$prefs_file")" "$(dirname "$data_dir")"
+mkdir -p "$state_dir" "$config_dir/Themes/Comfy" "$config_dir/Themes/Default" "$config_dir/Extensions" "$(dirname "$prefs_file")" "$(dirname "$data_dir")"
 exec 9>"$state_dir/spotify.lock"
 flock 9
 
@@ -26,7 +26,7 @@ for old in "$(dirname "$data_dir")"/.spotify-previous-*; do
 done
 
 version="$KORUNIX_SPOTIFY_SOURCE
-$KORUNIX_COMFY_SOURCE
+$KORUNIX_DEFAULT_SOURCE
 $KORUNIX_ADBLOCK_SOURCE
 $KORUNIX_LYRICS_SOURCE
 $KORUNIX_ONEKO_SOURCE"
@@ -51,18 +51,19 @@ if [[ ! -f $marker || $(cat "$marker") != "$version" || ! -x $data_dir/spotify ]
   chmod --reference="$stage/spotify" "$stage/spotify.korunix"
   mv "$stage/spotify.korunix" "$stage/spotify"
 
-  # Conservar los colores de Noctalia al actualizar la estructura de Comfy.
-  rsync -rL --exclude=/color.ini "$KORUNIX_COMFY_SOURCE/" "$config_dir/Themes/Comfy/"
-  chmod -R u+w "$config_dir/Themes/Comfy"
+  # Default aplica la paleta generada por Noctalia para Comfy, sin su CSS ni JS.
+  # La plantilla de Noctalia conserva su ubicación original.
   if [[ ! -f $config_dir/Themes/Comfy/color.ini ]]; then
-    cp "$KORUNIX_COMFY_SOURCE/color.ini" "$config_dir/Themes/Comfy/color.ini"
-    chmod u+w "$config_dir/Themes/Comfy/color.ini"
+    sed 's/^\[Ocean\]$/[Comfy]/' "$KORUNIX_DEFAULT_SOURCE/color.ini" > "$config_dir/Themes/Comfy/color.ini"
   fi
+  if [[ -f $config_dir/Themes/Default/color.ini && ! -L $config_dir/Themes/Default/color.ini && ! -e $config_dir/Themes/Default/color.ini.korunix-backup ]]; then
+    cp "$config_dir/Themes/Default/color.ini" "$config_dir/Themes/Default/color.ini.korunix-backup"
+  fi
+  ln -sfn ../Comfy/color.ini "$config_dir/Themes/Default/color.ini"
   cp -L "$KORUNIX_ADBLOCK_SOURCE" "$config_dir/Extensions/adblock.js"
   cp -L "$KORUNIX_LYRICS_SOURCE" "$config_dir/Extensions/spicy-lyrics.mjs"
   cp -L "$KORUNIX_ONEKO_SOURCE" "$config_dir/Extensions/oneko.js"
-  cat "$KORUNIX_COMFY_SOURCE/theme.js" "$KORUNIX_COMFY_SOURCE/theme.script.js" > "$config_dir/Extensions/theme.js"
-  chmod u+w "$config_dir/Extensions/"{adblock.js,spicy-lyrics.mjs,oneko.js,theme.js}
+  chmod u+w "$config_dir/Extensions/"{adblock.js,spicy-lyrics.mjs,oneko.js}
 
   touch "$prefs_file"
   if [[ -f $config_dir/config-xpui.ini && ! -e $config_dir/config-xpui.ini.korunix-backup ]]; then
@@ -72,16 +73,16 @@ if [[ ! -f $marker || $(cat "$marker") != "$version" || ! -x $data_dir/spotify ]
 [Setting]
 spotify_path = $data_dir
 prefs_path = $prefs_file
-current_theme = Comfy
+current_theme = Default
 color_scheme = Comfy
-inject_css = 1
+inject_css = 0
 replace_colors = 1
-overwrite_assets = 1
-inject_theme_js = 1
+overwrite_assets = 0
+inject_theme_js = 0
 check_spicetify_update = 0
 
 [AdditionalOptions]
-extensions = adblock.js|spicy-lyrics.mjs|oneko.js|theme.js
+extensions = adblock.js|spicy-lyrics.mjs|oneko.js
 home_config = 1
 sidebar_config = 0
 

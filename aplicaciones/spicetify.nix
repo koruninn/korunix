@@ -6,14 +6,14 @@
 }: let
   spicePkgs = inputs.spicetify-nix.legacyPackages.${pkgs.stdenv.hostPlatform.system};
   extensions = spicePkgs.extensions;
-  comfy = spicePkgs.themes.comfy;
+  defaultTheme = spicePkgs.themes.default;
 
   runtime = pkgs.writeShellApplication {
     name = "korunix-spotify-runtime";
     runtimeInputs = with pkgs; [coreutils gnugrep gnused psmisc rsync util-linux];
     text = ''
       export KORUNIX_SPOTIFY_SOURCE=${lib.escapeShellArg "${pkgs.spotify}/share/spotify"}
-      export KORUNIX_COMFY_SOURCE=${lib.escapeShellArg (toString comfy.src)}
+      export KORUNIX_DEFAULT_SOURCE=${lib.escapeShellArg (toString defaultTheme.src)}
       export KORUNIX_ADBLOCK_SOURCE=${lib.escapeShellArg "${extensions.adblock.src}/${extensions.adblock.name}"}
       export KORUNIX_LYRICS_SOURCE=${lib.escapeShellArg "${extensions.spicyLyrics.src}/${extensions.spicyLyrics.name}"}
       export KORUNIX_ONEKO_SOURCE=${lib.escapeShellArg "${extensions.oneko.src}/${extensions.oneko.name}"}
@@ -51,7 +51,7 @@ in {
   # a una copia modificable de Spotify preparada desde el paquete Nix.
   environment.systemPackages = [application];
   systemd.user.services.korunix-spotify-prepare = {
-    description = "Preparar Spotify y Comfy para los colores de Noctalia";
+    description = "Preparar Spotify con Default y los colores de Noctalia";
     wantedBy = ["default.target"];
     serviceConfig = {
       Type = "oneshot";

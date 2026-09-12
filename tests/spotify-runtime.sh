@@ -8,7 +8,7 @@ export HOME=$tmp/home
 export XDG_CONFIG_HOME=$HOME/.config
 export XDG_DATA_HOME=$HOME/.local/share
 export XDG_STATE_HOME=$HOME/.local/state
-mkdir -p "$HOME" "$tmp/source/share/spotify/Apps" "$tmp/comfy" "$tmp/ext"
+mkdir -p "$HOME" "$tmp/source/share/spotify/Apps" "$tmp/default" "$tmp/ext"
 
 source_dir=$tmp/source/share/spotify
 cat > "$source_dir/spotify" <<EOF
@@ -20,28 +20,32 @@ cat > "$source_dir/.spotify-wrapped" <<'EOF'
 printf '%s\n' "$*" > "$HOME/launched"
 EOF
 chmod +x "$source_dir/spotify" "$source_dir/.spotify-wrapped"
-printf 'theme\n' > "$tmp/comfy/color.ini"
-printf 'css\n' > "$tmp/comfy/user.css"
-printf 'js\n' > "$tmp/comfy/theme.js"
-printf 'script\n' > "$tmp/comfy/theme.script.js"
+printf '[Base]\n\n[Ocean]\nmain = 0F111A\n' > "$tmp/default/color.ini"
 for extension in adblock.js spicy-lyrics.mjs oneko.js; do
   printf 'extension\n' > "$tmp/ext/$extension"
 done
 cat > "$tmp/cli" <<'EOF'
 #!/usr/bin/env bash
+set -euo pipefail
 [[ $* == '--no-restart backup apply' ]]
-[[ -f $SPICETIFY_CONFIG/Themes/Comfy/color.ini ]]
+[[ -L $SPICETIFY_CONFIG/Themes/Default/color.ini ]]
+[[ $(readlink "$SPICETIFY_CONFIG/Themes/Default/color.ini") == ../Comfy/color.ini ]]
+[[ -f $SPICETIFY_CONFIG/Themes/Default/color.ini ]]
+grep -q '^current_theme = Default$' "$SPICETIFY_CONFIG/config-xpui.ini"
+grep -q '^color_scheme = Comfy$' "$SPICETIFY_CONFIG/config-xpui.ini"
+grep -q '^inject_css = 0$' "$SPICETIFY_CONFIG/config-xpui.ini"
+grep -q '^inject_theme_js = 0$' "$SPICETIFY_CONFIG/config-xpui.ini"
 spotify_path=$(sed -n 's/^spotify_path = //p' "$SPICETIFY_CONFIG/config-xpui.ini")
 [[ -x $spotify_path/spotify ]]
 [[ -d $spotify_path/Apps ]]
-[[ -f $SPICETIFY_CONFIG/Extensions/theme.js ]]
+! grep -q '^extensions = .*theme.js' "$SPICETIFY_CONFIG/config-xpui.ini"
 if [[ -e $HOME/fail-apply ]]; then exit 1; fi
 printf 'apply\n' >> "$HOME/applies"
 EOF
 chmod +x "$tmp/cli"
 
 export KORUNIX_SPOTIFY_SOURCE=$source_dir
-export KORUNIX_COMFY_SOURCE=$tmp/comfy
+export KORUNIX_DEFAULT_SOURCE=$tmp/default
 export KORUNIX_ADBLOCK_SOURCE=$tmp/ext/adblock.js
 export KORUNIX_LYRICS_SOURCE=$tmp/ext/spicy-lyrics.mjs
 export KORUNIX_ONEKO_SOURCE=$tmp/ext/oneko.js
@@ -49,29 +53,30 @@ export KORUNIX_SPICETIFY_CLI=$tmp/cli
 
 bash "$root/aplicaciones/spicetify-runtime.sh" --prepare
 [[ $(wc -l < "$HOME/applies") == 1 ]]
+grep -q '^\[Comfy\]$' "$HOME/.config/spicetify/Themes/Default/color.ini"
 bash "$root/aplicaciones/spicetify-runtime.sh" --launch spotify:album:abc
 [[ $(cat "$HOME/launched") == 'spotify:album:abc' ]]
 
-printf 'noctalia-m3-tonal-spot\n' > "$HOME/.config/spicetify/Themes/Comfy/color.ini"
+printf '[Comfy]\nmain = ABCDEF\n' > "$HOME/.config/spicetify/Themes/Comfy/color.ini"
 printf 'personal\n' > "$HOME/.config/spicetify/Themes/Comfy/personal.css"
 bash "$root/aplicaciones/spicetify-runtime.sh" --prepare
 [[ $(wc -l < "$HOME/applies") == 1 ]]
 
-# Una actualización renueva la estructura de Comfy sin pisar la paleta.
-mkdir -p "$tmp/comfy2"
-cp -a "$tmp/comfy/." "$tmp/comfy2/"
-printf 'new-css\n' > "$tmp/comfy2/user.css"
-export KORUNIX_COMFY_SOURCE=$tmp/comfy2
+# Una actualización de Default conserva los colores de Noctalia.
+mkdir -p "$tmp/default2"
+cp -a "$tmp/default/." "$tmp/default2/"
+printf '[Base]\n\n[Ocean]\nmain = FFFFFF\n' > "$tmp/default2/color.ini"
+export KORUNIX_DEFAULT_SOURCE=$tmp/default2
 bash "$root/aplicaciones/spicetify-runtime.sh" --prepare
-[[ $(cat "$HOME/.config/spicetify/Themes/Comfy/color.ini") == 'noctalia-m3-tonal-spot' ]]
+grep -q '^main = ABCDEF$' "$HOME/.config/spicetify/Themes/Default/color.ini"
 [[ $(cat "$HOME/.config/spicetify/Themes/Comfy/personal.css") == 'personal' ]]
-[[ $(cat "$HOME/.config/spicetify/Themes/Comfy/user.css") == 'new-css' ]]
+[[ $(readlink "$HOME/.config/spicetify/Themes/Default/color.ini") == ../Comfy/color.ini ]]
 [[ $(wc -l < "$HOME/applies") == 2 ]]
 
 # Si falla el parcheado de una actualización, el Spotify anterior sigue ahí.
-mkdir -p "$tmp/comfy3"
-cp -a "$tmp/comfy2/." "$tmp/comfy3/"
-export KORUNIX_COMFY_SOURCE=$tmp/comfy3
+mkdir -p "$tmp/default3"
+cp -a "$tmp/default2/." "$tmp/default3/"
+export KORUNIX_DEFAULT_SOURCE=$tmp/default3
 touch "$HOME/fail-apply"
 if bash "$root/aplicaciones/spicetify-runtime.sh" --prepare; then
   echo 'Se esperaba un fallo al aplicar Spicetify.' >&2
