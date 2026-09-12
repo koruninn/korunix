@@ -46,10 +46,7 @@
         focus-follows-mouse max-scroll-amount="0%"
     }
 
-    output "DP-1" {
-        mode "1920x1080@120.000"
-        scale 1
-    }
+    include "/etc/niri/monitor.kdl"
 
     hotkey-overlay {
         skip-at-startup

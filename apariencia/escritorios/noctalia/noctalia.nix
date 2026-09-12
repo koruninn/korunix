@@ -201,7 +201,7 @@
     blurred_desktop = true
     blur_intensity = 0.5
     tint_intensity = 0.6
-    wallpaper = "${./fondos/oscuro}/capriccio-arco-rovinado-e-una-villa-nello-sfondo.jpg"
+    wallpaper = "${./fondos/oscuro}/capriccio-arco-rovinato-e-una-villa-nello-sfondo.jpg"
     monitors = []
 
     [calendar]
@@ -222,7 +222,7 @@
     per_monitor_directories = false
 
     [wallpaper.default]
-    path = "${./fondos/oscuro}/capriccio-arco-rovinado-e-una-villa-nello-sfondo.jpg"
+    path = "${./fondos/oscuro}/capriccio-arco-rovinato-e-una-villa-nello-sfondo.jpg"
 
     [wallpaper.automation]
     enabled = false

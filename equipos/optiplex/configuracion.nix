@@ -8,6 +8,7 @@
 
   services.xserver.enable = true;
   services.xserver.displayManager.lightdm.enable = true;
+  services.displayManager.defaultSession = "cinnamon";
   services.displayManager.autoLogin = {
     enable = true;
     user = "dell";

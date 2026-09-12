@@ -11,6 +11,17 @@
     extraGroups = [ "networkmanager" "wheel" ];
   };
 
+  # Ajustes exclusivos de este equipo: monitor y dotfiles de koru.
+  environment.etc."niri/monitor.kdl".text = ''
+    output "DP-1" {
+        mode "1920x1080@120.000"
+        scale 1
+    }
+  '';
+  systemd.tmpfiles.rules = [
+    "L+ /home/koru/.config/fish/config.fish - - - - /home/koru/.korunix/config.fish"
+  ];
+
   nixpkgs.config.allowUnfree = true;
 
   system.stateVersion = "26.05";
