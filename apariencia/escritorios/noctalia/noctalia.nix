@@ -107,6 +107,7 @@
     capsule_thickness = 0.76
     capsule_radius = 8.0
     capsule_opacity = 1.0
+    capsule_opacity = 1.0
     start = ["launcher", "wallpaper", "workspaces"]
     center = ["clock"]
     end = [
@@ -232,9 +233,9 @@
 
     [theme]
     mode = "auto"
-    source = "community"
+    source = "wallpaper"
     builtin = "Noctalia"
-    community_palette = "Everforest"
+    wallpaper_scheme = "m3-tonal-spot"
 
     [theme.templates]
     enable_builtin_templates = true
