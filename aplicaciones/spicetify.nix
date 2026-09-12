@@ -14,6 +14,5 @@ in {
       oneko
     ];
     theme = spicePkgs.themes.comfy;
-    colorScheme = "Everforest";
   };
 }
