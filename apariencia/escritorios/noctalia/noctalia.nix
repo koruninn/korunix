@@ -255,7 +255,6 @@
       "libreoffice",
       "obsidian",
       "prismlauncher",
-      "spicetify",
       "steam",
       "vscode",
       "zen-browser"

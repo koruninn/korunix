@@ -79,27 +79,21 @@
     }
 
     window-rule {
-        prefer-no-csd true
-    }
-    window-rule {
-        clip-to-geometry true
-    }
-
-    window-rule {
         background-effect {
             blur true
             xray false
         }
     }
 
+    // Transparencia diferenciada según el foco de la ventana.
     window-rule {
         match is-active=true
-        opacity 0.85
+        opacity 0.90
     }
 
     window-rule {
         match is-active=false
-        opacity 0.50
+        opacity 0.85
     }
 
     layer-rule {
