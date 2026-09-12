@@ -2,7 +2,9 @@
   config,
   pkgs,
   ...
-}: let
+}:
+
+let
   noctaliaConfig = pkgs.writeText "noctalia-config.toml" ''
     [accessibility]
     ui_scale = 0.9
@@ -155,7 +157,7 @@
     inactive_opacity = 0.85
     show_instance_count = true
     show_dots = true
-    launcher_position = "start"
+    launcher_position = "none"
     launcher_icon = "grid-dots"
     pinned = [
       "firefox",
@@ -163,16 +165,16 @@
       "spotify",
       "steam",
       "net.lutris.Lutris",
-      "anime-game-launcher",
-      "honkers-railway-launcher",
+      "moe.launcher.an-anime-game-launcher",
+      "moe.launcher.the-honkers-railway-launcher",
       "vesktop",
       "affinity.exe",
-      "LocalSend",
+      "localsend_app",
       "code",
       "com.obsproject.Studio",
       "org.kde.kdenlive",
-      "com.heroicgameslauncher.hgl",
-      "onlyoffice-desktopeditors",
+      "heroic",
+      "ONLYOFFICE",
       "birdfont"
     ]
 
