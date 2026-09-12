@@ -1,8 +1,11 @@
 # Justfile
 
-# Reconstruye todo el sistema NixOS
-os:
+# Reconstruye la configuración NixOS de un equipo.
+korunix:
 	sudo nixos-rebuild switch --flake .#korunix
+
+optiplex:
+	sudo nixos-rebuild switch --flake .#optiplex
 
 # Actualiza la versión de los paquetes (flake.lock)
 update:
