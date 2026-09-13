@@ -5,7 +5,7 @@
     enable = true;
     interactiveShellInit = ''
       set -g fish_greeting ""
-      fastfetch
+      fetch -l nixos_small
     '';
   };
 
