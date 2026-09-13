@@ -1,5 +1,4 @@
 {
-  equipo,
   pkgs,
   ...
 }:
@@ -8,12 +7,6 @@
   time.timeZone = "America/Lima";
   i18n.defaultLocale = "es_PE.UTF-8";
   services.printing.enable = true;
-
-  users.users.${equipo.persona} = {
-    isNormalUser = true;
-    description = "André";
-    extraGroups = [ "networkmanager" "wheel" ];
-  };
 
   # Ajustes exclusivos de este equipo: monitor.
   environment.etc."niri/monitor.kdl".text = ''
