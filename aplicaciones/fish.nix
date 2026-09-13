@@ -5,7 +5,7 @@
     enable = true;
     interactiveShellInit = ''
       set -g fish_greeting ""
-      fetch -l NixOS
+      fetch -l NixOS --frames 1
     '';
   };
 
