@@ -90,6 +90,7 @@
     window-rule {
         geometry-corner-radius 20
         clip-to-geometry true
+        draw-border-with-background false
     }
 
     debug {
