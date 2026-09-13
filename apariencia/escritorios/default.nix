@@ -1,5 +1,3 @@
-{ config, pkgs, lib, ... }:
-
 {
   imports = [
     ./plasma.nix
@@ -14,10 +12,4 @@
     variant = "deadtilde";
   };
   console.keyMap = "es";
-
-  # Gestor de inicio de sesión SDDM.
-  services.displayManager.sddm = {
-    enable = true;
-    wayland.enable = true;
-  };
 }
