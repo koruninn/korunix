@@ -1,9 +1,10 @@
 {
   config,
+  equipo,
   pkgs,
   ...
 }: let
-  usuario = config.users.users.koru;
+  usuario = config.users.users.${equipo.persona};
 
   mimeDefaults = pkgs.writeShellScript "korunix-aplicaciones-predeterminadas" ''
     export XDG_CONFIG_HOME="$HOME/.config"
