@@ -63,15 +63,20 @@
 
     crearEquipo = nombre: let
       equipoOriginal = import ./equipos/${nombre}/equipo.nix;
-      canalEquipo =
-        equipoOriginal.canal
-        or (throw "Falta canal en equipos/${nombre}/equipo.nix.");
-      arquitecturaEquipo =
-        equipoOriginal.arquitectura
-        or (throw "Falta arquitectura en equipos/${nombre}/equipo.nix.");
-      personaEquipo =
-        equipoOriginal.persona
-        or (throw "Falta persona en equipos/${nombre}/equipo.nix.");
+
+      cadenaObligatoria = campo:
+        if !(builtins.hasAttr campo equipoOriginal)
+        then throw "Falta ${campo} en equipos/${nombre}/equipo.nix."
+        else let
+          valor = builtins.getAttr campo equipoOriginal;
+        in
+          if builtins.isString valor && valor != ""
+          then valor
+          else throw "${campo} debe ser una cadena no vacía en equipos/${nombre}/equipo.nix.";
+
+      canalEquipo = cadenaObligatoria "canal";
+      arquitecturaEquipo = cadenaObligatoria "arquitectura";
+      personaEquipo = cadenaObligatoria "persona";
 
       pantallaEquipo =
         if !(equipoOriginal ? pantalla)
