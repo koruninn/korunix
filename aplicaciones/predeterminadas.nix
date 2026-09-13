@@ -6,33 +6,32 @@
   ...
 }: let
   usuario = config.users.users.${equipo.persona};
-  navegadorPredeterminado = equipo.navegadorPredeterminado or "chrome";
+  navegadorPredeterminado = equipo.navegadorPredeterminado or null;
+  zen = inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default;
 
-  navegadorPaquete =
-    if navegadorPredeterminado == "zen"
-    then inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default
-    else if navegadorPredeterminado == "chrome"
-    then pkgs.google-chrome
-    else throw "Navegador predeterminado no soportado: ${navegadorPredeterminado}";
-
-  navegadorDesktop =
-    if navegadorPredeterminado == "zen"
-    then "zen-browser.desktop"
-    else "google-chrome.desktop";
+  webDefaults =
+    if navegadorPredeterminado == null
+    then ""
+    else if navegadorPredeterminado == "zen"
+    then ''
+      # Web: Zen es el navegador declarativo de este equipo. Chrome nunca se
+      # selecciona automáticamente; solo puede convertirse en predeterminado
+      # mediante una elección manual de la persona usuaria.
+      "$xdgMime" default zen-browser.desktop \
+        x-scheme-handler/http \
+        x-scheme-handler/https \
+        text/html \
+        application/xhtml+xml
+    ''
+    else throw "Navegador predeterminado declarativo no permitido: ${navegadorPredeterminado}. Chrome solo puede elegirse manualmente.";
 
   mimeDefaults = pkgs.writeShellScript "korunix-aplicaciones-predeterminadas" ''
     export XDG_CONFIG_HOME="$HOME/.config"
-    export XDG_DATA_DIRS="${navegadorPaquete}/share:${pkgs.google-chrome}/share:${pkgs.nautilus}/share:${pkgs.loupe}/share:${pkgs.papers}/share:${pkgs.file-roller}/share"
+    export XDG_DATA_DIRS="${zen}/share:${pkgs.nautilus}/share:${pkgs.loupe}/share:${pkgs.papers}/share:${pkgs.file-roller}/share"
 
     xdgMime=${pkgs.xdg-utils}/bin/xdg-mime
 
-    # Web: cada equipo decide su navegador predeterminado. Esto afecta enlaces
-    # HTTP/HTTPS y documentos web, pero no roba PDF, imágenes ni carpetas.
-    "$xdgMime" default ${navegadorDesktop} \
-      x-scheme-handler/http \
-      x-scheme-handler/https \
-      text/html \
-      application/xhtml+xml
+    ${webDefaults}
 
     # Carpetas: Nautilus.
     "$xdgMime" default org.gnome.Nautilus.desktop \
@@ -68,7 +67,7 @@
       image/vnd.djvu \
       image/vnd.djvu+multipage
 
-    # Archivos comprimidos: File Roller en lugar de PeaZip.
+    # Archivos comprimidos: File Roller.
     "$xdgMime" default org.gnome.FileRoller.desktop \
       application/zip \
       application/x-7z-compressed \
@@ -85,9 +84,8 @@
       application/x-xz-compressed-tar
   '';
 in {
-  # Chrome no captura los PDF: los descarga/entrega al sistema para que Papers
-  # sea quien los abra. Esta política sigue siendo útil aunque otro navegador
-  # sea el predeterminado del equipo.
+  # Chrome puede seguir instalado, pero no se registra como predeterminado.
+  # Si se usa, los PDF se entregan al sistema para que Papers los abra.
   environment.etc."opt/chrome/policies/managed/korunix.json".text = builtins.toJSON {
     AlwaysOpenPdfExternally = true;
   };
