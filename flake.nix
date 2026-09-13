@@ -85,11 +85,22 @@
           pantalla = equipoOriginal.pantalla;
           campos = ["nombre" "modo" "escala"];
           faltantes = builtins.filter (campo: !(builtins.hasAttr campo pantalla)) campos;
+          nombreValido = builtins.isString pantalla.nombre && pantalla.nombre != "";
+          modoValido = builtins.isString pantalla.modo && pantalla.modo != "";
+          escalaValida =
+            (builtins.isInt pantalla.escala || builtins.isFloat pantalla.escala)
+            && pantalla.escala > 0;
         in
-          if faltantes == []
-          then pantalla
-          else
-            throw "Pantalla incompleta en equipos/${nombre}/equipo.nix. Faltan: ${builtins.concatStringsSep ", " faltantes}.";
+          if faltantes != []
+          then
+            throw "Pantalla incompleta en equipos/${nombre}/equipo.nix. Faltan: ${builtins.concatStringsSep ", " faltantes}."
+          else if !nombreValido
+          then throw "pantalla.nombre debe ser una cadena no vacía en equipos/${nombre}/equipo.nix."
+          else if !modoValido
+          then throw "pantalla.modo debe ser una cadena no vacía en equipos/${nombre}/equipo.nix."
+          else if !escalaValida
+          then throw "pantalla.escala debe ser un número mayor que cero en equipos/${nombre}/equipo.nix."
+          else pantalla;
 
       equipo =
         equipoOriginal
