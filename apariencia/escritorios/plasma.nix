@@ -1,10 +1,16 @@
 { pkgs, ... }:
 
 {
-  # Activar el entorno de escritorio KDE Plasma 6
+  # Activar KDE Plasma 6 únicamente como sesión Wayland.
   services.desktopManager.plasma6.enable = true;
 
-  # Configuración del teclado nativo para Wayland en Plasma
+  # KWin X11 no es necesario para ejecutar aplicaciones X11 dentro de Wayland;
+  # esa compatibilidad la proporciona XWayland.
+  environment.plasma6.excludePackages = [
+    pkgs.kdePackages.kwin-x11
+  ];
+
+  # Configuración del teclado nativo para Wayland en Plasma.
   environment.variables = {
     XKB_DEFAULT_LAYOUT = "es";
     XKB_DEFAULT_VARIANT = "deadtilde";
