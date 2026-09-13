@@ -5,10 +5,16 @@
 }: let
   korunixFetch = pkgs.fetch.overrideAttrs (old: {
     postPatch = (old.postPatch or "") + ''
-      # Compactamos el lienzo del logo para acercarlo a la información.
-      sed -i 's/#define ANIM_WIDTH 60/#define ANIM_WIDTH 24/' fetch.c
+      # Un lienzo más estrecho acerca el logo al bloque de información.
+      substituteInPlace fetch.c \
+        --replace-fail '#define ANIM_WIDTH 60' '#define ANIM_WIDTH 18'
 
-      # Sustituimos las etiquetas de texto por iconos Nerd Font.
+      # Presentación compacta: icono, flecha y valor; sin cabecera usuario@equipo.
+      substituteInPlace fetch.c \
+        --replace-fail 'snprintf(line, sizeof(line), "\033[1;%sm%s\033[0m: %s", label_color, label,' 'snprintf(line, sizeof(line), "\033[1;%sm%s\033[0m  ➜  %s", label_color, label,'
+      sed -i '/static void gather_title(void) {/a\  return;' fetch.c
+
+      # Etiquetas simbólicas con Nerd Fonts.
       sed -i \
         -e 's/add_info("OS",/add_info("",/g' \
         -e 's/add_info("Kernel",/add_info("",/g' \
@@ -16,11 +22,22 @@
         -e 's/add_info("WM",/add_info("",/g' \
         -e 's/add_info("CPU",/add_info("",/g' \
         -e 's/add_info("Memory",/add_info("",/g' \
-        -e 's/"Disk (%s)"/" (%s)"/g' \
+        -e 's/"Disk (%s)"/""/g' \
         fetch.c
 
-      # La cabecera usuario@equipo no aporta información útil en este panel.
-      sed -i '/static void gather_title(void) {/a\  return;' fetch.c
+      # Dejamos solo la información útil, como en el Fastfetch de Korunix.
+      substituteInPlace fetch.c \
+        --replace-fail 'add_info("", "%s %s", pretty, u.machine);' 'add_info("", "NixOS");' \
+        --replace-fail 'add_info("", "%s %s%s", wm, version, is_wayland ? " (Wayland)" : "");' 'add_info("", "%s", wm);' \
+        --replace-fail 'add_info("", "%s%s", wm, is_wayland ? " (Wayland)" : "");' 'add_info("", "%s", wm);' \
+        --replace-fail 'add_info("", "%s (%d) @ %.2f GHz", name, cores, ghz);' 'add_info("", "%s", name);' \
+        --replace-fail 'add_info("", "%s (%d) @ %.2f GHz", name, cores, max_ghz);' 'add_info("", "%s", name);' \
+        --replace-fail 'add_info("", "%s (%d)", name, cores);' 'add_info("", "%s", name);'
+
+      # RAM y disco: usado / total, sin porcentaje ni tipo de sistema de archivos.
+      substituteInPlace fetch.c \
+        --replace-warn '%.2f GiB / %.2f GiB (\033[%sm%d%%\033[0m) - %s' '%.2f GiB / %.2f GiB' \
+        --replace-warn '%.2f GiB / %.2f GiB (\033[%sm%d%%\033[0m)' '%.2f GiB / %.2f GiB'
     '';
   });
 
@@ -36,17 +53,16 @@
 
     label_color=magenta
 
-    # Logo algo mayor y centrado respecto al bloque de información.
+    # Logo protagonista, pero equilibrado con las siete líneas de información.
     spin=xy
     speed=1.0
-    size=1.35
-    height=12
+    size=1.80
+    height=14
     light=top-left
     v_alignment=center
     h_alignment=left
   '';
 in {
-  # Símbolos usados como etiquetas por fetch.
   fonts.packages = [
     pkgs.nerd-fonts.symbols-only
   ];
