@@ -9,17 +9,17 @@
     inputs.nix-flatpak.nixosModules.nix-flatpak
   ];
 
-  # Habilitamos el demonio de Flatpak en el sistema
+  # Habilitamos Flatpak en el sistema.
   services.flatpak.enable = true;
 
-  # Declaramos los paquetes que queremos instalar desde Flathub
+  # Aplicaciones instaladas declarativamente desde Flathub.
   services.flatpak.packages = [
     "io.github.brunofin.Cohesion"
+    "net.nokyan.Resources"
   ];
 
-  # Opcional: Para asegurar que los repositorios de Flathub se actualicen solos
   services.flatpak.update.auto = {
     enable = true;
-    onCalendar = "weekly"; # Puedes cambiarlo a "daily"
+    onCalendar = "weekly";
   };
 }
