@@ -46,6 +46,9 @@
     direction = "down"
     alpha = 0.55
 
+    [shell.greeter_sync]
+    auto_sync = true
+
     [shell.panel]
     transparency_mode = "glass"
     borders = true
