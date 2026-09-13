@@ -4,6 +4,10 @@
 rebuild equipo:
 	sudo nixos-rebuild switch --flake ".#{{equipo}}"
 
+# Construye una generación completa sin activarla.
+build equipo:
+	nixos-rebuild build --flake ".#{{equipo}}"
+
 # Prueba una generación sin convertirla en el arranque predeterminado.
 test equipo:
 	sudo nixos-rebuild test --flake ".#{{equipo}}"
