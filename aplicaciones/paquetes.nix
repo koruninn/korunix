@@ -15,9 +15,9 @@
     birdfont
     blender
     darktable
-    eog
     fastfetch
     figma-linux
+    file-roller
     fontforge
     gimp
     google-chrome
@@ -27,12 +27,13 @@
     kdePackages.kate
     kdePackages.kdenlive
     libreoffice
+    loupe
     lutris
     nautilus
     nautilus-open-any-terminal
     obsidian
     onlyoffice-desktopeditors
-    peazip
+    papers
     pear-desktop
     polyglot
     prismlauncher
