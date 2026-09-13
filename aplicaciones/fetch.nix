@@ -42,17 +42,6 @@
       substituteInPlace fetch.c \
         --replace-warn '%.2f GiB / %.2f GiB (\033[%sm%d%%\033[0m) - %s' '%.2f GiB / %.2f GiB' \
         --replace-warn '%.2f GiB / %.2f GiB (\033[%sm%d%%\033[0m)' '%.2f GiB / %.2f GiB'
-
-      # fetch normalmente gira el segundo eje inclinando el logo hacia delante
-      # y atrás. Para NixOS hacemos que ese eje sea Z: el copo rota en su propio
-      # plano y mantiene siempre su silueta reconocible.
-      substituteInPlace fetch.c \
-        --replace-fail 'float x2 = px * cB + z1 * sB;' 'float x2 = px * cB - y1 * sB;' \
-        --replace-fail 'float z2 = -px * sB + z1 * cB;' 'float z2 = z1;' \
-        --replace-fail 'float y2 = y1;' 'float y2 = px * sB + y1 * cB;' \
-        --replace-fail 'float nx2 = nx * cB + nz1 * sB;' 'float nx2 = nx * cB - ny1 * sB;' \
-        --replace-fail 'float nz2 = -nx * sB + nz1 * cB;' 'float nz2 = nz1;' \
-        --replace-fail 'float ny2 = ny1;' 'float ny2 = nx * sB + ny1 * cB;'
     '';
   });
 
@@ -68,12 +57,12 @@
 
     label_color=magenta
 
-    # El segundo eje está adaptado arriba para girar el copo dentro de su plano.
+    # Logo frontal y estático: priorizamos que el copo de NixOS sea reconocible.
     shading_mode=blocks
-    spin=y
-    speed=0.75
+    spin=none
+    speed=0
     size=1.80
-    depth=0.30
+    depth=0.10
     height=14
     light=front
     v_alignment=center
