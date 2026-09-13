@@ -16,7 +16,6 @@
     blender
     darktable
     fastfetch
-    figma-linux
     file-roller
     fontforge
     gimp
