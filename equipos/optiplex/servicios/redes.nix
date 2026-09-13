@@ -14,15 +14,7 @@
     openFirewall = true;
   };
 
-  networking.firewall = rec {
-    allowedTCPPortRanges = [
-      {
-        from = 1714;
-        to = 1764;
-      }
-    ];
-    allowedUDPPortRanges = allowedTCPPortRanges;
-  };
-
+  # LocalSend abre declarativamente su propio puerto. No mantenemos rangos
+  # adicionales para servicios que este equipo no instala.
   networking.firewall.enable = true;
 }
