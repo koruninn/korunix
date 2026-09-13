@@ -67,7 +67,7 @@
         mouse {
         }
         warp-mouse-to-focus
-        focus-follows-mouse max-scroll-amount="0%"
+        focus-follows-mouse
     }
 
     include "/etc/niri/monitor.kdl"
