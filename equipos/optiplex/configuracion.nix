@@ -1,4 +1,5 @@
 {
+  equipo,
   lib,
   pkgs,
   ...
@@ -28,7 +29,7 @@ in {
   services.displayManager.defaultSession = "cinnamon-wayland";
   services.displayManager.autoLogin = {
     enable = true;
-    user = "dell";
+    user = equipo.persona;
   };
 
   services.xserver.desktopManager.cinnamon.enable = true;
