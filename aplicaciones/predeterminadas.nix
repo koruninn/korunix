@@ -1,19 +1,34 @@
 {
   config,
   equipo,
+  inputs,
   pkgs,
   ...
 }: let
   usuario = config.users.users.${equipo.persona};
+  navegadorPredeterminado = equipo.navegadorPredeterminado or "chrome";
+
+  navegadorPaquete =
+    if navegadorPredeterminado == "zen"
+    then inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default
+    else if navegadorPredeterminado == "chrome"
+    then pkgs.google-chrome
+    else throw "Navegador predeterminado no soportado: ${navegadorPredeterminado}";
+
+  navegadorDesktop =
+    if navegadorPredeterminado == "zen"
+    then "zen-browser.desktop"
+    else "google-chrome.desktop";
 
   mimeDefaults = pkgs.writeShellScript "korunix-aplicaciones-predeterminadas" ''
     export XDG_CONFIG_HOME="$HOME/.config"
-    export XDG_DATA_DIRS="${pkgs.google-chrome}/share:${pkgs.nautilus}/share:${pkgs.loupe}/share:${pkgs.papers}/share:${pkgs.file-roller}/share"
+    export XDG_DATA_DIRS="${navegadorPaquete}/share:${pkgs.google-chrome}/share:${pkgs.nautilus}/share:${pkgs.loupe}/share:${pkgs.papers}/share:${pkgs.file-roller}/share"
 
     xdgMime=${pkgs.xdg-utils}/bin/xdg-mime
 
-    # Web: Chrome sigue siendo navegador, no visor de archivos locales.
-    "$xdgMime" default google-chrome.desktop \
+    # Web: cada equipo decide su navegador predeterminado. Esto afecta enlaces
+    # HTTP/HTTPS y documentos web, pero no roba PDF, imágenes ni carpetas.
+    "$xdgMime" default ${navegadorDesktop} \
       x-scheme-handler/http \
       x-scheme-handler/https \
       text/html \
@@ -71,8 +86,8 @@
   '';
 in {
   # Chrome no captura los PDF: los descarga/entrega al sistema para que Papers
-  # sea quien los abra. Las imágenes web siguen mostrándose normalmente dentro
-  # de las páginas; los archivos de imagen locales quedan asociados a Loupe.
+  # sea quien los abra. Esta política sigue siendo útil aunque otro navegador
+  # sea el predeterminado del equipo.
   environment.etc."opt/chrome/policies/managed/korunix.json".text = builtins.toJSON {
     AlwaysOpenPdfExternally = true;
   };
