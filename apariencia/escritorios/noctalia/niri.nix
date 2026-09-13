@@ -52,7 +52,7 @@
     // Cursor nativo de Niri. No dependemos solo de las variables de entorno:
     // el compositor carga Bibata directamente para su propio puntero.
     cursor {
-        xcursor-theme "Bibata-Modern-Ice"
+        xcursor-theme "Bibata-Original-Classic"
         xcursor-size 24
     }
 
