@@ -1,6 +1,8 @@
 { pkgs, ... }: {
-  # Tema de iconos global: Hatter para GTK y aplicaciones que usan la especificación XDG.
+  # Noctalia usa adw-gtk3/adw-gtk3-dark para sincronizar GTK 3 con el modo
+  # claro u oscuro. Lutris y otras aplicaciones GTK 3 dependen de este tema.
   environment.systemPackages = [
+    pkgs.adw-gtk3
     pkgs.hatter-icon-theme
   ];
 
