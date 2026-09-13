@@ -7,11 +7,14 @@ korunix:
 optiplex:
 	sudo nixos-rebuild switch --flake .#optiplex
 
-# Evalúa las dos configuraciones antes de reconstruir un equipo.
+# Evalúa todas las configuraciones que el flake descubra en equipos/.
 check:
 	nix flake check --no-build
-	nix eval --raw .#nixosConfigurations.korunix.config.system.build.toplevel.drvPath
-	nix eval --raw .#nixosConfigurations.optiplex.config.system.build.toplevel.drvPath
+	@set -eu; for equipo in $$(nix eval --raw .#nixosConfigurations --apply 'x: builtins.concatStringsSep " " (builtins.attrNames x)'); do \
+		echo "Evaluando $$equipo"; \
+		nix eval --raw ".#nixosConfigurations.$$equipo.config.system.build.toplevel.drvPath"; \
+		echo; \
+	done
 
 # Actualiza la versión de los paquetes (flake.lock)
 update:
