@@ -1,8 +1,11 @@
 {
   config,
+  equipo,
   pkgs,
   ...
 }: let
+  usuario = config.users.users.${equipo.persona};
+
   noctaliaConfig = pkgs.writeText "noctalia-config.toml" ''
     [accessibility]
     ui_scale = 0.9
@@ -272,7 +275,7 @@ in {
     # La interfaz de Noctalia guarda sus cambios en settings.toml, que tiene
     # prioridad sobre config.toml. Eliminamos solo el bloque de plantillas para
     # que la selección declarativa de Korunix sea la fuente de verdad por defecto.
-    settings_file=${config.users.users.koru.home}/.local/state/noctalia/settings.toml
+    settings_file=${usuario.home}/.local/state/noctalia/settings.toml
     if [ -f "$settings_file" ]; then
       tmp_file="$settings_file.korunix-tmp"
       skip_templates=false
@@ -290,19 +293,19 @@ in {
           printf '%s\n' "$line"
         fi
       done < "$settings_file" > "$tmp_file"
-      install -m 0644 -o ${config.users.users.koru.name} -g ${config.users.users.koru.group} "$tmp_file" "$settings_file"
+      install -m 0644 -o ${usuario.name} -g ${usuario.group} "$tmp_file" "$settings_file"
       rm -f "$tmp_file"
     fi
 
     install -d -m 0755 \
-      -o ${config.users.users.koru.name} \
-      -g ${config.users.users.koru.group} \
-      ${config.users.users.koru.home}/.config/noctalia
+      -o ${usuario.name} \
+      -g ${usuario.group} \
+      ${usuario.home}/.config/noctalia
 
     install -m 0644 \
-      -o ${config.users.users.koru.name} \
-      -g ${config.users.users.koru.group} \
+      -o ${usuario.name} \
+      -g ${usuario.group} \
       ${noctaliaConfig} \
-      ${config.users.users.koru.home}/.config/noctalia/config.toml
+      ${usuario.home}/.config/noctalia/config.toml
   '';
 }
