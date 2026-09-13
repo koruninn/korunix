@@ -22,6 +22,9 @@
     # Figma
     figma-linux-next.url = "github:arximus88/figma-linux-next";
 
+    # Millennium para Steam
+    millennium.url = "github:SteamClientHomebrew/Millennium?dir=packages/nix";
+
     # Spicetify-Nix (Spotify + Spicetify)
     spicetify-nix = {
       url = "github:Gerg-L/spicetify-nix";
