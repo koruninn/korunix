@@ -38,13 +38,14 @@
       corner_radius = 20;
       drag_opacity = 0.75;
 
-      # Equivalente al blur de Niri con xray=false: se desenfoca lo que hay
-      # realmente detrás de cada superficie, no un fondo cacheado del monitor.
+      # Equivalente visual al blur de Niri con xray=false: se desenfoca lo que
+      # hay realmente detrás de cada superficie. Umbriel necesita un radio un
+      # poco mayor para igualar la intensidad percibida de Niri.
       blur = {
         enabled = true;
         optimized = false;
         passes = 1;
-        radius = 3;
+        radius = 4;
         noise = 0.03;
         brightness = 1.0;
         contrast = 1.0;
