@@ -10,6 +10,7 @@
     ./niri.nix
     ./umbriel.nix
     ./hyprland.nix
+    ./hyprland-sin-uwsm.nix
     ./qt.nix
   ];
 }
