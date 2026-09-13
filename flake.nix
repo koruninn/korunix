@@ -73,11 +73,31 @@
         equipoOriginal.persona
         or (throw "Falta persona en equipos/${nombre}/equipo.nix.");
 
-      equipo = equipoOriginal // {
-        canal = canalEquipo;
-        arquitectura = arquitecturaEquipo;
-        persona = personaEquipo;
-      };
+      pantallaEquipo =
+        if !(equipoOriginal ? pantalla)
+        then null
+        else let
+          pantalla = equipoOriginal.pantalla;
+          campos = ["nombre" "modo" "escala"];
+          faltantes = builtins.filter (campo: !(builtins.hasAttr campo pantalla)) campos;
+        in
+          if faltantes == []
+          then pantalla
+          else
+            throw "Pantalla incompleta en equipos/${nombre}/equipo.nix. Faltan: ${builtins.concatStringsSep ", " faltantes}.";
+
+      equipo =
+        equipoOriginal
+        // {
+          canal = canalEquipo;
+          arquitectura = arquitecturaEquipo;
+          persona = personaEquipo;
+        }
+        // (
+          if pantallaEquipo == null
+          then {}
+          else {pantalla = pantallaEquipo;}
+        );
 
       nixpkgsSeleccionado =
         if canalEquipo == "stable"
@@ -105,7 +125,9 @@
       };
     };
   in {
-    formatter.x86_64-linux = nixpkgs.legacyPackages.x86_64-linux.alejandra;
+    formatter = nixpkgs.lib.genAttrs ["x86_64-linux" "aarch64-linux"] (
+      system: nixpkgs.legacyPackages.${system}.alejandra
+    );
 
     nixosConfigurations = builtins.listToAttrs (map crearEquipo equipos);
   };
