@@ -79,7 +79,7 @@
       scrolling = {
         default_width_fraction = 0.5;
         center_underfull_strip = true;
-        center_focused = "never";
+        center_focused = false;
       };
     };
 
