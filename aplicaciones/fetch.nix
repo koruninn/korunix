@@ -36,7 +36,7 @@
 
       # En algunos Ryzen con gráfica integrada /proc/cpuinfo añade este sufijo.
       # Lo quitamos para mostrar únicamente el modelo del procesador.
-      sed -i '/if (name\[0\]) {/i\  char *radeon_suffix = strstr(name, " with Radeon Graphics");\n  if (radeon_suffix)\n    *radeon_suffix = '\''\\0'\'';' fetch.c
+      sed -i '/if (name\[0\]) {/i\  char *radeon_suffix = strstr(name, " with Radeon Graphics");\n  if (radeon_suffix)\n    *radeon_suffix = 0;' fetch.c
 
       # RAM y disco: usado / total, sin porcentaje ni tipo de sistema de archivos.
       substituteInPlace fetch.c \
