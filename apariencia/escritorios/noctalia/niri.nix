@@ -49,6 +49,13 @@
         KDE_SESSION_UID null
     }
 
+    // Cursor nativo de Niri. No dependemos solo de las variables de entorno:
+    // el compositor carga Bibata directamente para su propio puntero.
+    cursor {
+        xcursor-theme "Bibata-Modern-Ice"
+        xcursor-size 24
+    }
+
     // ----------------------------------------
     // ENTRADA (Teclado y Touchpad)
     // ----------------------------------------
