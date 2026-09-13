@@ -13,6 +13,7 @@
     ./localsend.nix
     ./obs.nix
     ./paquetes.nix
+    ./predeterminadas.nix
     ./spicetify.nix
     ./steam.nix
   ];
