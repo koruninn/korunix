@@ -6,6 +6,10 @@
   # en vez de asumir un usuario concreto.
   persona = "koru";
 
+  # Navegador predeterminado de este equipo. Otros equipos conservan Chrome
+  # salvo que declaren explícitamente otra opción.
+  navegadorPredeterminado = "zen";
+
   # Pantalla principal de este equipo. Los compositores pueden reutilizar estos
   # datos sin incrustar detalles de hardware dentro de sus módulos.
   pantalla = {
