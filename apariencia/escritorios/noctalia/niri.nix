@@ -108,9 +108,8 @@
         }
     }
 
-    // Transparencia diferenciada según el foco de la ventana.
+    // Todas las ventanas parten de 0.90; las inactivas bajan después a 0.85.
     window-rule {
-        match is-active=true
         opacity 0.90
     }
 
