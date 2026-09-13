@@ -11,21 +11,21 @@
   environment.etc = {
     "gtk-2.0/gtkrc".text = ''
       gtk-icon-theme-name="Hatter-Slate"
-      gtk-cursor-theme-name="Bibata-Original-Classic"
+      gtk-cursor-theme-name="Bibata-Modern-Classic"
       gtk-cursor-theme-size=24
     '';
 
     "gtk-3.0/settings.ini".text = ''
       [Settings]
       gtk-icon-theme-name=Hatter-Slate
-      gtk-cursor-theme-name=Bibata-Original-Classic
+      gtk-cursor-theme-name=Bibata-Modern-Classic
       gtk-cursor-theme-size=24
     '';
 
     "gtk-4.0/settings.ini".text = ''
       [Settings]
       gtk-icon-theme-name=Hatter-Slate
-      gtk-cursor-theme-name=Bibata-Original-Classic
+      gtk-cursor-theme-name=Bibata-Modern-Classic
       gtk-cursor-theme-size=24
     '';
   };

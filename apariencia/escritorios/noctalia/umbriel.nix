@@ -68,7 +68,7 @@
         natural_scroll = true;
       };
       cursor = {
-        theme = "Bibata-Original-Classic";
+        theme = "Bibata-Modern-Classic";
         size = 24;
         follows_focus = true;
       };

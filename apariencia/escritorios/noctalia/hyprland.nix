@@ -39,7 +39,7 @@
     hl.env("GDK_BACKEND", "wayland")
     hl.env("QT_QPA_PLATFORMTHEME", "kde")
     hl.env("QT_QPA_PLATFORMTHEME_QT6", "kde")
-    hl.env("XCURSOR_THEME", "Bibata-Original-Classic")
+    hl.env("XCURSOR_THEME", "Bibata-Modern-Classic")
     hl.env("XCURSOR_SIZE", "24")
 
     hl.config({
@@ -160,7 +160,7 @@
     -- Inicio de sesión.
     hl.on("hyprland.start", function()
       hl.exec_cmd("noctalia")
-      hl.exec_cmd("hyprctl setcursor Bibata-Original-Classic 24")
+      hl.exec_cmd("hyprctl setcursor Bibata-Modern-Classic 24")
       hl.exec_cmd([[dconf write /org/gnome/desktop/interface/icon-theme "'Hatter-Slate'"]])
     end)
 

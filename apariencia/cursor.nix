@@ -4,7 +4,7 @@
   environment.systemPackages = [pkgs.bibata-cursors];
 
   environment.variables = {
-    XCURSOR_THEME = "Bibata-Original-Classic";
+    XCURSOR_THEME = "Bibata-Modern-Classic";
     XCURSOR_SIZE = "24";
   };
 }
