@@ -8,6 +8,7 @@
     ./fondos-dia-noche.nix
     ./niri.nix
     ./umbriel.nix
+    ./hyprland.nix
     ./qt.nix
   ];
 }
