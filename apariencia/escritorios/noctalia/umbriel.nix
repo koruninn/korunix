@@ -182,7 +182,7 @@
 
     layer_rule = [
       {
-        match.namespace = "^noctalia-(bar-[^\\\"]+|notification|dock|panel|attached-panel|osd|desktop-widget-[^\\\"]*)$";
+        match.namespace = ''^noctalia-(bar-[^"]+|notification|dock|panel|attached-panel|osd|desktop-widget-[^"]*)$'';
         blur = true;
         blur_ignore_alpha = 0.5;
         blur_popups = true;
@@ -196,10 +196,12 @@
       curve = "easeout";
     };
   } // lib.optionalAttrs (equipo ? pantalla) {
-    output.${equipo.pantalla.nombre} = {
-      enabled = true;
-      mode = equipo.pantalla.modo;
-      scale = equipo.pantalla.escala;
+    output = {
+      "${equipo.pantalla.nombre}" = {
+        enabled = true;
+        mode = equipo.pantalla.modo;
+        scale = equipo.pantalla.escala;
+      };
     };
   });
 in {
