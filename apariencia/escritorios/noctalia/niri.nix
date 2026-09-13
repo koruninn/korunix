@@ -42,8 +42,8 @@
         XDG_SESSION_TYPE "wayland"
         QT_QPA_PLATFORM "wayland"
         GDK_BACKEND "wayland"
-        QT_QPA_PLATFORMTHEME null
-        QT_QPA_PLATFORMTHEME_QT6 null
+        QT_QPA_PLATFORMTHEME "qt6ct"
+        QT_QPA_PLATFORMTHEME_QT6 "qt6ct"
         KDE_FULL_SESSION null
         KDE_SESSION_VERSION null
         KDE_SESSION_UID null
