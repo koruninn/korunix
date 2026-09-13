@@ -17,7 +17,7 @@
       # Web: Zen es el navegador declarativo de este equipo. Chrome nunca se
       # selecciona automáticamente; solo puede convertirse en predeterminado
       # mediante una elección manual de la persona usuaria.
-      "$xdgMime" default zen-browser.desktop \
+      "$xdgMime" default zen.desktop \
         x-scheme-handler/http \
         x-scheme-handler/https \
         text/html \
