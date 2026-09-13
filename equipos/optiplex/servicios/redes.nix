@@ -1,11 +1,5 @@
-{
-  config,
-  pkgs,
-  ...
-}: {
-  # Hostname
-  networking.hostName = "optiplex";
-  # Activar redes
+{...}: {
+  # El hostname se deriva del nombre del equipo en flake.nix.
   networking.networkmanager.enable = true;
 
   # Avahi
