@@ -6,6 +6,7 @@
   imports = [
     ./aagl.nix
     ./fastfetch.nix
+    ./fetch.nix
     ./figma.nix
     ./fish.nix
     ./flatpak.nix
