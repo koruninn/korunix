@@ -11,6 +11,7 @@
     ./fish.nix
     ./flatpak.nix
     ./localsend.nix
+    ./nautilus.nix
     ./obs.nix
     ./paquetes.nix
     ./predeterminadas.nix
