@@ -132,6 +132,7 @@ in {
       end
 
       fastfetch --config /etc/fastfetch/config.jsonc
+      echo
     '';
   };
 
