@@ -34,6 +34,10 @@
         --replace-fail 'add_info("", "%s (%d) @ %.2f GHz", name, cores, max_ghz);' 'add_info("", "%s", name);' \
         --replace-fail 'add_info("", "%s (%d)", name, cores);' 'add_info("", "%s", name);'
 
+      # En algunos Ryzen con gráfica integrada /proc/cpuinfo añade este sufijo.
+      # Lo quitamos para mostrar únicamente el modelo del procesador.
+      sed -i '/if (name\[0\]) {/i\  char *radeon_suffix = strstr(name, " with Radeon Graphics");\n  if (radeon_suffix)\n    *radeon_suffix = '\''\\0'\'';' fetch.c
+
       # RAM y disco: usado / total, sin porcentaje ni tipo de sistema de archivos.
       substituteInPlace fetch.c \
         --replace-warn '%.2f GiB / %.2f GiB (\033[%sm%d%%\033[0m) - %s' '%.2f GiB / %.2f GiB' \
@@ -53,7 +57,7 @@
 
     label_color=magenta
 
-    # Logo protagonista, pero equilibrado con las siete líneas de información.
+    # Logo protagonista, equilibrado con las siete líneas de información.
     spin=xy
     speed=1.0
     size=1.80
