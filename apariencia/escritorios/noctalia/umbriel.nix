@@ -263,9 +263,12 @@
 
     layer_rule = [
       {
-        match.namespace = ''^noctalia-(bar-[^"]+|notification|dock|panel|attached-panel|osd|desktop-widget-[^"]*)$'';
+        match.namespace = ''^noctalia-(bar-[^\"]+|notification|dock|panel|attached-panel|osd|desktop-widget-[^\"]*)$'';
         blur = true;
-        blur_ignore_alpha = 0.5;
+        # Los paneles de Korunix rondan 0.5 de opacidad. Un umbral de 0.5
+        # descartaba demasiado vidrio; 0.10 mantiene transparentes los bordes
+        # realmente vacíos y conserva el blur dentro del panel.
+        blur_ignore_alpha = 0.10;
         blur_popups = true;
         blur_optimized = false;
       }
