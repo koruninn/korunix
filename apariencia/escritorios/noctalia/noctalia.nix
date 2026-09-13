@@ -242,7 +242,8 @@
       "alacritty",
       "gtk3",
       "gtk4",
-      "niri"
+      "niri",
+      "qt"
     ]
     enable_community_templates = true
     community_ids = [
