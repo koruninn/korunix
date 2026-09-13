@@ -1,13 +1,6 @@
-{
-  config,
-  pkgs,
-  ...
-}: {
-  # Hostname
-  networking.hostName = "korunix";
-  # Activar redes
+{...}: {
+  # El hostname se deriva del nombre del equipo en flake.nix.
   networking.networkmanager.enable = true;
-  # networking.wireless.enable = true; # Habilitar Wi-Fi
 
   # Avahi
   services.avahi = {
