@@ -1,105 +1,77 @@
 {
-  config,
   equipo,
-  inputs,
-  pkgs,
+  lib,
   ...
 }: let
-  usuario = config.users.users.${equipo.persona};
   navegadorPredeterminado = equipo.navegadorPredeterminado or null;
-  zen = inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default;
 
   webDefaults =
     if navegadorPredeterminado == null
-    then ""
+    then {}
     else if navegadorPredeterminado == "zen"
-    then ''
-      # Web: Zen es el navegador declarativo de este equipo. Chrome nunca se
-      # selecciona automáticamente; solo puede convertirse en predeterminado
-      # mediante una elección manual de la persona usuaria.
-      "$xdgMime" default zen.desktop \
-        x-scheme-handler/http \
-        x-scheme-handler/https \
-        text/html \
-        application/xhtml+xml
-    ''
+    then {
+      "x-scheme-handler/http" = "zen.desktop";
+      "x-scheme-handler/https" = "zen.desktop";
+      "text/html" = "zen.desktop";
+      "application/xhtml+xml" = "zen.desktop";
+    }
     else throw "Navegador predeterminado declarativo no permitido: ${navegadorPredeterminado}. Chrome solo puede elegirse manualmente.";
-
-  mimeDefaults = pkgs.writeShellScript "korunix-aplicaciones-predeterminadas" ''
-    export XDG_CONFIG_HOME="$HOME/.config"
-    export XDG_DATA_DIRS="${zen}/share:${pkgs.nautilus}/share:${pkgs.loupe}/share:${pkgs.papers}/share:${pkgs.file-roller}/share"
-
-    xdgMime=${pkgs.xdg-utils}/bin/xdg-mime
-
-    ${webDefaults}
-
-    # Carpetas: Nautilus.
-    "$xdgMime" default org.gnome.Nautilus.desktop \
-      inode/directory
-
-    # Imágenes: Loupe, el visor actual de GNOME.
-    "$xdgMime" default org.gnome.Loupe.desktop \
-      image/avif \
-      image/bmp \
-      image/gif \
-      image/heic \
-      image/heif \
-      image/jpeg \
-      image/jxl \
-      image/png \
-      image/svg+xml \
-      image/tiff \
-      image/webp
-
-    # Documentos de lectura: Papers, incluido PDF y DjVu.
-    "$xdgMime" default org.gnome.Papers.desktop \
-      application/pdf \
-      application/x-bzpdf \
-      application/x-ext-pdf \
-      application/x-gzpdf \
-      application/x-xzpdf \
-      application/x-cb7 \
-      application/x-cbr \
-      application/x-cbt \
-      application/x-cbz \
-      application/vnd.comicbook-rar \
-      application/vnd.comicbook+zip \
-      image/vnd.djvu \
-      image/vnd.djvu+multipage
-
-    # Archivos comprimidos: File Roller.
-    "$xdgMime" default org.gnome.FileRoller.desktop \
-      application/zip \
-      application/x-7z-compressed \
-      application/x-rar \
-      application/vnd.rar \
-      application/x-tar \
-      application/gzip \
-      application/x-gzip \
-      application/x-bzip2 \
-      application/x-xz \
-      application/zstd \
-      application/x-compressed-tar \
-      application/x-bzip-compressed-tar \
-      application/x-xz-compressed-tar
-  '';
 in {
+  # Estos son valores predeterminados del sistema. Una elección manual guardada
+  # por la persona usuaria en ~/.config/mimeapps.list tiene prioridad sobre ellos.
+  xdg.mime.defaultApplications =
+    webDefaults
+    // {
+      # Carpetas: Nautilus.
+      "inode/directory" = "org.gnome.Nautilus.desktop";
+
+      # Imágenes: Loupe.
+      "image/avif" = "org.gnome.Loupe.desktop";
+      "image/bmp" = "org.gnome.Loupe.desktop";
+      "image/gif" = "org.gnome.Loupe.desktop";
+      "image/heic" = "org.gnome.Loupe.desktop";
+      "image/heif" = "org.gnome.Loupe.desktop";
+      "image/jpeg" = "org.gnome.Loupe.desktop";
+      "image/jxl" = "org.gnome.Loupe.desktop";
+      "image/png" = "org.gnome.Loupe.desktop";
+      "image/svg+xml" = "org.gnome.Loupe.desktop";
+      "image/tiff" = "org.gnome.Loupe.desktop";
+      "image/webp" = "org.gnome.Loupe.desktop";
+
+      # Documentos de lectura: Papers.
+      "application/pdf" = "org.gnome.Papers.desktop";
+      "application/x-bzpdf" = "org.gnome.Papers.desktop";
+      "application/x-ext-pdf" = "org.gnome.Papers.desktop";
+      "application/x-gzpdf" = "org.gnome.Papers.desktop";
+      "application/x-xzpdf" = "org.gnome.Papers.desktop";
+      "application/x-cb7" = "org.gnome.Papers.desktop";
+      "application/x-cbr" = "org.gnome.Papers.desktop";
+      "application/x-cbt" = "org.gnome.Papers.desktop";
+      "application/x-cbz" = "org.gnome.Papers.desktop";
+      "application/vnd.comicbook-rar" = "org.gnome.Papers.desktop";
+      "application/vnd.comicbook+zip" = "org.gnome.Papers.desktop";
+      "image/vnd.djvu" = "org.gnome.Papers.desktop";
+      "image/vnd.djvu+multipage" = "org.gnome.Papers.desktop";
+
+      # Archivos comprimidos: File Roller.
+      "application/zip" = "org.gnome.FileRoller.desktop";
+      "application/x-7z-compressed" = "org.gnome.FileRoller.desktop";
+      "application/x-rar" = "org.gnome.FileRoller.desktop";
+      "application/vnd.rar" = "org.gnome.FileRoller.desktop";
+      "application/x-tar" = "org.gnome.FileRoller.desktop";
+      "application/gzip" = "org.gnome.FileRoller.desktop";
+      "application/x-gzip" = "org.gnome.FileRoller.desktop";
+      "application/x-bzip2" = "org.gnome.FileRoller.desktop";
+      "application/x-xz" = "org.gnome.FileRoller.desktop";
+      "application/zstd" = "org.gnome.FileRoller.desktop";
+      "application/x-compressed-tar" = "org.gnome.FileRoller.desktop";
+      "application/x-bzip-compressed-tar" = "org.gnome.FileRoller.desktop";
+      "application/x-xz-compressed-tar" = "org.gnome.FileRoller.desktop";
+    };
+
   # Chrome puede seguir instalado, pero no se registra como predeterminado.
   # Si se usa, los PDF se entregan al sistema para que Papers los abra.
   environment.etc."opt/chrome/policies/managed/korunix.json".text = builtins.toJSON {
     AlwaysOpenPdfExternally = true;
   };
-
-  # Aplicamos las asociaciones a la persona actual sin sustituir sus otras
-  # asociaciones MIME no relacionadas con este bloque.
-  system.activationScripts.aplicacionesPredeterminadas.text = ''
-    install -d -m 0755 \
-      -o ${usuario.name} \
-      -g ${usuario.group} \
-      ${usuario.home}/.config
-
-    ${pkgs.util-linux}/bin/runuser \
-      -u ${usuario.name} -- \
-      env HOME=${usuario.home} ${mimeDefaults}
-  '';
 }
