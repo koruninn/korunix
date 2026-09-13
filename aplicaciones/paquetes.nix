@@ -1,5 +1,4 @@
 {
-  config,
   inputs,
   pkgs,
   ...
@@ -29,7 +28,6 @@
     loupe
     lutris
     nautilus
-    nautilus-open-any-terminal
     obsidian
     onlyoffice-desktopeditors
     papers
