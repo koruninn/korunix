@@ -3,7 +3,7 @@
   # Mantenemos 0.8.1 hasta que la corrección llegue a una versión posterior.
   nixpkgs.overlays = [
     (_final: prev: {
-      xwayland-satellite = prev.xwayland-satellite.overrideAttrs (_old: {
+      xwayland-satellite = prev.xwayland-satellite.overrideAttrs (finalAttrs: old: {
         version = "0.8.1";
         src = prev.fetchFromGitHub {
           owner = "Supreeeme";
@@ -12,6 +12,12 @@
           hash = "sha256-BUE41HjLIGPjq3U8VXPjf8asH8GaMI7FYdgrIHKFMXA=";
         };
         cargoHash = "sha256-16L6gsvze+m7XCJlOA1lsPNELE3D364ef2FTdkh0rVY=";
+        cargoDeps = prev.rustPlatform.fetchCargoVendor {
+          inherit (old) pname;
+          inherit (finalAttrs) src version;
+          patches = old.cargoDeps.vendorStaging.patches or [];
+          hash = finalAttrs.cargoHash;
+        };
       });
     })
   ];
