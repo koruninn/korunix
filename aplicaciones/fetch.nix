@@ -3,8 +3,28 @@
   pkgs,
   ...
 }: let
+  korunixFetch = pkgs.fetch.overrideAttrs (old: {
+    postPatch = (old.postPatch or "") + ''
+      # Compactamos el lienzo del logo para acercarlo a la información.
+      sed -i 's/#define ANIM_WIDTH 60/#define ANIM_WIDTH 24/' fetch.c
+
+      # Sustituimos las etiquetas de texto por iconos Nerd Font.
+      sed -i \
+        -e 's/add_info("OS",/add_info("",/g' \
+        -e 's/add_info("Kernel",/add_info("",/g' \
+        -e 's/add_info("Shell",/add_info("",/g' \
+        -e 's/add_info("WM",/add_info("",/g' \
+        -e 's/add_info("CPU",/add_info("",/g' \
+        -e 's/add_info("Memory",/add_info("",/g' \
+        -e 's/"Disk (%s)"/" (%s)"/g' \
+        fetch.c
+
+      # La cabecera usuario@equipo no aporta información útil en este panel.
+      sed -i '/static void gather_title(void) {/a\  return;' fetch.c
+    '';
+  });
+
   fetchConfig = pkgs.writeText "korunix-fetch-config" ''
-    # Misma selección y orden de información que Fastfetch en Korunix.
     os
     kernel
     shell
@@ -14,20 +34,25 @@
     disk
     colors
 
-    # Apariencia del panel de información.
     label_color=magenta
 
-    # Animación 3D.
+    # Logo algo mayor y centrado respecto al bloque de información.
     spin=xy
     speed=1.0
-    size=1.0
+    size=1.35
+    height=12
     light=top-left
-    v_alignment=top
+    v_alignment=center
     h_alignment=left
   '';
 in {
+  # Símbolos usados como etiquetas por fetch.
+  fonts.packages = [
+    pkgs.nerd-fonts.symbols-only
+  ];
+
   environment.systemPackages = [
-    pkgs.fetch
+    korunixFetch
   ];
 
   # fetch solo lee su configuración desde el directorio XDG del usuario.
