@@ -5,6 +5,7 @@
 }: {
   imports = [
     ./aagl.nix
+    ./alacritty.nix
     ./fastfetch.nix
     ./fetch.nix
     ./figma.nix
