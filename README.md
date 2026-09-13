@@ -33,7 +33,7 @@ pantalla = {
 };
 ```
 
-El flake falla con un mensaje claro si falta `canal`, `arquitectura` o `persona`, o si el canal no es `stable`/`unstable`.
+El flake falla con un mensaje claro si falta `canal`, `arquitectura` o `persona`, si alguno está vacío, si el canal no es `stable`/`unstable` o si una pantalla declarada está incompleta.
 
 ## Comandos
 
@@ -41,6 +41,12 @@ Validar todas las configuraciones descubiertas:
 
 ```bash
 just check
+```
+
+Construir una generación completa sin activarla:
+
+```bash
+just build korunix
 ```
 
 Probar una configuración sin convertirla en el arranque predeterminado:
@@ -94,7 +100,7 @@ just clean
 3. Sustituir `hardware.nix` por la configuración generada para la máquina real.
 4. Revisar `system.stateVersion` al crear la máquina. Debe representar la versión con la que nació esa instalación y no incrementarse simplemente por actualizar NixOS.
 5. Añadir únicamente los servicios y escritorios que necesite ese equipo.
-6. Ejecutar `just check` y después `just test <nombre>` antes del primer `switch`.
+6. Ejecutar `just check`, `just build <nombre>` y después `just test <nombre>` antes del primer `switch`.
 
 ## Principios actuales
 
