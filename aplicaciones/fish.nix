@@ -1,4 +1,11 @@
-{pkgs, ...}: let
+{
+  config,
+  equipo,
+  pkgs,
+  ...
+}: let
+  usuario = config.users.users.${equipo.persona};
+
   commandSuggest = pkgs.writeShellApplication {
     name = "korunix-command-suggest";
     runtimeInputs = [
@@ -139,6 +146,17 @@ in {
   environment.systemPackages = [
     commandSuggest
   ];
+
+  # Limpia únicamente el enlace heredado que apuntaba al antiguo config.fish
+  # del repositorio. Un archivo real o un enlace distinto se conserva intacto.
+  system.activationScripts.fishLegacyCleanup.text = ''
+    legacy=${usuario.home}/.config/fish/config.fish
+    old_target=${usuario.home}/.korunix/config.fish
+
+    if [ -L "$legacy" ] && [ "$(readlink "$legacy")" = "$old_target" ]; then
+      rm "$legacy"
+    fi
+  '';
 
   users.defaultUserShell = pkgs.fish;
 }
