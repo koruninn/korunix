@@ -1,4 +1,21 @@
 {pkgs, ...}: {
+  # xwayland-satellite 0.8.2 rompe los menús emergentes de Steam bajo Niri.
+  # Mantenemos 0.8.1 hasta que la corrección llegue a una versión posterior.
+  nixpkgs.overlays = [
+    (_final: prev: {
+      xwayland-satellite = prev.xwayland-satellite.overrideAttrs (_old: {
+        version = "0.8.1";
+        src = prev.fetchFromGitHub {
+          owner = "Supreeeme";
+          repo = "xwayland-satellite";
+          rev = "v0.8.1";
+          hash = "sha256-BUE41HjLIGPjq3U8VXPjf8asH8GaMI7FYdgrIHKFMXA=";
+        };
+        cargoHash = "sha256-16L6gsvze+m7XCJlOA1lsPNELE3D364ef2FTdkh0rVY=";
+      });
+    })
+  ];
+
   # 1. Activar el gestor de ventanas Niri (Wayland nativo) a nivel de sistema
   programs.niri.enable = true;
 
@@ -228,8 +245,8 @@
         Mod+V { toggle-window-floating; }
         Mod+Shift+V { switch-focus-between-floating-and-tiling; }
         Mod+W { toggle-column-tabbed-display; }
-        Print { screenshot; }
-        Ctrl+Print { screenshot-screen; }
+        Print { spawn "noctalia" "msg" "screenshot-region"; }
+        Ctrl+Print { spawn "noctalia" "msg" "screenshot-fullscreen"; }
         Alt+Print { screenshot-window; }
         Mod+Escape allow-inhibiting=false { toggle-keyboard-shortcuts-inhibit; }
         Mod+Shift+E { quit; }
