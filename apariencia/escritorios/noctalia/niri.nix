@@ -22,14 +22,13 @@
     })
   ];
 
-  # 1. Activar el gestor de ventanas Niri (Wayland nativo) a nivel de sistema
+  # Activar Niri (Wayland nativo) a nivel de sistema.
   programs.niri.enable = true;
 
   # Niri debe usar la configuración declarativa de Korunix aunque Noctalia cree
   # una configuración de usuario para sus fragmentos dinámicos.
   environment.variables.NIRI_CONFIG = "/etc/niri/config.kdl";
 
-  # 2. Inyectar el archivo KDL directamente en la ruta global de configuración de XDG
   environment.etc."niri/config.kdl".text = ''
     // ----------------------------------------
     // SESIÓN AISLADA DE PLASMA
@@ -56,7 +55,8 @@
     input {
         keyboard {
             xkb {
-                // Puedes definir reglas, modelo, distribución, variantes u opciones aquí.
+                layout "es"
+                variant "deadtilde"
             }
             numlock
         }
@@ -138,16 +138,13 @@
         Mod+Space { spawn "noctalia" "msg" "panel-toggle" "launcher"; }
         Mod+S { spawn "noctalia" "msg" "panel-toggle" "control-center"; }
         Mod+Comma { spawn "noctalia" "msg" "settings-toggle"; }
-        Mod+L { spawn "noctalia" "msg" "session" "lock";}
+        Mod+L { spawn "noctalia" "msg" "session" "lock"; }
         XF86AudioRaiseVolume { spawn "noctalia" "msg" "volume-up"; }
         XF86AudioLowerVolume { spawn "noctalia" "msg" "volume-down"; }
         XF86AudioMute { spawn "noctalia" "msg" "volume-mute"; }
         XF86MonBrightnessUp { spawn "noctalia" "msg" "brightness-up"; }
         XF86MonBrightnessDown { spawn "noctalia" "msg" "brightness-down"; }
-        Mod+T hotkey-overlay-title="Open a Terminal: alacritty" { spawn "alacritty"; }
-        Mod+D hotkey-overlay-title="Run an Application: fuzzel" { spawn "fuzzel"; }
-        Super+Alt+L hotkey-overlay-title="Lock the Screen: swaylock" { spawn "swaylock"; }
-        Super+Alt+S allow-when-locked=true hotkey-overlay-title=null { spawn-sh "pkill orca || exec orca"; }
+        Mod+T hotkey-overlay-title="Abrir terminal: Alacritty" { spawn "alacritty"; }
         XF86AudioMicMute allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"; }
         XF86AudioPlay allow-when-locked=true { spawn "noctalia" "msg" "media" "toggle"; }
         XF86AudioStop allow-when-locked=true { spawn "noctalia" "msg" "media" "stop"; }
