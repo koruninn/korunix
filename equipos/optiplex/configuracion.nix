@@ -17,8 +17,6 @@
     cp "$origen" "$out/share/wayland-sessions/cinnamon-wayland.desktop"
   '';
 in {
-  networking.networkmanager.enable = true;
-
   time.timeZone = "America/Lima";
   i18n.defaultLocale = "es_PE.UTF-8";
 
