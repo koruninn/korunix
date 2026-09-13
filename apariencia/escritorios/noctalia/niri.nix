@@ -219,6 +219,15 @@
         Mod+7 { focus-workspace 7; }
         Mod+8 { focus-workspace 8; }
         Mod+9 { focus-workspace 9; }
+        Mod+KP_1 { focus-workspace 1; }
+        Mod+KP_2 { focus-workspace 2; }
+        Mod+KP_3 { focus-workspace 3; }
+        Mod+KP_4 { focus-workspace 4; }
+        Mod+KP_5 { focus-workspace 5; }
+        Mod+KP_6 { focus-workspace 6; }
+        Mod+KP_7 { focus-workspace 7; }
+        Mod+KP_8 { focus-workspace 8; }
+        Mod+KP_9 { focus-workspace 9; }
         Mod+Shift+1 { move-window-to-workspace 1; }
         Mod+Shift+2 { move-window-to-workspace 2; }
         Mod+Shift+3 { move-window-to-workspace 3; }
