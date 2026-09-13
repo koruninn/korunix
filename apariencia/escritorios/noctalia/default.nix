@@ -1,9 +1,9 @@
 {
-  config,
-  pkgs,
+  inputs,
   ...
 }: {
   imports = [
+    inputs.noctalia.nixosModules.default
     ./noctalia.nix
     ./fondos-dia-noche.nix
     ./portales.nix
