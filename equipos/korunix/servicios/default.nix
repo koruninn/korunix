@@ -1,14 +1,9 @@
-{
-  config,
-  pkgs,
-  ...
-}: {
-  imports = [    
+{...}: {
+  imports = [
     ./arranque.nix
     ./audio.nix
-    ./cachix.nix    
+    ./cachix.nix
     ./energia.nix
     ./redes.nix
-    ./touchpad.nix
   ];
 }
