@@ -30,7 +30,7 @@ check:
 
 # Formatea todos los archivos Nix con el formatter declarado por el flake.
 format:
-	nix fmt
+	nix fmt -- .
 
 # Comprueba el formato sin modificar archivos.
 format-check:
