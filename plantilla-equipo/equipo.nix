@@ -4,4 +4,7 @@
 
   # Arquitectura de la máquina.
   arquitectura = "x86_64-linux";
+
+  # Nombre de la persona principal configurada en este equipo.
+  persona = "usuario";
 }
