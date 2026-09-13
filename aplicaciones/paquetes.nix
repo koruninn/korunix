@@ -13,22 +13,29 @@
     alacritty
     android-tools
     birdfont
+    blender
+    darktable
     eog
     fastfetch
     figma-linux
     fontforge
+    gimp
     google-chrome
     heroic
+    inkscape
     inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default
     kdePackages.kate
     kdePackages.kdenlive
+    libreoffice
     lutris
     nautilus
     nautilus-open-any-terminal
+    obsidian
     onlyoffice-desktopeditors
     peazip
     pear-desktop
     polyglot
+    prismlauncher
     protonplus
     rar
     scrcpy
