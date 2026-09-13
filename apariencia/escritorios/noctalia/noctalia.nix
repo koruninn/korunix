@@ -248,6 +248,7 @@
       "alacritty",
       "gtk3",
       "gtk4",
+      "hyprland",
       "kcolorscheme",
       "niri",
       "qt",
