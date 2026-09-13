@@ -1,10 +1,12 @@
 {
-  config,
-  pkgs,
+  inputs,
   ...
 }: {
-  # Selecciona con 'true' únicamente el launcher o launchers de los juegos que uses.
-  # El módulo de AAGL aplicará la configuración de rendimiento global automáticamente.
+  # AAGL es autocontenido: este módulo carga por sí mismo el soporte oficial
+  # y luego declara únicamente los launchers que Korunix quiere habilitar.
+  imports = [
+    inputs.aagl.nixosModules.default
+  ];
 
   programs.anime-game-launcher.enable = true; # Genshin Impact
   programs.honkers-railway-launcher.enable = true; # Honkai: Star Rail
