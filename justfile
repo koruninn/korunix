@@ -1,8 +1,16 @@
 # Justfile
 
-# Reconstruye cualquier equipo descubierto por el flake.
+# Reconstruye cualquier equipo descubierto por el flake y lo deja como generación activa.
 rebuild equipo:
 	sudo nixos-rebuild switch --flake ".#{{equipo}}"
+
+# Prueba una generación sin convertirla en el arranque predeterminado.
+test equipo:
+	sudo nixos-rebuild test --flake ".#{{equipo}}"
+
+# Vuelve a la generación anterior del equipo actual.
+rollback:
+	sudo nixos-rebuild switch --rollback
 
 # Atajos para los equipos actuales.
 korunix:
