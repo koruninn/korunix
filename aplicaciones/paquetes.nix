@@ -7,7 +7,8 @@
   services.gvfs.enable = true;
   services.udisks2.enable = true;
 
-  # Lista de paquetes instalados en el perfil del sistema
+  # Lista de paquetes instalados en el perfil del sistema.
+  # Los programas habilitados por módulos propios (como Sunshine) no se repiten aquí.
   environment.systemPackages = with pkgs; [
     alacritty
     android-tools
@@ -37,7 +38,6 @@
     protonplus
     rar
     scrcpy
-    sunshine
     thunderbird
     unrar
     valent
