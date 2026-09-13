@@ -1,4 +1,4 @@
-{ inputs, ... }: {
+{...}: {
   imports = [
     ./configuracion.nix
     ./hardware.nix
@@ -6,6 +6,5 @@
     ./servicios
     ../../aplicaciones
     ../../apariencia
-    inputs.noctalia.nixosModules.default
   ];
 }
