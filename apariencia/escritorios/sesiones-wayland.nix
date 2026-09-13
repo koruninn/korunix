@@ -22,11 +22,6 @@
       cp "$origen" "$out/share/wayland-sessions/${sesion}.desktop"
     '';
 
-  hyprland = sesionWayland {
-    nombre = "korunix-hyprland-session";
-    paquete = pkgs.hyprland;
-    sesion = "hyprland";
-  };
 
   plasma = sesionWayland {
     nombre = "korunix-plasma-wayland-session";
@@ -40,7 +35,6 @@ in {
   services.displayManager.sessionPackages = lib.mkForce [
     pkgs.niri
     pkgs.umbriel
-    hyprland
     plasma
   ];
 }

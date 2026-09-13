@@ -10,6 +10,12 @@
     pkgs.kdePackages.kwin-x11
   ];
 
+  # Num Lock encendido al iniciar Plasma.
+  environment.etc."xdg/kcminputrc".text = ''
+[Keyboard]
+NumLock=0
+'';
+
   # Configuración del teclado nativo para Wayland en Plasma.
   environment.variables = {
     XKB_DEFAULT_LAYOUT = "es";

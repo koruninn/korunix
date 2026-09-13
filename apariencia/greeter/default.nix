@@ -33,6 +33,7 @@ in {
       keyboard = {
         layout = "es";
         variant = "deadtilde";
+        numlock = true;
       };
 
       cursor.size = 24;
