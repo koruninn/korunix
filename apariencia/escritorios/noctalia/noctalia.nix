@@ -250,7 +250,8 @@
       "gtk4",
       "kcolorscheme",
       "niri",
-      "qt"
+      "qt",
+      "umbriel"
     ]
     enable_community_templates = true
     community_ids = [
