@@ -1,9 +1,10 @@
 {
-  config,
-  pkgs,
+  equipo,
   ...
 }: {
-  imports = [
-    ./dell.nix
-  ];
+  users.users.${equipo.persona} = {
+    isNormalUser = true;
+    description = equipo.persona;
+    extraGroups = ["networkmanager" "wheel"];
+  };
 }
