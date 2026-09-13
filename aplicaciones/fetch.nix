@@ -21,7 +21,7 @@
         -e 's/add_info("Shell",/add_info("",/g' \
         -e 's/add_info("WM",/add_info("",/g' \
         -e 's/add_info("CPU",/add_info("",/g' \
-        -e 's/add_info("Memory",/add_info("",/g' \
+        -e 's/add_info("Memory",/add_info("󰍛",/g' \
         -e 's/"Disk (%s)"/""/g' \
         fetch.c
 
@@ -57,12 +57,15 @@
 
     label_color=magenta
 
-    # Logo protagonista, equilibrado con las siete líneas de información.
-    spin=xy
-    speed=1.0
+    # Conservamos la silueta de NixOS: menos relieve, bloques sólidos y giro
+    # sobre un solo eje para que el copo siga siendo reconocible al animarse.
+    shading_mode=blocks
+    spin=y
+    speed=0.75
     size=1.80
+    depth=0.30
     height=14
-    light=top-left
+    light=front
     v_alignment=center
     h_alignment=left
   '';
