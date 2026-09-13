@@ -1,6 +1,10 @@
 # Justfile
 
-# Reconstruye la configuración NixOS de un equipo.
+# Reconstruye cualquier equipo descubierto por el flake.
+rebuild equipo:
+	sudo nixos-rebuild switch --flake ".#{{equipo}}"
+
+# Atajos para los equipos actuales.
 korunix:
 	sudo nixos-rebuild switch --flake .#korunix
 
