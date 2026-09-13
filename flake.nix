@@ -66,7 +66,9 @@
       nixpkgsSeleccionado =
         if equipo.canal == "stable"
         then nixpkgs-stable
-        else nixpkgs;
+        else if equipo.canal == "unstable"
+        then nixpkgs
+        else throw "Canal no válido en equipos/${nombre}/equipo.nix: ${equipo.canal}. Usa stable o unstable.";
       system = equipo.arquitectura;
       lib = nixpkgsSeleccionado.lib;
     in {
