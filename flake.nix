@@ -62,14 +62,30 @@
     ) (builtins.attrNames directorios);
 
     crearEquipo = nombre: let
-      equipo = import ./equipos/${nombre}/equipo.nix;
+      equipoOriginal = import ./equipos/${nombre}/equipo.nix;
+      canalEquipo =
+        equipoOriginal.canal
+        or (throw "Falta canal en equipos/${nombre}/equipo.nix.");
+      arquitecturaEquipo =
+        equipoOriginal.arquitectura
+        or (throw "Falta arquitectura en equipos/${nombre}/equipo.nix.");
+      personaEquipo =
+        equipoOriginal.persona
+        or (throw "Falta persona en equipos/${nombre}/equipo.nix.");
+
+      equipo = equipoOriginal // {
+        canal = canalEquipo;
+        arquitectura = arquitecturaEquipo;
+        persona = personaEquipo;
+      };
+
       nixpkgsSeleccionado =
-        if equipo.canal == "stable"
+        if canalEquipo == "stable"
         then nixpkgs-stable
-        else if equipo.canal == "unstable"
+        else if canalEquipo == "unstable"
         then nixpkgs
-        else throw "Canal no válido en equipos/${nombre}/equipo.nix: ${equipo.canal}. Usa stable o unstable.";
-      system = equipo.arquitectura;
+        else throw "Canal no válido en equipos/${nombre}/equipo.nix: ${canalEquipo}. Usa stable o unstable.";
+      system = arquitecturaEquipo;
       lib = nixpkgsSeleccionado.lib;
     in {
       name = nombre;
@@ -77,7 +93,7 @@
         inherit system;
         specialArgs = {
           inherit inputs equipo nombre;
-          canal = equipo.canal;
+          canal = canalEquipo;
         };
         modules = [
           ./equipos/${nombre}
