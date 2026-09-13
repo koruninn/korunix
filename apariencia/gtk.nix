@@ -3,7 +3,6 @@
   # claro u oscuro. Lutris y otras aplicaciones GTK 3 dependen de este tema.
   environment.systemPackages = [
     pkgs.adw-gtk3
-    pkgs.hatter-icon-theme
   ];
 
   # GTK mantiene su apariencia independiente de Plasma y Qt.
