@@ -6,7 +6,6 @@
     ./servicios
     ../../aplicaciones
     ../../apariencia
-    inputs.aagl.nixosModules.default
     inputs.noctalia.nixosModules.default
   ];
 }
