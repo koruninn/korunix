@@ -242,6 +242,7 @@
       "alacritty",
       "gtk3",
       "gtk4",
+      "kcolorscheme",
       "niri",
       "qt"
     ]
@@ -254,6 +255,7 @@
       "heroiclauncher",
       "inkscape",
       "libreoffice",
+      "obs",
       "obsidian",
       "prismlauncher",
       "steam",
