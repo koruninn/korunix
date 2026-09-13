@@ -6,8 +6,8 @@
   # en vez de asumir un usuario concreto.
   persona = "koru";
 
-  # Navegador predeterminado de este equipo. Otros equipos conservan Chrome
-  # salvo que declaren explícitamente otra opción.
+  # Navegador predeterminado de este equipo. Chrome puede seguir instalado,
+  # pero Korunix no lo selecciona automáticamente como predeterminado.
   navegadorPredeterminado = "zen";
 
   # Pantalla principal de este equipo. Los compositores pueden reutilizar estos
