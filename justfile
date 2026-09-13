@@ -28,6 +28,14 @@ check:
 		echo; \
 	done
 
+# Formatea todos los archivos Nix con el formatter declarado por el flake.
+format:
+	nix fmt
+
+# Comprueba el formato sin modificar archivos.
+format-check:
+	nix fmt -- --check .
+
 # Actualiza la versión de los paquetes (flake.lock)
 update:
 	nix flake update
