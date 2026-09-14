@@ -10,6 +10,7 @@
   noctaliaGtkHook = pkgs.writeText "noctalia-gtk-session.toml" ''
     [hooks]
     started = "korunix-gtk-session noctalia"
+    colors_changed = "korunix-gtk-session noctalia"
   '';
 
   gtkSession = pkgs.writeShellApplication {
@@ -110,7 +111,9 @@
           esac
 
           # Al volver a Niri/Umbriel retiramos la paleta GTK que generó Plasma
-          # y restauramos la capa dinámica de Noctalia.
+          # y restauramos la capa dinámica de Noctalia. Este mismo paso se repite
+          # después de cada cambio de colores de Noctalia para reafirmar qué
+          # sesión es la dueña de GTK.
           strip_kde
 
           tries=0
@@ -149,9 +152,9 @@ in {
     gtkSession
   ];
 
-  # Noctalia ejecuta el cambio una vez que termina su arranque y sus plantillas
-  # ya están disponibles. Así Niri y Umbriel comparten la misma ruta sin añadir
-  # lógica específica a cada compositor.
+  # Noctalia reafirma su propiedad visual al terminar de arrancar y cada vez que
+  # resuelve una paleta nueva. Así Niri/Umbriel recuperan GTK después de Plasma
+  # sin afectar la sesión KDE cuando Noctalia se abre manualmente allí.
   system.activationScripts.noctaliaGtkSession.text = ''
     install -d -m 0755 \
       -o ${usuario.name} \

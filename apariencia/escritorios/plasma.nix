@@ -1,27 +1,32 @@
 {
   config,
-  equipo,
   pkgs,
   ...
 }: let
-  usuario = config.users.users.${equipo.persona};
   materialYou = pkgs.python3Packages."kde-material-you-colors";
+  noctaliaPackage = config.programs.noctalia.package;
 
-  plasmaAppColors = pkgs.writeShellApplication {
-    name = "korunix-plasma-app-colors";
-    runtimeInputs = [
-      pkgs.bash
-      pkgs.coreutils
-      pkgs.dasel
-      pkgs.inotify-tools
-      pkgs.jq
-      pkgs.kdePackages.kconfig
-      pkgs.matugen
+  plasmaThemeBridge = pkgs.writeShellApplication {
+    name = "korunix-plasma-theme";
+    runtimeInputs = with pkgs; [
+      bash
+      coreutils
+      dbus
+      gawk
+      glib
+      jq
     ];
     text = ''
+      # Este puente solo puede ser dueño de los colores mientras Plasma está
+      # realmente activo. Si se invoca desde Niri/Umbriel, no toca nada.
+      case "''${XDG_CURRENT_DESKTOP:-}" in
+        *KDE*) ;;
+        *) exit 0 ;;
+      esac
+
       config_home="''${XDG_CONFIG_HOME:-$HOME/.config}"
       state_home="''${XDG_STATE_HOME:-$HOME/.local/state}"
-      kdeglobals="$config_home/kdeglobals"
+      material_json="''${TMPDIR:-/tmp}/kde-material-you-colors-$USER.json"
       noctalia_config="$config_home/noctalia/config.toml"
       community_root="$state_home/noctalia/community-templates"
 
@@ -29,185 +34,18 @@
         noctalia_config=/etc/noctalia/config.toml
       fi
 
-      accent_hex() {
-        local value r g b
-        value="$(kreadconfig6 \
-          --file "$kdeglobals" \
-          --group General \
-          --key AccentColor \
-          2>/dev/null || true)"
-        value="$(printf '%s' "$value" | tr -d '[:space:]')"
+      # KDE Material You Colors escribe este JSON antes de ejecutar el hook.
+      # Si todavía no existe, no reutilizamos jamás los últimos colores de
+      # Noctalia: esperamos al siguiente evento del propio backend de Plasma.
+      if [ ! -s "$material_json" ]; then
+        exit 0
+      fi
 
-        if [[ "$value" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
-          printf '%s\n' "$value"
-          return 0
-        fi
-
-        IFS=',' read -r r g b _ <<< "$value"
-        if [[ "$r" =~ ^[0-9]+$ ]] \
-          && [[ "$g" =~ ^[0-9]+$ ]] \
-          && [[ "$b" =~ ^[0-9]+$ ]] \
-          && ((r >= 0 && r <= 255)) \
-          && ((g >= 0 && g <= 255)) \
-          && ((b >= 0 && b <= 255)); then
-          printf '#%02x%02x%02x\n' "$r" "$g" "$b"
-          return 0
-        fi
-
-        return 1
-      }
-
-      render_template() {
-        local id="$1"
-        local accent="$2"
-        local dir="$community_root/$id"
-        local source="$dir/template.toml"
-        local json rewritten config_file tmp name command output
-
-        [ -f "$source" ] || return 0
-
-        json="$(mktemp)"
-        rewritten="$(mktemp)"
-
-        if ! dasel -i toml -o json < "$source" > "$json" 2>/dev/null; then
-          rm -f "$json" "$rewritten"
-          return 0
-        fi
-
-        jq --arg config_dir "$dir" '
-          def replace_config_dir:
-            if type == "string" then
-              gsub("\\{\\{ config_dir \\}\\}"; $config_dir)
-            elif type == "array" then
-              map(replace_config_dir)
-            elif type == "object" then
-              with_entries(.value |= replace_config_dir)
-            else
-              .
-            end;
-
-          replace_config_dir
-          | del(.catalog)
-          | .config = {
-              version_check: false,
-              caching: false
-            }
-        ' "$json" > "$rewritten"
-        mv "$rewritten" "$json"
-
-        while IFS=$'\t' read -r name command; do
-          [ -n "$name" ] || continue
-
-          output="$(bash -c "$command" 2>/dev/null | tail -n 1)" || output=""
-          tmp="$(mktemp)"
-
-          if [ -n "$output" ]; then
-            jq \
-              --arg name "$name" \
-              --arg output "$output" \
-              '.templates[$name].output_path = $output
-               | del(.templates[$name].output_path_dynamic)' \
-              "$json" > "$tmp"
-          else
-            jq \
-              --arg name "$name" \
-              '.templates[$name].enabled = false
-               | del(.templates[$name].output_path_dynamic)' \
-              "$json" > "$tmp"
-          fi
-
-          mv "$tmp" "$json"
-        done < <(
-          jq -r '
-            .templates // {}
-            | to_entries[]
-            | select(.value.output_path_dynamic? != null)
-            | [.key, .value.output_path_dynamic]
-            | @tsv
-          ' "$json"
-        )
-
-        tmp="$(mktemp)"
-        jq '
-          .templates |= with_entries(
-            .value |= del(.output_path_dynamic, .post_action, .hook_async)
-          )
-        ' "$json" > "$tmp"
-        mv "$tmp" "$json"
-
-        config_file="$(mktemp "$dir/.korunix-plasma.XXXXXX")"
-        if dasel -i json -o toml < "$json" > "$config_file" 2>/dev/null; then
-          matugen color hex "$accent" \
-            --config "$config_file" \
-            --mode dark \
-            --type scheme-tonal-spot \
-            --quiet \
-            --continue-on-error \
-            >/dev/null 2>&1 || true
-        fi
-
-        rm -f "$json" "$config_file"
-      }
-
-      apply_templates() {
-        local accent="$1"
-        local id
-
-        [ -f "$noctalia_config" ] || return 0
-        [ -d "$community_root" ] || return 0
-
-        while IFS= read -r id; do
-          [ -n "$id" ] || continue
-          render_template "$id" "$accent"
-        done < <(
-          dasel -i toml -o json < "$noctalia_config" 2>/dev/null \
-            | jq -r '.theme.templates.community_ids[]?' 2>/dev/null
-        )
-      }
-
-      case "''${1:-apply}" in
-        apply)
-          accent="$(accent_hex)" || exit 0
-          apply_templates "$accent"
-          ;;
-
-        watch|--watch)
-          last=""
-          while :; do
-            current="$(accent_hex 2>/dev/null || true)"
-            if [ -n "$current" ] && [ "$current" != "$last" ]; then
-              apply_templates "$current"
-              last="$current"
-            fi
-
-            inotifywait \
-              -q \
-              -e close_write,moved_to,create \
-              "$config_home" \
-              >/dev/null 2>&1 || sleep 1
-          done
-          ;;
-
-        *)
-          echo "Uso: korunix-plasma-app-colors {apply|--watch}" >&2
-          exit 2
-          ;;
-      esac
-    '';
-  };
-
-  plasmaMaterialYou = pkgs.writeShellApplication {
-    name = "korunix-plasma-material-you";
-    runtimeInputs = [
-      pkgs.dbus
-      materialYou
-      plasmaAppColors
-    ];
-    text = ''
-      # Plasma desconecta la capa GTK de Noctalia antes de aplicar su propio tema.
+      # Plasma vuelve a apropiarse de GTK después de haber aplicado su nueva
+      # paleta. Así Breeze se sincroniza con el color actual y no con el que
+      # hubiera quedado al entrar en la sesión.
       korunix-gtk-session plasma
 
-      # KDE mantiene Breeze como integración GTK de la sesión Plasma.
       dbus-send \
         --session \
         --type=method_call \
@@ -228,11 +66,83 @@
         string:Breeze \
         >/dev/null 2>&1 || true
 
-      # Las plantillas comunitarias siguen el AccentColor que KDE Material You
-      # Colors escriba en kdeglobals, sin tocar la configuración Qt de Niri/Umbriel.
-      korunix-plasma-app-colors --watch &
+      theme_json="$(mktemp)"
+      trap 'rm -f "$theme_json"' EXIT
 
-      exec kde-material-you-colors
+      # KDE Material You Colors usa nombres camelCase y Noctalia snake_case.
+      # Conservamos la paleta completa de Plasma; no reconstruimos otra desde
+      # un único AccentColor.
+      if ! jq '
+        def snake:
+          gsub("(?<c>[A-Z])"; "_\(.c)") | ascii_downcase;
+        {
+          dark: (.schemes.dark // {} | with_entries(.key |= snake)),
+          light: (.schemes.light // {} | with_entries(.key |= snake))
+        }
+      ' "$material_json" > "$theme_json"; then
+        exit 0
+      fi
+
+      if ! jq -e '
+        .dark.primary and
+        .dark.surface and
+        .dark.on_surface and
+        .light.primary and
+        .light.surface and
+        .light.on_surface
+      ' "$theme_json" >/dev/null; then
+        exit 0
+      fi
+
+      mode="$(jq -r 'if .light == true then "light" else "dark" end' "$material_json")"
+      wallpaper="$(jq -r '.wallpaper.data // empty' "$material_json")"
+
+      template_ids() {
+        [ -f "$noctalia_config" ] || return 0
+        awk '
+          /^[[:space:]]*community_ids[[:space:]]*=[[:space:]]*\[/ {
+            inside = 1
+            next
+          }
+          inside && /^[[:space:]]*\]/ {
+            exit
+          }
+          inside {
+            line = $0
+            while (match(line, /"[^"]+"/)) {
+              print substr(line, RSTART + 1, RLENGTH - 2)
+              line = substr(line, RSTART + RLENGTH)
+            }
+          }
+        ' "$noctalia_config"
+      }
+
+      # Las plantillas son compartidas, pero durante Plasma se vuelven a
+      # renderizar con la paleta completa de Plasma. Al volver a Niri/Umbriel,
+      # Noctalia las vuelve a generar con su propia paleta al arrancar.
+      while IFS= read -r id; do
+        [ -n "$id" ] || continue
+        template_config="$community_root/$id/template.toml"
+        [ -f "$template_config" ] || continue
+
+        args=(
+          theme
+          --theme-json "$theme_json"
+          --scheme m3-tonal-spot
+          --default-mode "$mode"
+          --config "$template_config"
+        )
+
+        # Mantener la imagen permite que sigan funcionando plantillas que usan
+        # {{ image }} además de los tokens Material.
+        if [ -n "$wallpaper" ] && [ -f "$wallpaper" ]; then
+          args=(theme "$wallpaper" "''${args[@]:1}")
+        fi
+
+        if ! ${noctaliaPackage}/bin/noctalia "''${args[@]}" >/dev/null 2>&1; then
+          echo "korunix-plasma-theme: no se pudo aplicar la plantilla $id" >&2
+        fi
+      done < <(template_ids)
     '';
   };
 in {
@@ -242,25 +152,34 @@ in {
     pkgs.kdePackages.kwin-x11
   ];
 
+  # Plasma tiene un único dueño de color: KDE Material You Colors. No dejamos
+  # en paralelo el puente AccentColor -> Matugen que podía conservar o inventar
+  # una paleta distinta de la que Plasma estaba mostrando.
   environment.systemPackages = [
     materialYou
-    plasmaAppColors
-    plasmaMaterialYou
+    plasmaThemeBridge
   ];
 
-  # KDE Material You Colors vuelve a ser el motor de colores dinámicos de Plasma.
-  # No se fuerza KorunixDynamic ni accentColorFromWallpaper: evitamos dos motores
-  # escribiendo simultáneamente la misma configuración de KDE.
+  # El backend ejecuta el puente después de cada cambio de fondo, modo o ajuste.
+  # El mismo backend queda expuesto directamente al plasmoid, sin un watcher
+  # adicional de Korunix entre ambos.
   environment.etc."xdg/autostart/kde-material-you-colors.desktop".text = ''
 [Desktop Entry]
 Type=Application
 Name=KDE Material You Colors
 Comment=Genera los colores de Plasma a partir del fondo de pantalla
-Exec=${plasmaMaterialYou}/bin/korunix-plasma-material-you
+Exec=${materialYou}/bin/kde-material-you-colors --on-change-hook ${plasmaThemeBridge}/bin/korunix-plasma-theme
 Icon=color-management
 OnlyShowIn=KDE;
 NoDisplay=true
 X-KDE-AutostartScript=true
+  '';
+
+  # kde-gtk-config permanece activo en Plasma; el hook anterior lo vuelve a
+  # sincronizar una vez que la nueva paleta Material ya fue aplicada.
+  environment.etc."xdg/kded6rc".text = ''
+[Module-gtkconfig]
+autoload=true
   '';
 
   environment.etc."xdg/kcminputrc".text = ''
