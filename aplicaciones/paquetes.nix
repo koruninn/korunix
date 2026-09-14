@@ -1,12 +1,42 @@
-{pkgs, ...}: {
-  # Acceso a dispositivos y medios extraíbles desde aplicaciones GTK.
+{
+  lib,
+  pkgs,
+  ...
+}: let
+  lanzadoresOcultos = pkgs.runCommand "korunix-lanzadores-ocultos" {} ''
+    mkdir -p "$out/share/applications"
+
+    ocultar() {
+      id="$1"
+      nombre="$2"
+      cat > "$out/share/applications/$id" <<EOF
+[Desktop Entry]
+Type=Application
+Name=$nombre
+NoDisplay=true
+Hidden=true
+EOF
+    }
+
+    ocultar qt5ct.desktop "Ajustes de Qt5"
+    ocultar qt6ct.desktop "Ajustes de Qt6"
+    ocultar scrcpy-console.desktop "scrcpy (consola)"
+    ocultar nixos-manual.desktop "Manual de NixOS"
+  '';
+in {
   services.gvfs.enable = true;
   services.udisks2.enable = true;
 
-  # Lista de paquetes instalados en el perfil del sistema.
-  # Los programas habilitados por módulos propios (como Firefox o Sunshine)
-  # no se repiten aquí.
+  # GNOME sigue completo, pero sin aplicaciones auxiliares que Korunix no usa.
+  environment.gnome.excludePackages = with pkgs; [
+    epiphany
+    gnome-tour
+    gnome-user-docs
+    yelp
+  ];
+
   environment.systemPackages = with pkgs; [
+    (lib.hiPrio lanzadoresOcultos)
     alacritty
     android-tools
     birdfont
@@ -19,7 +49,6 @@
     google-chrome
     heroic
     inkscape
-    kdePackages.kate
     kdePackages.kdenlive
     libreoffice
     loupe
@@ -41,7 +70,6 @@
     vesktop
     vlc
     vscode
-    xwayland-satellite
     zoom-us
   ];
 }
