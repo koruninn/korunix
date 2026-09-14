@@ -38,6 +38,7 @@
     protonplus
     rar
     scrcpy
+    stirling-pdf-desktop
     thunderbird
     valent
     vesktop

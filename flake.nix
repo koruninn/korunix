@@ -12,10 +12,6 @@
     aagl.url = "github:ezKEa/aagl-gtk-on-nix";
     aagl.inputs.nixpkgs.follows = "nixpkgs";
 
-    # Alejandra
-    alejandra.url = "github:kamadorueda/alejandra";
-    alejandra.inputs.nixpkgs.follows = "nixpkgs";
-
     # Flatpak declarativo
     nix-flatpak.url = "github:gmodena/nix-flatpak?ref=latest";
 
@@ -45,15 +41,8 @@
   };
 
   outputs = {
-    alejandra,
-    figma-linux-next,
-    nix-flatpak,
     nixpkgs,
     nixpkgs-stable,
-    noctalia,
-    self,
-    spicetify-nix,
-    zen-browser,
     ...
   } @ inputs: let
     directorios = builtins.readDir ./equipos;

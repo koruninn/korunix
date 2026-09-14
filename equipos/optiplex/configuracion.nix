@@ -45,7 +45,6 @@ in {
 
   console.keyMap = "es";
 
-  programs.firefox.enable = false;
   nixpkgs.config.allowUnfree = true;
 
   environment.systemPackages = with pkgs; [

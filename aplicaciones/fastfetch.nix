@@ -1,6 +1,5 @@
 { ... }: {
   environment.etc."fastfetch/config.jsonc".text = builtins.toJSON {
-    "$schema" = "https://github.com";
 
     display = {
       key = {
