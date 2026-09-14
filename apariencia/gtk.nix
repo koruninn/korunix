@@ -1,17 +1,9 @@
 {
   config,
-  equipo,
   pkgs,
   ...
 }: let
-  usuario = config.users.users.${equipo.persona};
   noctaliaPackage = config.programs.noctalia.package;
-
-  noctaliaGtkHook = pkgs.writeText "noctalia-gtk-session.toml" ''
-    [hooks]
-    started = "korunix-gtk-session noctalia"
-    colors_changed = "korunix-gtk-session noctalia"
-  '';
 
   gtkSession = pkgs.writeShellApplication {
     name = "korunix-gtk-session";
@@ -138,17 +130,11 @@
 
       case "''${1:-}" in
         plasma)
-          # Plasma conserva los archivos de Noctalia, pero desconecta su CSS y
-          # deja que kde-gtk-config aplique Breeze para esta sesión.
           strip_noctalia
           set_theme Breeze dark
           ;;
 
         noctalia)
-          # Ejecutar Noctalia manualmente dentro de Plasma no debe cambiar GTK.
-          # Durante el arranque de Umbriel, sin embargo, XDG_CURRENT_DESKTOP puede
-          # conservar KDE unos instantes desde la sesión anterior. El wrapper de
-          # sesión usa noctalia-session para saltarse únicamente esta protección.
           case "''${XDG_CURRENT_DESKTOP:-}" in
             *KDE*) exit 0 ;;
           esac
@@ -156,8 +142,6 @@
           ;;
 
         noctalia-session)
-          # Entrada confiable desde el compositor Noctalia: restaura la identidad
-          # GTK aunque el entorno temprano todavía contenga restos de Plasma.
           restore_noctalia
           ;;
 
@@ -173,8 +157,6 @@
     name = "korunix-noctalia-session";
     runtimeInputs = [gtkSession];
     text = ''
-      # Esta ruta solo la invoca el arranque de la sesión Noctalia. Debe recuperar
-      # GTK incluso si Plasma dejó XDG_CURRENT_DESKTOP=KDE en el entorno temprano.
       korunix-gtk-session noctalia-session
       exec ${noctaliaPackage}/bin/noctalia "$@"
     '';
@@ -185,21 +167,6 @@ in {
     gtkSession
     noctaliaSession
   ];
-
-  # Noctalia reafirma la propiedad GTK al arrancar y cuando cambia su paleta.
-  # El arranque inicial también queda cubierto por korunix-noctalia-session.
-  system.activationScripts.noctaliaGtkSession.text = ''
-    install -d -m 0755 \
-      -o ${usuario.name} \
-      -g ${usuario.group} \
-      ${usuario.home}/.config/noctalia
-
-    install -m 0644 \
-      -o ${usuario.name} \
-      -g ${usuario.group} \
-      ${noctaliaGtkHook} \
-      ${usuario.home}/.config/noctalia/gtk-session.toml
-  '';
 
   environment.etc = {
     "gtk-2.0/gtkrc".text = ''
