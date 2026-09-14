@@ -262,7 +262,7 @@
       "obs",
       "obsidian",
       "prismlauncher",
-      "pywalfox-beta4",
+      "pywalfox",
       "steam",
       "vscode"
     ]
