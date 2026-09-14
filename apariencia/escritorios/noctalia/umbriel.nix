@@ -22,8 +22,7 @@
     environment = {
       QT_QPA_PLATFORM = "wayland";
       GDK_BACKEND = "wayland";
-      QT_QPA_PLATFORMTHEME = "kde";
-      QT_QPA_PLATFORMTHEME_QT6 = "kde";
+      QT_QPA_PLATFORMTHEME = "qt5ct:qt6ct";
     };
 
     workspaces = {

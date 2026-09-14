@@ -34,16 +34,15 @@
     // SESIÓN AISLADA DE PLASMA
     // ----------------------------------------
     // Estas variables afectan únicamente a los procesos que Niri lanza.
-    // GTK no debe detectar Plasma como escritorio activo; Qt/KDE sí usa su
-    // integración de plataforma para leer el KColorScheme generado por Noctalia.
+    // GTK no detecta Plasma como escritorio activo y Qt usa qt5ct/qt6ct para
+    // leer la paleta de Noctalia sin escribir ni depender de kdeglobals.
     environment {
         XDG_CURRENT_DESKTOP "niri"
         XDG_SESSION_DESKTOP "niri"
         XDG_SESSION_TYPE "wayland"
         QT_QPA_PLATFORM "wayland"
         GDK_BACKEND "wayland"
-        QT_QPA_PLATFORMTHEME "kde"
-        QT_QPA_PLATFORMTHEME_QT6 "kde"
+        QT_QPA_PLATFORMTHEME "qt5ct:qt6ct"
         KDE_FULL_SESSION null
         KDE_SESSION_VERSION null
         KDE_SESSION_UID null

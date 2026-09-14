@@ -1,10 +1,28 @@
-{pkgs, ...}: {
+{pkgs, ...}: let
+  materialYou = pkgs.python3Packages."kde-material-you-colors";
+in {
   # Plasma 6 únicamente como sesión Wayland.
   services.desktopManager.plasma6.enable = true;
 
   environment.plasma6.excludePackages = [
     pkgs.kdePackages.kwin-x11
   ];
+
+  # Colores dinámicos propios de Plasma, independientes de Noctalia.
+  environment.systemPackages = [
+    materialYou
+  ];
+
+  environment.etc."xdg/autostart/kde-material-you-colors.desktop".text = ''
+[Desktop Entry]
+Type=Application
+Name=KDE Material You Colors
+Comment=Colores dinámicos de Plasma a partir del fondo
+Exec=${materialYou}/bin/kde-material-you-colors
+Icon=color-management
+OnlyShowIn=KDE;
+X-KDE-AutostartScript=true
+  '';
 
   # Num Lock encendido al iniciar Plasma.
   environment.etc."xdg/kcminputrc".text = ''
