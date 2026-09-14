@@ -1,5 +1,6 @@
 {
   config,
+  lib,
   pkgs,
   ...
 }: let
@@ -69,6 +70,11 @@
 in {
   services.desktopManager.gnome.enable = true;
   services.desktopManager.gnome.sessionPath = [chromaleon];
+
+  # Plasma y GNOME definen sendos askpass con la misma prioridad. Seahorse se
+  # usa como implementación común mientras ambas sesiones conviven.
+  programs.ssh.askPassword =
+    lib.mkForce "${pkgs.seahorse}/libexec/seahorse/ssh-askpass";
 
   environment.systemPackages = [gnomeDynamicColors];
 
