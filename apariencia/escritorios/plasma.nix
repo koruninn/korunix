@@ -85,9 +85,6 @@
       wallpaper="$(jq -r '.wallpaper.data // empty' "$material_json")"
       seed="$(jq -r '.seed.color // .schemes.dark.primary // "desconocido"' "$material_json")"
 
-      # Plasma recupera GTK solo después de que KDE Material You Colors haya
-      # escrito la nueva paleta. Así Breeze no conserva el acento de la sesión
-      # anterior de Noctalia.
       korunix-gtk-session plasma
 
       dbus-send \
@@ -189,7 +186,6 @@
         *) exit 0 ;;
       esac
 
-      # Forzamos el mismo directorio temporal para el backend y el supervisor.
       export TMPDIR=/tmp
       material_json="$TMPDIR/kde-material-you-colors-$USER.json"
       material_dir="$(dirname "$material_json")"
@@ -200,11 +196,12 @@
       last_hash=""
 
       mkdir -p "$log_dir"
-      rm -f "$material_json"
 
       log() {
         printf '%s %s\n' "$(date -Is)" "$*" >> "$log_file"
       }
+
+      log "Supervisor Plasma iniciado: escritorio=''${XDG_CURRENT_DESKTOP:-desconocido}"
 
       cleanup() {
         if [ -n "$backend_pid" ] && kill -0 "$backend_pid" 2>/dev/null; then
@@ -214,13 +211,15 @@
       }
       trap cleanup EXIT INT TERM HUP
 
-      # El backend queda como proceso real de la sesión Plasma para que también
-      # pueda ser detectado por el plasmoid oficial.
+      # Arrancamos el backend para que una instalación limpia funcione sin
+      # depender del autostart que la propia aplicación pueda haber creado.
+      # Si ese otro autostart arranca después, KDE Material You Colors sustituye
+      # su instancia anterior; el supervisor permanece vivo y sigue el JSON.
       ${materialYou}/bin/kde-material-you-colors &
       backend_pid=$!
-      log "Backend KDE Material You Colors iniciado: pid=$backend_pid"
+      log "Backend KDE Material You Colors lanzado: pid=$backend_pid"
 
-      while kill -0 "$backend_pid" 2>/dev/null; do
+      while :; do
         if [ -s "$material_json" ]; then
           current_hash="$(sha256sum "$material_json" 2>/dev/null | awk '{print $1}' || true)"
           if [ -n "$current_hash" ] && [ "$current_hash" != "$last_hash" ]; then
@@ -232,9 +231,6 @@
           fi
         fi
 
-        # KDE Material You Colors reescribe el JSON en cada cambio de fondo,
-        # modo o configuración. Vigilamos el directorio para no depender de que
-        # el archivo exista cuando empieza la sesión.
         inotifywait \
           -q \
           -t 30 \
@@ -242,8 +238,6 @@
           "$material_dir" \
           >/dev/null 2>&1 || true
       done
-
-      wait "$backend_pid"
     '';
   };
 in {
@@ -259,13 +253,14 @@ in {
     plasmaMaterialYouSession
   ];
 
-  # Korunix supervisa directamente el JSON que genera el backend. Ya no
-  # dependemos de un hook silencioso para aplicar las plantillas de Plasma.
-  environment.etc."xdg/autostart/kde-material-you-colors.desktop".text = ''
+  # Nombre propio de Korunix: no puede ser ocultado por
+  # ~/.config/autostart/kde-material-you-colors.desktop, que la aplicación
+  # oficial crea con prioridad sobre /etc/xdg/autostart.
+  environment.etc."xdg/autostart/korunix-plasma-material-you.desktop".text = ''
 [Desktop Entry]
 Type=Application
-Name=KDE Material You Colors
-Comment=Genera los colores de Plasma a partir del fondo de pantalla
+Name=Korunix · KDE Material You Colors
+Comment=Sincroniza los colores de Plasma con las plantillas de aplicaciones
 Exec=${plasmaMaterialYouSession}/bin/korunix-plasma-material-you
 Icon=color-management
 OnlyShowIn=KDE;
