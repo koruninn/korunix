@@ -111,6 +111,31 @@
         fi
       }
 
+      restore_noctalia() {
+        strip_kde
+        restore_noctalia_identity
+
+        tries=0
+        while [ "$tries" -lt 50 ]; do
+          if [ -f "$config_home/gtk-3.0/noctalia.css" ] && [ -f "$config_home/gtk-4.0/noctalia.css" ]; then
+            break
+          fi
+          tries=$((tries + 1))
+          sleep 0.1
+        done
+
+        mode=$(current_mode)
+        if [ "$mode" = light ]; then
+          set_theme adw-gtk3 light
+        else
+          set_theme adw-gtk3-dark dark
+        fi
+
+        if [ -f "$config_home/gtk-3.0/noctalia.css" ] && [ -f "$config_home/gtk-4.0/noctalia.css" ]; then
+          bash "$noctalia_apply" "$mode" >/dev/null 2>&1 || true
+        fi
+      }
+
       case "''${1:-}" in
         plasma)
           # Plasma conserva los archivos de Noctalia, pero desconecta su CSS y
@@ -120,42 +145,24 @@
           ;;
 
         noctalia)
-          # Abrir Noctalia manualmente dentro de Plasma no debe cambiar GTK.
+          # Ejecutar Noctalia manualmente dentro de Plasma no debe cambiar GTK.
+          # Durante el arranque de Umbriel, sin embargo, XDG_CURRENT_DESKTOP puede
+          # conservar KDE unos instantes desde la sesión anterior. El wrapper de
+          # sesión usa noctalia-session para saltarse únicamente esta protección.
           case "''${XDG_CURRENT_DESKTOP:-}" in
             *KDE*) exit 0 ;;
           esac
+          restore_noctalia
+          ;;
 
-          # Al entrar a Niri/Umbriel restauramos primero la identidad GTK de la
-          # sesión. Esto no toca Qt ni las plantillas de aplicaciones.
-          strip_kde
-          restore_noctalia_identity
-
-          # La paleta GTK de Noctalia se conserva entre sesiones. Si ya existe,
-          # la reconectamos de inmediato; cuando Noctalia arranque o cambie de
-          # colores, sus plantillas GTK volverán a escribirla normalmente.
-          tries=0
-          while [ "$tries" -lt 50 ]; do
-            if [ -f "$config_home/gtk-3.0/noctalia.css" ] && [ -f "$config_home/gtk-4.0/noctalia.css" ]; then
-              break
-            fi
-            tries=$((tries + 1))
-            sleep 0.1
-          done
-
-          mode=$(current_mode)
-          if [ "$mode" = light ]; then
-            set_theme adw-gtk3 light
-          else
-            set_theme adw-gtk3-dark dark
-          fi
-
-          if [ -f "$config_home/gtk-3.0/noctalia.css" ] && [ -f "$config_home/gtk-4.0/noctalia.css" ]; then
-            bash "$noctalia_apply" "$mode" >/dev/null 2>&1 || true
-          fi
+        noctalia-session)
+          # Entrada confiable desde el compositor Noctalia: restaura la identidad
+          # GTK aunque el entorno temprano todavía contenga restos de Plasma.
+          restore_noctalia
           ;;
 
         *)
-          echo "Uso: korunix-gtk-session {plasma|noctalia}" >&2
+          echo "Uso: korunix-gtk-session {plasma|noctalia|noctalia-session}" >&2
           exit 2
           ;;
       esac
@@ -166,10 +173,9 @@
     name = "korunix-noctalia-session";
     runtimeInputs = [gtkSession];
     text = ''
-      # La sesión Noctalia recupera GTK antes de iniciar el shell. Así una sesión
-      # Plasma previa no puede dejar Breeze/Hatter desincronizados durante el
-      # arranque de Niri o Umbriel.
-      korunix-gtk-session noctalia
+      # Esta ruta solo la invoca el arranque de la sesión Noctalia. Debe recuperar
+      # GTK incluso si Plasma dejó XDG_CURRENT_DESKTOP=KDE en el entorno temprano.
+      korunix-gtk-session noctalia-session
       exec ${noctaliaPackage}/bin/noctalia "$@"
     '';
   };
