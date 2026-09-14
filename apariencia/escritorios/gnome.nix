@@ -1,9 +1,63 @@
 {
   config,
+  lib,
   pkgs,
   ...
 }: let
   uuid = "user-accent-colors@fabito02";
+  fondosClaros = ./noctalia/fondos/claro;
+  fondosOscuros = ./noctalia/fondos/oscuro;
+
+  imageFiles = directory: let
+    entries = builtins.readDir directory;
+  in
+    lib.sort builtins.lessThan (
+      lib.filter
+        (name:
+          entries.${name} == "regular"
+          && lib.any (suffix: lib.hasSuffix suffix name) [
+            ".jpg"
+            ".jpeg"
+            ".png"
+            ".webp"
+            ".avif"
+          ])
+        (builtins.attrNames entries)
+    );
+
+  prettyName = name:
+    builtins.replaceStrings
+      ["-" "_"]
+      [" " " "]
+      (builtins.replaceStrings
+        [".jpeg" ".jpg" ".png" ".webp" ".avif"]
+        ["" "" "" "" ""]
+        name);
+
+  backgroundEntry = collection: directory: name: ''
+    <wallpaper deleted="false">
+      <name>${lib.escapeXML "Korunix · ${collection} · ${prettyName name}"}</name>
+      <filename>${directory}/${name}</filename>
+      <filename-dark>${directory}/${name}</filename-dark>
+      <options>zoom</options>
+      <shade_type>solid</shade_type>
+      <pcolor>#000000</pcolor>
+      <scolor>#000000</scolor>
+    </wallpaper>
+  '';
+
+  gnomeBackgrounds = pkgs.writeTextFile {
+    name = "korunix-gnome-backgrounds";
+    destination = "/share/gnome-background-properties/korunix.xml";
+    text = ''
+      <?xml version="1.0"?>
+      <!DOCTYPE wallpapers SYSTEM "gnome-wp-list.dtd">
+      <wallpapers>
+        ${lib.concatMapStrings (backgroundEntry "Claro" fondosClaros) (imageFiles fondosClaros)}
+        ${lib.concatMapStrings (backgroundEntry "Oscuro" fondosOscuros) (imageFiles fondosOscuros)}
+      </wallpapers>
+    '';
+  };
 
   chromaleonSource = builtins.fetchGit {
     url = "https://github.com/Fabito02/ChromaLeon.git";
@@ -157,6 +211,7 @@ in {
   services.desktopManager.gnome.sessionPath = [chromaleon];
 
   environment.systemPackages = [
+    gnomeBackgrounds
     gnomeShellPalette
     obsidianAlias
     localSendAlias
