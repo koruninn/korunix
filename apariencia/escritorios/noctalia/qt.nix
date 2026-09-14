@@ -6,8 +6,8 @@
 }: let
   usuario = config.users.users.${equipo.persona};
 in {
-  # Noctalia tematiza Qt mediante qt5ct/qt6ct sin escribir kdeglobals.
-  # Así las aplicaciones Qt de Niri y Umbriel quedan separadas de Plasma.
+  # Niri, Umbriel y GNOME comparten qt5ct/qt6ct. La paleta noctalia.conf se
+  # regenera desde el mismo fondo en cada sesión, así Qt deja de ser una isla.
   qt.enable = true;
 
   environment.systemPackages = [
@@ -15,8 +15,8 @@ in {
     pkgs.qt6Packages.qt6ct
   ];
 
-  # Los dos configuradores apuntan a la paleta dinámica que genera la plantilla
-  # Qt de Noctalia. Plasma no usa estos archivos porque conserva su integración KDE.
+  environment.variables.QT_QPA_PLATFORMTHEME = "qt5ct:qt6ct";
+
   system.activationScripts.noctaliaQtConfig.text = ''
     for version in qt5ct qt6ct; do
       config_dir=${usuario.home}/.config/$version
