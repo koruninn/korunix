@@ -138,8 +138,8 @@ PY
     rev = "9d9eb77013b24e45ae75fc92a85a9b6d82e052f6";
   };
 
-  # Solo Steam necesita redondeo adicional: las ventanas GNOME/libadwaita ya
-  # tienen sus propias esquinas y no deben pasar por un segundo renderer.
+  # Steam y Code necesitan redondeo adicional: las ventanas GNOME/libadwaita
+  # ya tienen sus propias esquinas y no deben pasar por un segundo renderer.
   roundedWindows = pkgs.stdenvNoCC.mkDerivation {
     pname = "gnome-shell-extension-rounded-windows-korunix";
     version = "2.2.0";
@@ -233,6 +233,13 @@ PY
       gsettings set org.gnome.desktop.interface cursor-theme Bibata-Modern-Classic >/dev/null 2>&1 || true
       gsettings set org.gnome.desktop.interface cursor-size 24 >/dev/null 2>&1 || true
 
+      # GNOME abre la terminal única de Korunix con el mismo Ctrl+Alt+T que
+      # Cinnamon. Se usa un atajo propio para no depender de GNOME Console.
+      dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/korunix-terminal/']"
+      dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/korunix-terminal/name "'Alacritty'"
+      dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/korunix-terminal/command "'alacritty'"
+      dconf write /org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/korunix-terminal/binding "'<Control><Alt>t'"
+
       # Dash to Dock replica la disposición del dock de Noctalia.
       dconf write /org/gnome/shell/extensions/dash-to-dock/dock-position "'BOTTOM'"
       dconf write /org/gnome/shell/extensions/dash-to-dock/dash-max-icon-size 40
@@ -262,15 +269,15 @@ PY
       dconf write /org/gnome/shell/extensions/alphabetical-app-grid/folder-order-position "'alphabetical'"
       dconf write /org/gnome/shell/extensions/alphabetical-app-grid/show-favourite-apps false
 
-      # Steam es la única ventana a la que añadimos redondeo por compositor.
-      # El cliente principal usa steam y las ventanas CEF de chat/amigos usan
-      # steamwebhelper, por eso ambos identificadores pertenecen a la whitelist.
+      # Steam/steamwebhelper y Visual Studio Code reciben redondeo por
+      # compositor. Se cubren los identificadores de Code usados por XWayland
+      # y por el seguimiento de aplicaciones de GNOME.
       dconf write /org/gnome/shell/extensions/rounded-windows/corner-radius 12
       dconf write /org/gnome/shell/extensions/rounded-windows/smoothing 0.6
       dconf write /org/gnome/shell/extensions/rounded-windows/border-width 0
       dconf write /org/gnome/shell/extensions/rounded-windows/custom-shadow true
       dconf write /org/gnome/shell/extensions/rounded-windows/whitelist-mode true
-      dconf write /org/gnome/shell/extensions/rounded-windows/blacklist "['steam', 'steamwebhelper']"
+      dconf write /org/gnome/shell/extensions/rounded-windows/blacklist "['steam', 'steamwebhelper', 'code', 'Code', 'Visual Studio Code']"
       dconf write /org/gnome/shell/extensions/rounded-windows/keep-rounded-maximized false
       dconf write /org/gnome/shell/extensions/rounded-windows/keep-rounded-fullscreen false
 
