@@ -22,17 +22,16 @@
       cp "$origen" "$out/share/wayland-sessions/${sesion}.desktop"
     '';
 
-  plasma = sesionWayland {
-    nombre = "korunix-plasma-wayland-session";
-    paquete = pkgs.kdePackages.plasma-workspace.sessions;
-    sesion = "plasma";
+  gnome = sesionWayland {
+    nombre = "korunix-gnome-wayland-session";
+    paquete = pkgs.gnome-session.sessions;
+    sesion = "gnome";
   };
 in {
-  # Korunix expone únicamente sesiones Wayland. Niri y Umbriel ya publican una
-  # sola sesión; Plasma se filtra para evitar variantes adicionales.
+  # Korunix expone únicamente Niri, Umbriel y GNOME en Wayland.
   services.displayManager.sessionPackages = lib.mkForce [
     pkgs.niri
     pkgs.umbriel
-    plasma
+    gnome
   ];
 }
