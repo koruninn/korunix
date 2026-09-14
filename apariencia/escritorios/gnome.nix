@@ -12,12 +12,60 @@
 
   chromaleon = pkgs.stdenvNoCC.mkDerivation {
     pname = "gnome-shell-extension-chromaleon";
-    version = "2.3.1";
+    version = "2.3.1-korunix";
     src = chromaleonSource;
 
-    nativeBuildInputs = [pkgs.glib];
+    nativeBuildInputs = [
+      pkgs.glib
+      pkgs.python3
+    ];
     dontConfigure = true;
     dontBuild = true;
+
+    # ChromaLeon sirve únicamente como renderer del GNOME Shell. Su código
+    # normal siempre escribe gtk.css y genera su propio tema de iconos incluso
+    # cuando el tintado de aplicaciones está desactivado; Korunix necesita que
+    # GTK y Hatter tengan un único propietario compartido con Noctalia.
+    postPatch = ''
+      python3 - <<'PY'
+from pathlib import Path
+import re
+
+path = Path("extension.js")
+text = path.read_text()
+
+text, icon_count = re.subn(
+    r"  async _updateIconPack\(cancellable\) \{.*?\n  \}\n\n  async _updateStyles",
+    """  async _updateIconPack(cancellable) {
+    throwIfCancelled(cancellable);
+  }
+
+  async _updateStyles""",
+    text,
+    count=1,
+    flags=re.S,
+)
+
+text, app_count = re.subn(
+    r"  async _updateAppStyles\(cancellable\) \{.*?\n  \}\n\n  _shouldUseLightShell",
+    """  async _updateAppStyles(cancellable) {
+    throwIfCancelled(cancellable);
+  }
+
+  _shouldUseLightShell""",
+    text,
+    count=1,
+    flags=re.S,
+)
+
+if icon_count != 1 or app_count != 1:
+    raise SystemExit(
+        f"No se pudo limitar ChromaLeon al Shell: iconos={icon_count} GTK={app_count}"
+    )
+
+path.write_text(text)
+PY
+    '';
 
     installPhase = ''
       extension=$out/share/gnome-shell/extensions/${uuid}
@@ -30,16 +78,33 @@
   gnomeShellPalette = pkgs.writeShellApplication {
     name = "korunix-gnome-shell-palette";
     runtimeInputs = [
+      pkgs.coreutils
       pkgs.glib
       pkgs.gnome-shell
+      pkgs.gnused
       pkgs.jq
     ];
     text = ''
       extension_dir="${chromaleon}/share/gnome-shell/extensions/${uuid}"
+      config_home="''${XDG_CONFIG_HOME:-$HOME/.config}"
       palette="''${1:-}"
       mode="''${2:-dark}"
 
       export GSETTINGS_SCHEMA_DIR="$extension_dir/schemas"
+
+      # Limpia una sola vez cualquier CSS que una versión anterior de
+      # ChromaLeon hubiese dejado dentro de GTK. A partir de este build la
+      # extensión ya no vuelve a escribir estos archivos.
+      for version in 3 4; do
+        gtk_dir="$config_home/gtk-$version.0"
+        gtk_css="$gtk_dir/gtk.css"
+        if [ -f "$gtk_css" ]; then
+          sed -i \
+            '/\/\* CustomAccentExtension Start \*\//,/\/\* CustomAccentExtension End \*\//d' \
+            "$gtk_css"
+        fi
+        rm -f "$gtk_dir/custom-accent.css"
+      done
 
       # ChromaLeon queda limitado al Shell. GTK, Qt y las aplicaciones con
       # plantillas consumen directamente la paleta M3 generada por Korunix.
