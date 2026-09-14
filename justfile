@@ -1,30 +1,10 @@
-# Justfile
-
-# Reconstruye cualquier equipo descubierto por el flake y lo deja como generación activa.
-rebuild equipo:
+# Aplica la configuración de un equipo.
+aplicar equipo:
 	sudo nixos-rebuild switch --flake ".#{{equipo}}"
 
-# Construye una generación completa sin activarla.
-build equipo:
-	nixos-rebuild build --flake ".#{{equipo}}"
-
-# Prueba una generación sin convertirla en el arranque predeterminado.
-test equipo:
-	sudo nixos-rebuild test --flake ".#{{equipo}}"
-
-# Vuelve a la generación anterior del equipo actual.
-rollback:
-	sudo nixos-rebuild switch --rollback
-
-# Atajos para los equipos actuales.
-korunix:
-	sudo nixos-rebuild switch --flake .#korunix
-
-optiplex:
-	sudo nixos-rebuild switch --flake .#optiplex
-
-# Evalúa todas las configuraciones que el flake descubra en equipos/.
-check:
+# Revisa formato y configuraciones sin modificar el sistema.
+revisar:
+	nix fmt -- --check .
 	nix flake check --no-build
 	@set -eu; for equipo in $(nix eval --raw .#nixosConfigurations --apply 'x: builtins.concatStringsSep " " (builtins.attrNames x)'); do \
 		echo "Evaluando $equipo"; \
@@ -32,19 +12,15 @@ check:
 		echo; \
 	done
 
-# Formatea todos los archivos Nix con el formatter declarado por el flake.
-format:
-	nix fmt -- .
-
-# Comprueba el formato sin modificar archivos.
-format-check:
-	nix fmt -- --check .
-
-# Actualiza la versión de los paquetes (flake.lock)
-update:
+# Actualiza las versiones fijadas en flake.lock.
+actualizar:
 	nix flake update
 
-# Limpia la basura de Nix y optimiza el almacenamiento
-clean:
+# Vuelve a la generación anterior del equipo actual.
+volver:
+	sudo nixos-rebuild switch --rollback
+
+# Elimina generaciones antiguas y optimiza el almacén de Nix.
+limpiar:
 	sudo nix-collect-garbage --delete-older-than 30d
 	nix store optimise
