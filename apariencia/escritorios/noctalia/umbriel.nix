@@ -279,6 +279,27 @@
       enabled = true;
       duration_ms = 250;
       curve = "easeout";
+
+      windows_in = {
+        enabled = true;
+        duration_ms = 180;
+        curve = "easeout";
+        style = "popin";
+        scale = 0.90;
+      };
+
+      windows_out = {
+        enabled = true;
+        duration_ms = 220;
+        curve = "easeout";
+        style = "fade";
+      };
+
+      windows_move = {
+        enabled = true;
+        duration_ms = 220;
+        curve = "snappy";
+      };
     };
   } // lib.optionalAttrs (equipo ? pantalla) {
     output = {
