@@ -5,7 +5,6 @@
   ...
 }: let
   usuario = config.users.users.${equipo.persona};
-  noctaliaPackage = config.programs.noctalia.package;
 
   plasmaDynamicScheme = pkgs.runCommand "korunix-plasma-dynamic-colors" {} ''
     mkdir -p "$out/share/color-schemes"
@@ -35,28 +34,38 @@
   plasmaNativeColors = pkgs.writeShellApplication {
     name = "korunix-plasma-colors";
     runtimeInputs = [
-      pkgs.bash
-      pkgs.glib
+      pkgs.dbus
       pkgs.kdePackages.plasma-workspace
     ];
     text = ''
-      noctalia_templates="${noctaliaPackage}/share/noctalia/assets/templates"
+      # La frontera GTK se conmuta por sesión: Plasma desconecta Noctalia y
+      # ChromaLeon, pero conserva sus archivos para restaurarlos al volver.
+      korunix-gtk-session plasma
 
-      for undo in \
-        "$noctalia_templates/gtk/undo-gtk3.sh" \
-        "$noctalia_templates/gtk/undo-gtk4.sh" \
-        "$noctalia_templates/qt/undo.sh"
-      do
-        if [ -f "$undo" ]; then
-          bash "$undo" >/dev/null 2>&1 || true
-        fi
-      done
-
-      if command -v gsettings >/dev/null 2>&1; then
-        gsettings set org.gnome.desktop.interface gtk-theme 'Breeze' >/dev/null 2>&1 || true
-      fi
-
+      # Aplicamos primero el esquema final de Plasma. Al cargar gtkconfig a
+      # continuación, KDE exporta ese mismo Breeze tintado a GTK y genera su
+      # colors.css de sesión.
       plasma-apply-colorscheme KorunixDynamic >/dev/null 2>&1 || true
+
+      dbus-send \
+        --session \
+        --type=method_call \
+        --print-reply \
+        --dest=org.kde.kded6 \
+        /kded \
+        org.kde.kded6.loadModule \
+        string:gtkconfig \
+        >/dev/null 2>&1 || true
+
+      dbus-send \
+        --session \
+        --type=method_call \
+        --print-reply \
+        --dest=org.kde.GtkConfig \
+        /GtkConfig \
+        org.kde.GtkConfig.setGtkTheme \
+        string:Breeze \
+        >/dev/null 2>&1 || true
     '';
   };
 in {
@@ -109,13 +118,6 @@ Exec=${plasmaNativeColors}/bin/korunix-plasma-colors
 OnlyShowIn=KDE;
 NoDisplay=true
 X-KDE-AutostartScript=true
-  '';
-
-  # kde-gtk-config queda disponible para que las aplicaciones GTK de Plasma
-  # sigan el esquema Breeze y su acento dinámico.
-  environment.etc."xdg/kded5rc".text = ''
-[Module-gtkconfig]
-autoload=true
   '';
 
   environment.etc."xdg/kcminputrc".text = ''

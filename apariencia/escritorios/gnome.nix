@@ -1,11 +1,9 @@
 {
-  config,
   lib,
   pkgs,
   ...
 }: let
   uuid = "user-accent-colors@fabito02";
-  noctaliaPackage = config.programs.noctalia.package;
 
   chromaleonSource = builtins.fetchGit {
     url = "https://github.com/Fabito02/ChromaLeon.git";
@@ -32,24 +30,15 @@
   gnomeDynamicColors = pkgs.writeShellApplication {
     name = "korunix-gnome-colors";
     runtimeInputs = [
-      pkgs.bash
       pkgs.glib
       pkgs.gnome-shell
     ];
     text = ''
       extension_dir="${chromaleon}/share/gnome-shell/extensions/${uuid}"
-      noctalia_templates="${noctaliaPackage}/share/noctalia/assets/templates"
 
-      # Al entrar en GNOME retiramos solamente la capa GTK de Noctalia. Las
-      # preferencias y datos de las aplicaciones permanecen intactos.
-      for undo in \
-        "$noctalia_templates/gtk/undo-gtk3.sh" \
-        "$noctalia_templates/gtk/undo-gtk4.sh"
-      do
-        if [ -f "$undo" ]; then
-          bash "$undo" >/dev/null 2>&1 || true
-        fi
-      done
+      # GNOME recibe su propia capa GTK y desconecta tanto Noctalia como la
+      # colors.css que Plasma genera con kde-gtk-config.
+      korunix-gtk-session gnome
 
       export GSETTINGS_SCHEMA_DIR="$extension_dir/schemas"
 
