@@ -26,9 +26,9 @@ optiplex:
 # Evalúa todas las configuraciones que el flake descubra en equipos/.
 check:
 	nix flake check --no-build
-	@set -eu; for equipo in $$(nix eval --raw .#nixosConfigurations --apply 'x: builtins.concatStringsSep " " (builtins.attrNames x)'); do \
-		echo "Evaluando $$equipo"; \
-		nix eval --raw ".#nixosConfigurations.$$equipo.config.system.build.toplevel.drvPath"; \
+	@set -eu; for equipo in $(nix eval --raw .#nixosConfigurations --apply 'x: builtins.concatStringsSep " " (builtins.attrNames x)'); do \
+		echo "Evaluando $equipo"; \
+		nix eval --raw ".#nixosConfigurations.$equipo.config.system.build.toplevel.drvPath"; \
 		echo; \
 	done
 
