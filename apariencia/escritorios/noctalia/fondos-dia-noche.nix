@@ -24,6 +24,11 @@ in {
       -g ${usuario.group} \
       "$config_dir"
 
+    # Este archivo pertenecía al puente Plasma↔Noctalia anterior. Si queda en
+    # HOME definiría un segundo [hooks].started y competiría con el coordinador
+    # compartido actual.
+    rm -f "$config_dir/gtk-session.toml"
+
     install -m 0644 \
       -o ${usuario.name} \
       -g ${usuario.group} \
