@@ -13,10 +13,7 @@
       bash
       coreutils
       findutils
-      gawk
       glib
-      gnugrep
-      gnused
       jq
       python3
       util-linux
@@ -170,10 +167,11 @@ PY
           dark_dir \
           < <(read_runtime_config)
 
-        case "$automation_interval" in
-          ''|*[!0-9]*) automation_interval=1800 ;;
-        esac
+        if ! [[ "$automation_interval" =~ ^[0-9]+$ ]]; then
+          automation_interval=1800
+        fi
         [ "$automation_interval" -ge 60 ] || automation_interval=60
+
         case "$automation_order" in
           alphabetical|random) ;;
           *) automation_order=random ;;
@@ -196,7 +194,7 @@ PY
       }
 
       pick_wallpaper() {
-        local mode="$1" order="''${2:-random}" directory current next_index
+        local mode="$1" order="''${2:-random}" directory current next_index i
         local -a files
 
         load_runtime_config
@@ -226,23 +224,22 @@ PY
       }
 
       template_ids() {
-        [ -f "$noctalia_config" ] || return 0
-        awk '
-          /^[[:space:]]*community_ids[[:space:]]*=[[:space:]]*\[/ {
-            inside = 1
-            next
-          }
-          inside && /^[[:space:]]*\]/ {
-            exit
-          }
-          inside {
-            line = $0
-            while (match(line, /"[^"]+"/)) {
-              print substr(line, RSTART + 1, RLENGTH - 2)
-              line = substr(line, RSTART + RLENGTH)
-            }
-          }
-        ' "$noctalia_config"
+        python3 - "$noctalia_config" <<'PY'
+import pathlib
+import sys
+import tomllib
+
+path = pathlib.Path(sys.argv[1])
+if not path.is_file():
+    raise SystemExit(0)
+try:
+    data = tomllib.loads(path.read_text())
+except Exception:
+    raise SystemExit(0)
+for item in data.get("theme", {}).get("templates", {}).get("community_ids", []):
+    if isinstance(item, str) and item:
+        print(item)
+PY
       }
 
       render_gnome_palette() {
@@ -449,9 +446,9 @@ PY
 
           now="$(date +%s)"
           last="$(cat "$rotation_file" 2>/dev/null || printf '0')"
-          case "$last" in
-            ''|*[!0-9]*) last=0 ;;
-          esac
+          if ! [[ "$last" =~ ^[0-9]+$ ]]; then
+            last=0
+          fi
 
           if [ $((now - last)) -ge "$automation_interval" ]; then
             rotate || true
@@ -493,8 +490,6 @@ PY
 in {
   environment.systemPackages = [wallpaperSync];
 
-  # Un único coordinador mantiene el fondo actual y su rotación. Noctalia y
-  # GNOME son consumidores del mismo estado, no fuentes independientes.
   environment.etc."xdg/autostart/korunix-wallpaper-sync.desktop".text = ''
 [Desktop Entry]
 Type=Application
