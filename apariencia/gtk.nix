@@ -7,6 +7,12 @@
   usuario = config.users.users.${equipo.persona};
   noctaliaPackage = config.programs.noctalia.package;
 
+  noctaliaGtkHook = pkgs.writeText "noctalia-gtk-session.toml" ''
+    [hooks]
+    started = "korunix-gtk-session noctalia"
+    colors_changed = "korunix-gtk-session noctalia"
+  '';
+
   gtkSession = pkgs.writeShellApplication {
     name = "korunix-gtk-session";
     runtimeInputs = with pkgs; [
@@ -60,16 +66,7 @@
       }
 
       current_mode() {
-        local mode scheme
-
-        mode="$(${noctaliaPackage}/bin/noctalia msg theme-mode-get 2>/dev/null | tr -d '[:space:]' || true)"
-        case "$mode" in
-          light|dark)
-            printf '%s\n' "$mode"
-            return 0
-            ;;
-        esac
-
+        local scheme
         scheme=$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || true)
         case "$scheme" in
           *light*) printf '%s\n' light ;;
@@ -100,15 +97,23 @@
 
       case "''${1:-}" in
         plasma)
+          # Plasma conserva los archivos de Noctalia, pero desconecta su CSS y
+          # deja que kde-gtk-config aplique Breeze para esta sesión.
           strip_noctalia
           set_theme Breeze dark
           ;;
 
         noctalia)
+          # El hook vive en la configuración de Noctalia, pero abrir el shell
+          # manualmente dentro de Plasma no debe cambiar GTK.
           case "''${XDG_CURRENT_DESKTOP:-}" in
             *KDE*) exit 0 ;;
           esac
 
+          # Al volver a Niri/Umbriel retiramos la paleta GTK que generó Plasma
+          # y restauramos la capa dinámica de Noctalia. Este mismo paso se repite
+          # después de cada cambio de colores de Noctalia para reafirmar qué
+          # sesión es la dueña de GTK.
           strip_kde
 
           tries=0
@@ -138,62 +143,18 @@
       esac
     '';
   };
-
-  noctaliaSession = pkgs.writeShellApplication {
-    name = "korunix-noctalia-session";
-    runtimeInputs = [
-      pkgs.coreutils
-      gtkSession
-    ];
-    text = ''
-      case "''${XDG_CURRENT_DESKTOP:-}" in
-        *KDE*) exit 0 ;;
-      esac
-
-      state_home="''${XDG_STATE_HOME:-$HOME/.local/state}"
-      log_dir="$state_home/korunix"
-      log_file="$log_dir/noctalia-session.log"
-      mkdir -p "$log_dir"
-
-      log() {
-        printf '%s %s\n' "$(date -Is)" "$*" >> "$log_file"
-      }
-
-      # Primero retiramos cualquier resto GTK de Plasma y recuperamos la capa
-      # de Noctalia que ya exista, para no mostrar Breeze durante el arranque.
-      korunix-gtk-session noctalia
-
-      # Al cambiar desde Plasma no basta con volver a enlazar noctalia.css:
-      # hay que regenerar las plantillas con la paleta que Noctalia acaba de
-      # resolver para esta sesión. El IPC oficial fuerza esa reaplicación.
-      tries=0
-      while [ "$tries" -lt 50 ]; do
-        if output="$(${noctaliaPackage}/bin/noctalia msg templates-apply 2>&1)"; then
-          log "Plantillas de Noctalia reaplicadas: escritorio=''${XDG_CURRENT_DESKTOP:-desconocido}"
-          korunix-gtk-session noctalia
-          exit 0
-        fi
-        tries=$((tries + 1))
-        sleep 0.1
-      done
-
-      log "No se pudieron reaplicar las plantillas de Noctalia: ''${output:-sin respuesta}"
-      exit 1
-    '';
-  };
-
-  noctaliaGtkHook = pkgs.writeText "noctalia-gtk-session.toml" ''
-    [hooks]
-    started = "korunix-noctalia-session"
-    colors_changed = "korunix-gtk-session noctalia"
-  '';
 in {
+  # adw-gtk3 es la base que Noctalia usa para GTK 3. El conmutador conserva
+  # una sola configuración de usuario y cambia únicamente la capa visual GTK
+  # cuando empieza cada sesión.
   environment.systemPackages = [
     pkgs.adw-gtk3
     gtkSession
-    noctaliaSession
   ];
 
+  # Noctalia reafirma su propiedad visual al terminar de arrancar y cada vez que
+  # resuelve una paleta nueva. Así Niri/Umbriel recuperan GTK después de Plasma
+  # sin afectar la sesión KDE cuando Noctalia se abre manualmente allí.
   system.activationScripts.noctaliaGtkSession.text = ''
     install -d -m 0755 \
       -o ${usuario.name} \
