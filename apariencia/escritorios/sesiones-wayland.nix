@@ -22,19 +22,24 @@
       cp "$origen" "$out/share/wayland-sessions/${sesion}.desktop"
     '';
 
-
   plasma = sesionWayland {
     nombre = "korunix-plasma-wayland-session";
     paquete = pkgs.kdePackages.plasma-workspace.sessions;
     sesion = "plasma";
   };
+
+  gnome = sesionWayland {
+    nombre = "korunix-gnome-wayland-session";
+    paquete = pkgs.gnome-session.sessions;
+    sesion = "gnome";
+  };
 in {
-  # El selector de Korunix expone únicamente sesiones Wayland. Niri y Umbriel
-  # ya publican una sola sesión; Hyprland y Plasma se filtran para ocultar sus
-  # variantes UWSM/X11 sin quitar XWayland para aplicaciones antiguas.
+  # Korunix expone únicamente sesiones Wayland. Niri y Umbriel ya publican una
+  # sola sesión; Plasma y GNOME se filtran para evitar variantes adicionales.
   services.displayManager.sessionPackages = lib.mkForce [
     pkgs.niri
     pkgs.umbriel
     plasma
+    gnome
   ];
 }
