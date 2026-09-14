@@ -12,7 +12,7 @@
     include.files = ["noctalia.toml"];
 
     general = {
-      autostart = ["noctalia"];
+      autostart = ["korunix-noctalia-session"];
       mod_key = "Super";
       xwayland = true;
       show_cheatsheet = false;
@@ -23,6 +23,12 @@
       QT_QPA_PLATFORM = "wayland";
       GDK_BACKEND = "wayland";
       QT_QPA_PLATFORMTHEME = "qt5ct:qt6ct";
+      XDG_CURRENT_DESKTOP = "umbriel";
+      XDG_SESSION_DESKTOP = "umbriel";
+      XDG_SESSION_TYPE = "wayland";
+      KDE_FULL_SESSION = "";
+      KDE_SESSION_VERSION = "";
+      KDE_SESSION_UID = "";
     };
 
     workspaces = {
