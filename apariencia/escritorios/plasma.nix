@@ -253,6 +253,14 @@ in {
     plasmaMaterialYouSession
   ];
 
+  # Plasma lee estos scripts antes de arrancar sus programas. Forzamos la
+  # integración Qt nativa de KDE para que una sesión Niri/Umbriel anterior no
+  # pueda dejar qt5ct/qt6ct activo en Plasma.
+  environment.etc."xdg/plasma-workspace/env/korunix-plasma-qt.sh".text = ''
+    unset QT_STYLE_OVERRIDE
+    export QT_QPA_PLATFORMTHEME=kde
+  '';
+
   # Nombre propio de Korunix: no puede ser ocultado por
   # ~/.config/autostart/kde-material-you-colors.desktop, que la aplicación
   # oficial crea con prioridad sobre /etc/xdg/autostart.
