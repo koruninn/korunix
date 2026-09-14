@@ -11,15 +11,13 @@ in {
     inputs.noctalia.nixosModules.default
     ./noctalia.nix
     ./fondos-dia-noche.nix
-    ./monitor.nix
     ./portales.nix
-    ./niri.nix
     ./umbriel.nix
     ./qt.nix
   ];
 
-  # Las aplicaciones KDE siguen instaladas para Plasma, pero Noctalia no las
-  # muestra en Niri/Umbriel. Kdenlive es la única excepción visible.
+  # Las aplicaciones KDE siguen instaladas cuando alguna aplicación las necesita,
+  # pero Noctalia no las muestra en Umbriel. Kdenlive es la única excepción visible.
   system.activationScripts.noctaliaDesktopEntries.text = ''
     applications_dir=${usuario.home}/.local/share/applications
 
@@ -58,8 +56,6 @@ in {
             sub(/;*$/, "", value)
             if (value !~ /(^|;)umbriel(;|$)/)
               value = value ";umbriel"
-            if (value !~ /(^|;)niri(;|$)/)
-              value = value ";niri"
             lines[NR] = "NotShowIn=" value ";"
             has_not_show_in = 1
           }
@@ -70,7 +66,7 @@ in {
             if (lines[i] == "[Desktop Entry]") {
               print "X-Korunix-Noctalia-Hidden=true"
               if (!has_not_show_in)
-                print "NotShowIn=umbriel;niri;"
+                print "NotShowIn=umbriel;"
             }
           }
         }

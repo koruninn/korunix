@@ -6,8 +6,8 @@
 }: let
   usuario = config.users.users.${equipo.persona};
 in {
-  # Niri, Umbriel y GNOME comparten qt5ct/qt6ct. La paleta noctalia.conf se
-  # regenera desde el mismo fondo en cada sesión, así Qt deja de ser una isla.
+  # Umbriel y GNOME comparten qt5ct/qt6ct. La paleta noctalia.conf se regenera
+  # desde el mismo fondo en cada sesión, así Qt deja de ser una isla.
   qt.enable = true;
 
   environment.systemPackages = [

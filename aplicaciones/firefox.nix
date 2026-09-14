@@ -1,7 +1,8 @@
 {pkgs, ...}: {
-  # Firefox es el navegador principal de Korunix. Pywalfox queda instalado por
-  # política para que Noctalia pueda empujar la paleta mediante su host nativo
-  # firefox-theme, sin depender del antiguo daemon Python de pywalfox.
+  # Firefox es el navegador principal de Korunix. La extensión Pywalfox se
+  # instala por política. Con la plantilla pywalfox-beta4, Noctalia es el
+  # native-messaging host; no se instala pywalfox-native porque el host externo
+  # puede competir con el manifest que administra Noctalia.
   programs.firefox = {
     enable = true;
     package = pkgs.firefox;

@@ -8,9 +8,9 @@
 
   hooks = pkgs.writeText "noctalia-fondos-dia-noche.toml" ''
     [hooks]
-    # Korunix mantiene un único estado de fondo para GNOME, Niri y Umbriel.
-    # Noctalia sigue siendo quien muestra el fondo en sus sesiones, pero cada
-    # cambio se refleja inmediatamente en el estado compartido y en GNOME.
+    # Korunix mantiene un único estado de fondo para GNOME y Umbriel.
+    # Noctalia sigue siendo quien muestra el fondo en Umbriel, pero cada cambio
+    # se refleja inmediatamente en el estado compartido y en GNOME.
     started = "korunix-wallpaper-sync session-start"
     wallpaper_changed = "korunix-wallpaper-sync from-noctalia \"$NOCTALIA_WALLPAPER_PATH\""
     theme_mode_changed = "korunix-wallpaper-sync mode-change"

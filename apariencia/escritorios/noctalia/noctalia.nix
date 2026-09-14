@@ -20,7 +20,6 @@
     offline_mode = false
     telemetry_enabled = false
     setup_wizard_enabled = true
-    niri_overview_type_to_launch_enabled = false
     polkit_agent = true
     password_style = "default"
     avatar_path = "${./.face/avatar.jpg}"
@@ -248,7 +247,6 @@
       "alacritty",
       "gtk3",
       "gtk4",
-      "niri",
       "qt",
       "umbriel"
     ]

@@ -28,9 +28,8 @@
     sesion = "gnome";
   };
 in {
-  # Korunix expone únicamente Niri, Umbriel y GNOME en Wayland.
+  # Decisión final de Korunix: solo Umbriel y GNOME como sesiones gráficas.
   services.displayManager.sessionPackages = lib.mkForce [
-    pkgs.niri
     pkgs.umbriel
     gnome
   ];
