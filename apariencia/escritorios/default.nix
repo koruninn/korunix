@@ -1,6 +1,7 @@
 {
   imports = [
     ./gnome.nix
+    ./gnome-blur.nix
     ./sesiones-wayland.nix
     ./noctalia
   ];
