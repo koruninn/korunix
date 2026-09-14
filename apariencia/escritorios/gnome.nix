@@ -82,9 +82,9 @@
   localSendAlias = pkgs.makeDesktopItem {
     name = "org.localsend.localsend_app";
     desktopName = "LocalSend";
-    exec = "localsend";
+    exec = "localsend_app %U";
     icon = "localsend";
-    startupWMClass = "org.localsend.localsend_app";
+    startupWMClass = "localsend_app";
     noDisplay = true;
   };
 in {
