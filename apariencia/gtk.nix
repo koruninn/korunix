@@ -45,18 +45,6 @@
         done
       }
 
-      strip_chromaleon() {
-        local version dir file
-        for version in 3 4; do
-          dir="$config_home/gtk-$version.0"
-          file="$dir/gtk.css"
-          if [ -f "$file" ]; then
-            sed -i '/\/\* CustomAccentExtension Start \*\//,/\/\* CustomAccentExtension End \*\//d' "$file"
-          fi
-          rm -f "$dir/custom-accent.css"
-        done
-      }
-
       set_ini_value() {
         local file="$1"
         local key="$2"
@@ -108,39 +96,22 @@
 
       case "''${1:-}" in
         plasma)
-          # Plasma conserva los archivos generados por Noctalia para que volver
-          # a Niri/Umbriel no requiera reconstruir el estado. Solo desconecta
-          # sus imports y cualquier CSS que haya dejado ChromaLeon.
+          # Plasma conserva los archivos de Noctalia, pero desconecta su CSS y
+          # deja que kde-gtk-config aplique Breeze para esta sesión.
           strip_noctalia
-          strip_chromaleon
           set_theme Breeze dark
           ;;
 
-        gnome)
-          # GNOME/ChromaLeon no debe heredar ni Noctalia ni la paleta CSS que
-          # kde-gtk-config genera para Plasma.
-          strip_noctalia
-          strip_kde
-          mode=$(current_mode)
-          if [ "$mode" = light ]; then
-            set_theme adw-gtk3 light
-          else
-            set_theme adw-gtk3-dark dark
-          fi
-          ;;
-
         noctalia)
-          # El hook vive en la configuración de Noctalia, pero si alguien abre
-          # el shell manualmente dentro de Plasma o GNOME no debe cambiar GTK.
+          # El hook vive en la configuración de Noctalia, pero abrir el shell
+          # manualmente dentro de Plasma no debe cambiar GTK.
           case "''${XDG_CURRENT_DESKTOP:-}" in
-            *KDE*|*GNOME*) exit 0 ;;
+            *KDE*) exit 0 ;;
           esac
 
-          # Fuera de Plasma retiramos su colors.css y la capa de ChromaLeon.
-          # Noctalia conserva noctalia.css entre sesiones; esperamos únicamente
-          # el primer render de una instalación nueva antes de reactivar imports.
+          # Al volver a Niri/Umbriel retiramos la paleta GTK que generó Plasma
+          # y restauramos la capa dinámica de Noctalia.
           strip_kde
-          strip_chromaleon
 
           tries=0
           while [ "$tries" -lt 50 ]; do
@@ -163,7 +134,7 @@
           ;;
 
         *)
-          echo "Uso: korunix-gtk-session {plasma|gnome|noctalia}" >&2
+          echo "Uso: korunix-gtk-session {plasma|noctalia}" >&2
           exit 2
           ;;
       esac

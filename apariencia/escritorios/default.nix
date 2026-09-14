@@ -1,6 +1,5 @@
 {
   imports = [
-    ./gnome.nix
     ./plasma.nix
     ./sesiones-wayland.nix
     ./noctalia

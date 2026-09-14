@@ -27,19 +27,12 @@
     paquete = pkgs.kdePackages.plasma-workspace.sessions;
     sesion = "plasma";
   };
-
-  gnome = sesionWayland {
-    nombre = "korunix-gnome-wayland-session";
-    paquete = pkgs.gnome-session.sessions;
-    sesion = "gnome";
-  };
 in {
   # Korunix expone únicamente sesiones Wayland. Niri y Umbriel ya publican una
-  # sola sesión; Plasma y GNOME se filtran para evitar variantes adicionales.
+  # sola sesión; Plasma se filtra para evitar variantes adicionales.
   services.displayManager.sessionPackages = lib.mkForce [
     pkgs.niri
     pkgs.umbriel
     plasma
-    gnome
   ];
 }
