@@ -9,6 +9,7 @@
   fondosOscuros = ./noctalia/fondos/oscuro;
   dashToDock = pkgs.gnomeExtensions.dash-to-dock;
   appIndicator = pkgs.gnomeExtensions.appindicator;
+  roundedUuid = "rounded-windows@marcosgt.github.io";
 
   imageFiles = directory: let
     entries = builtins.readDir directory;
@@ -131,10 +132,35 @@ PY
     '';
   };
 
+  roundedWindowsSource = builtins.fetchGit {
+    url = "https://github.com/Nathanaelrc/rounded-windows.git";
+    rev = "9d9eb77013b24e45ae75fc92a85a9b6d82e052f6";
+  };
+
+  # Solo Steam necesita redondeo adicional: las ventanas GNOME/libadwaita ya
+  # tienen sus propias esquinas y no deben pasar por un segundo renderer.
+  roundedWindows = pkgs.stdenvNoCC.mkDerivation {
+    pname = "gnome-shell-extension-rounded-windows-korunix";
+    version = "2.2.0";
+    src = roundedWindowsSource;
+    nativeBuildInputs = [pkgs.glib];
+    dontConfigure = true;
+    dontBuild = true;
+
+    installPhase = ''
+      extension=$out/share/gnome-shell/extensions/${roundedUuid}
+      mkdir -p "$extension"
+      cp extension.js effect.js prefs.js metadata.json stylesheet.css "$extension/"
+      cp -r schemas "$extension/"
+      glib-compile-schemas "$extension/schemas"
+    '';
+  };
+
   gnomeShellPalette = pkgs.writeShellApplication {
     name = "korunix-gnome-shell-palette";
     runtimeInputs = [
       pkgs.coreutils
+      pkgs.dconf
       pkgs.glib
       pkgs.gnome-shell
       pkgs.gnused
@@ -185,9 +211,41 @@ PY
       gsettings set org.gnome.desktop.interface cursor-theme Bibata-Modern-Classic >/dev/null 2>&1 || true
       gsettings set org.gnome.desktop.interface cursor-size 24 >/dev/null 2>&1 || true
 
+      # Dash to Dock replica la disposición del dock de Noctalia.
+      dconf write /org/gnome/shell/extensions/dash-to-dock/dock-position "'BOTTOM'"
+      dconf write /org/gnome/shell/extensions/dash-to-dock/dash-max-icon-size 40
+      dconf write /org/gnome/shell/extensions/dash-to-dock/icon-size-fixed true
+      dconf write /org/gnome/shell/extensions/dash-to-dock/extend-height false
+      dconf write /org/gnome/shell/extensions/dash-to-dock/dock-fixed true
+      dconf write /org/gnome/shell/extensions/dash-to-dock/autohide false
+      dconf write /org/gnome/shell/extensions/dash-to-dock/intellihide false
+      dconf write /org/gnome/shell/extensions/dash-to-dock/multi-monitor true
+      dconf write /org/gnome/shell/extensions/dash-to-dock/show-favorites true
+      dconf write /org/gnome/shell/extensions/dash-to-dock/show-running true
+      dconf write /org/gnome/shell/extensions/dash-to-dock/show-show-apps-button false
+      dconf write /org/gnome/shell/extensions/dash-to-dock/show-trash false
+      dconf write /org/gnome/shell/extensions/dash-to-dock/show-mounts false
+      dconf write /org/gnome/shell/extensions/dash-to-dock/transparency-mode "'FIXED'"
+      dconf write /org/gnome/shell/extensions/dash-to-dock/background-opacity 0.5
+      dconf write /org/gnome/shell/extensions/dash-to-dock/running-indicator-style "'DOTS'"
+
+      # Mismo orden de fijados que [dock].pinned en Noctalia.
+      dconf write /org/gnome/shell/favorite-apps "['zen.desktop', 'org.gnome.Nautilus.desktop', 'spotify.desktop', 'steam.desktop', 'net.lutris.Lutris.desktop', 'anime-game-launcher.desktop', 'honkers-railway-launcher.desktop', 'vesktop.desktop', 'org.localsend.localsend_app.desktop', 'code.desktop', 'com.obsproject.Studio.desktop', 'org.kde.kdenlive.desktop', 'com.heroicgameslauncher.hgl.desktop', 'onlyoffice-desktopeditors.desktop', 'birdfont.desktop']"
+
+      # Steam es la única ventana a la que añadimos redondeo por compositor.
+      dconf write /org/gnome/shell/extensions/rounded-windows/corner-radius 12
+      dconf write /org/gnome/shell/extensions/rounded-windows/smoothing 0.6
+      dconf write /org/gnome/shell/extensions/rounded-windows/border-width 0
+      dconf write /org/gnome/shell/extensions/rounded-windows/custom-shadow true
+      dconf write /org/gnome/shell/extensions/rounded-windows/whitelist-mode true
+      dconf write /org/gnome/shell/extensions/rounded-windows/blacklist "['steam']"
+      dconf write /org/gnome/shell/extensions/rounded-windows/keep-rounded-maximized false
+      dconf write /org/gnome/shell/extensions/rounded-windows/keep-rounded-fullscreen false
+
       gnome-extensions enable ${uuid} >/dev/null 2>&1 || true
       gnome-extensions enable ${dashToDock.extensionUuid} >/dev/null 2>&1 || true
       gnome-extensions enable ${appIndicator.extensionUuid} >/dev/null 2>&1 || true
+      gnome-extensions enable ${roundedUuid} >/dev/null 2>&1 || true
     '';
   };
 
@@ -212,7 +270,10 @@ PY
   };
 in {
   services.desktopManager.gnome.enable = true;
-  services.desktopManager.gnome.sessionPath = [chromaleon];
+  services.desktopManager.gnome.sessionPath = [
+    chromaleon
+    roundedWindows
+  ];
 
   environment.systemPackages = [
     appIndicator
@@ -221,13 +282,14 @@ in {
     gnomeShellPalette
     obsidianAlias
     localSendAlias
+    roundedWindows
   ];
 
   environment.etc."xdg/autostart/korunix-gnome-shell-palette.desktop".text = ''
 [Desktop Entry]
 Type=Application
 Name=Korunix · GNOME Shell
-Comment=Conserva Hatter y Bibata y limita ChromaLeon al Shell de GNOME
+Comment=Conserva Hatter y Bibata y configura el Shell de GNOME de Korunix
 Exec=${gnomeShellPalette}/bin/korunix-gnome-shell-palette
 OnlyShowIn=GNOME;
 NoDisplay=true
