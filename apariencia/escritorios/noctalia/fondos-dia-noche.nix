@@ -8,14 +8,12 @@
 
   hooks = pkgs.writeText "noctalia-fondos-dia-noche.toml" ''
     [hooks]
-    # Al terminar de iniciar Noctalia, escoge un fondo del conjunto que
-    # corresponde al modo efectivo actual (claro u oscuro).
-    started = "noctalia msg wallpaper-random"
-
-    # theme.mode = auto usa la ubicación de Noctalia para resolver amanecer y
-    # atardecer. Cuando cruza claro ↔ oscuro, wallpaper-random respeta
-    # directory_light / directory_dark y cambia inmediatamente de conjunto.
-    theme_mode_changed = "noctalia msg wallpaper-random"
+    # Korunix mantiene un único estado de fondo para GNOME, Niri y Umbriel.
+    # Noctalia sigue siendo quien muestra el fondo en sus sesiones, pero cada
+    # cambio se refleja inmediatamente en el estado compartido y en GNOME.
+    started = "korunix-wallpaper-sync session-start"
+    wallpaper_changed = "korunix-wallpaper-sync from-noctalia \"$NOCTALIA_WALLPAPER_PATH\""
+    theme_mode_changed = "korunix-wallpaper-sync mode-change"
   '';
 in {
   system.activationScripts.noctaliaFondosDiaNoche.text = ''
