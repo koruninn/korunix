@@ -16,7 +16,6 @@
       jq
     ];
     text = ''
-      config_home="''${XDG_CONFIG_HOME:-$HOME/.config}"
       state_home="''${XDG_STATE_HOME:-$HOME/.local/state}"
       noctalia_templates="${noctaliaPackage}/share/noctalia/assets/templates"
       material_json="''${TMPDIR:-/tmp}/kde-material-you-colors-$USER.json"
