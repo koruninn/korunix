@@ -95,6 +95,22 @@
         fi
       }
 
+      restore_noctalia_identity() {
+        local version
+
+        for version in 3 4; do
+          set_ini_value "$config_home/gtk-$version.0/settings.ini" gtk-icon-theme-name Hatter-Slate
+          set_ini_value "$config_home/gtk-$version.0/settings.ini" gtk-cursor-theme-name Bibata-Modern-Classic
+          set_ini_value "$config_home/gtk-$version.0/settings.ini" gtk-cursor-theme-size 24
+        done
+
+        if gsettings list-schemas 2>/dev/null | grep -qx org.gnome.desktop.interface; then
+          gsettings set org.gnome.desktop.interface icon-theme Hatter-Slate >/dev/null 2>&1 || true
+          gsettings set org.gnome.desktop.interface cursor-theme Bibata-Modern-Classic >/dev/null 2>&1 || true
+          gsettings set org.gnome.desktop.interface cursor-size 24 >/dev/null 2>&1 || true
+        fi
+      }
+
       case "''${1:-}" in
         plasma)
           # Plasma conserva los archivos de Noctalia, pero desconecta su CSS y
@@ -104,18 +120,19 @@
           ;;
 
         noctalia)
-          # El hook vive en la configuración de Noctalia, pero abrir el shell
-          # manualmente dentro de Plasma no debe cambiar GTK.
+          # Abrir Noctalia manualmente dentro de Plasma no debe cambiar GTK.
           case "''${XDG_CURRENT_DESKTOP:-}" in
             *KDE*) exit 0 ;;
           esac
 
-          # Al volver a Niri/Umbriel retiramos la paleta GTK que generó Plasma
-          # y restauramos la capa dinámica de Noctalia. Este mismo paso se repite
-          # después de cada cambio de colores de Noctalia para reafirmar qué
-          # sesión es la dueña de GTK.
+          # Al entrar a Niri/Umbriel restauramos primero la identidad GTK de la
+          # sesión. Esto no toca Qt ni las plantillas de aplicaciones.
           strip_kde
+          restore_noctalia_identity
 
+          # La paleta GTK de Noctalia se conserva entre sesiones. Si ya existe,
+          # la reconectamos de inmediato; cuando Noctalia arranque o cambie de
+          # colores, sus plantillas GTK volverán a escribirla normalmente.
           tries=0
           while [ "$tries" -lt 50 ]; do
             if [ -f "$config_home/gtk-3.0/noctalia.css" ] && [ -f "$config_home/gtk-4.0/noctalia.css" ]; then
@@ -125,13 +142,14 @@
             sleep 0.1
           done
 
+          mode=$(current_mode)
+          if [ "$mode" = light ]; then
+            set_theme adw-gtk3 light
+          else
+            set_theme adw-gtk3-dark dark
+          fi
+
           if [ -f "$config_home/gtk-3.0/noctalia.css" ] && [ -f "$config_home/gtk-4.0/noctalia.css" ]; then
-            mode=$(current_mode)
-            if [ "$mode" = light ]; then
-              set_theme adw-gtk3 light
-            else
-              set_theme adw-gtk3-dark dark
-            fi
             bash "$noctalia_apply" "$mode" >/dev/null 2>&1 || true
           fi
           ;;
@@ -143,18 +161,27 @@
       esac
     '';
   };
+
+  noctaliaSession = pkgs.writeShellApplication {
+    name = "korunix-noctalia-session";
+    runtimeInputs = [gtkSession];
+    text = ''
+      # La sesión Noctalia recupera GTK antes de iniciar el shell. Así una sesión
+      # Plasma previa no puede dejar Breeze/Hatter desincronizados durante el
+      # arranque de Niri o Umbriel.
+      korunix-gtk-session noctalia
+      exec ${noctaliaPackage}/bin/noctalia "$@"
+    '';
+  };
 in {
-  # adw-gtk3 es la base que Noctalia usa para GTK 3. El conmutador conserva
-  # una sola configuración de usuario y cambia únicamente la capa visual GTK
-  # cuando empieza cada sesión.
   environment.systemPackages = [
     pkgs.adw-gtk3
     gtkSession
+    noctaliaSession
   ];
 
-  # Noctalia reafirma su propiedad visual al terminar de arrancar y cada vez que
-  # resuelve una paleta nueva. Así Niri/Umbriel recuperan GTK después de Plasma
-  # sin afectar la sesión KDE cuando Noctalia se abre manualmente allí.
+  # Noctalia reafirma la propiedad GTK al arrancar y cuando cambia su paleta.
+  # El arranque inicial también queda cubierto por korunix-noctalia-session.
   system.activationScripts.noctaliaGtkSession.text = ''
     install -d -m 0755 \
       -o ${usuario.name} \
