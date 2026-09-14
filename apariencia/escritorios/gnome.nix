@@ -7,6 +7,8 @@
   uuid = "user-accent-colors@fabito02";
   fondosClaros = ./noctalia/fondos/claro;
   fondosOscuros = ./noctalia/fondos/oscuro;
+  dashToDock = pkgs.gnomeExtensions.dash-to-dock;
+  appIndicator = pkgs.gnomeExtensions.appindicator;
 
   imageFiles = directory: let
     entries = builtins.readDir directory;
@@ -184,6 +186,8 @@ PY
       gsettings set org.gnome.desktop.interface cursor-size 24 >/dev/null 2>&1 || true
 
       gnome-extensions enable ${uuid} >/dev/null 2>&1 || true
+      gnome-extensions enable ${dashToDock.extensionUuid} >/dev/null 2>&1 || true
+      gnome-extensions enable ${appIndicator.extensionUuid} >/dev/null 2>&1 || true
     '';
   };
 
@@ -211,6 +215,8 @@ in {
   services.desktopManager.gnome.sessionPath = [chromaleon];
 
   environment.systemPackages = [
+    appIndicator
+    dashToDock
     gnomeBackgrounds
     gnomeShellPalette
     obsidianAlias
