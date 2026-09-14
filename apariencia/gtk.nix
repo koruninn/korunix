@@ -61,8 +61,8 @@
         local scheme
         scheme=$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || true)
         case "$scheme" in
-          *light*) printf '%s\n' light ;;
-          *) printf '%s\n' dark ;;
+          *dark*) printf '%s\n' dark ;;
+          *) printf '%s\n' light ;;
         esac
       }
 
