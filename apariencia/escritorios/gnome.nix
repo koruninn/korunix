@@ -10,6 +10,7 @@
   dashToDock = pkgs.gnomeExtensions.dash-to-dock;
   appIndicator = pkgs.gnomeExtensions.appindicator;
   roundedUuid = "rounded-windows@marcosgt.github.io";
+  alphabeticalUuid = "AlphabeticalAppGrid@stuarthayhurst";
 
   imageFiles = directory: let
     entries = builtins.readDir directory;
@@ -156,6 +157,27 @@ PY
     '';
   };
 
+  alphabeticalGridSource = builtins.fetchGit {
+    url = "https://github.com/stuarthayhurst/alphabetical-grid-extension.git";
+    rev = "bdd0bd07469c9df5dd1fbaca4a59f841da619549";
+  };
+
+  alphabeticalGrid = pkgs.stdenvNoCC.mkDerivation {
+    pname = "gnome-shell-extension-alphabetical-app-grid-korunix";
+    version = "46";
+    src = alphabeticalGridSource;
+    nativeBuildInputs = [pkgs.glib];
+    dontConfigure = true;
+    dontBuild = true;
+
+    installPhase = ''
+      extension=$out/share/gnome-shell/extensions/${alphabeticalUuid}
+      mkdir -p "$extension"
+      cp -r extension/. "$extension/"
+      glib-compile-schemas "$extension/schemas"
+    '';
+  };
+
   gnomeShellPalette = pkgs.writeShellApplication {
     name = "korunix-gnome-shell-palette";
     runtimeInputs = [
@@ -222,7 +244,9 @@ PY
       dconf write /org/gnome/shell/extensions/dash-to-dock/multi-monitor true
       dconf write /org/gnome/shell/extensions/dash-to-dock/show-favorites true
       dconf write /org/gnome/shell/extensions/dash-to-dock/show-running true
-      dconf write /org/gnome/shell/extensions/dash-to-dock/show-show-apps-button false
+      dconf write /org/gnome/shell/extensions/dash-to-dock/show-show-apps-button true
+      dconf write /org/gnome/shell/extensions/dash-to-dock/show-apps-at-top true
+      dconf write /org/gnome/shell/extensions/dash-to-dock/show-apps-always-in-the-edge true
       dconf write /org/gnome/shell/extensions/dash-to-dock/show-trash false
       dconf write /org/gnome/shell/extensions/dash-to-dock/show-mounts false
       dconf write /org/gnome/shell/extensions/dash-to-dock/transparency-mode "'FIXED'"
@@ -232,13 +256,21 @@ PY
       # Mismo orden de fijados que [dock].pinned en Noctalia.
       dconf write /org/gnome/shell/favorite-apps "['zen.desktop', 'org.gnome.Nautilus.desktop', 'spotify.desktop', 'steam.desktop', 'net.lutris.Lutris.desktop', 'anime-game-launcher.desktop', 'honkers-railway-launcher.desktop', 'vesktop.desktop', 'org.localsend.localsend_app.desktop', 'code.desktop', 'com.obsproject.Studio.desktop', 'org.kde.kdenlive.desktop', 'com.heroicgameslauncher.hgl.desktop', 'onlyoffice-desktopeditors.desktop', 'birdfont.desktop']"
 
+      # La cuadrícula de aplicaciones se mantiene ordenada alfabéticamente,
+      # incluidas las aplicaciones dentro de carpetas.
+      dconf write /org/gnome/shell/extensions/alphabetical-app-grid/sort-folder-contents true
+      dconf write /org/gnome/shell/extensions/alphabetical-app-grid/folder-order-position "'alphabetical'"
+      dconf write /org/gnome/shell/extensions/alphabetical-app-grid/show-favourite-apps false
+
       # Steam es la única ventana a la que añadimos redondeo por compositor.
+      # El cliente principal usa steam y las ventanas CEF de chat/amigos usan
+      # steamwebhelper, por eso ambos identificadores pertenecen a la whitelist.
       dconf write /org/gnome/shell/extensions/rounded-windows/corner-radius 12
       dconf write /org/gnome/shell/extensions/rounded-windows/smoothing 0.6
       dconf write /org/gnome/shell/extensions/rounded-windows/border-width 0
       dconf write /org/gnome/shell/extensions/rounded-windows/custom-shadow true
       dconf write /org/gnome/shell/extensions/rounded-windows/whitelist-mode true
-      dconf write /org/gnome/shell/extensions/rounded-windows/blacklist "['steam']"
+      dconf write /org/gnome/shell/extensions/rounded-windows/blacklist "['steam', 'steamwebhelper']"
       dconf write /org/gnome/shell/extensions/rounded-windows/keep-rounded-maximized false
       dconf write /org/gnome/shell/extensions/rounded-windows/keep-rounded-fullscreen false
 
@@ -246,6 +278,7 @@ PY
       gnome-extensions enable ${dashToDock.extensionUuid} >/dev/null 2>&1 || true
       gnome-extensions enable ${appIndicator.extensionUuid} >/dev/null 2>&1 || true
       gnome-extensions enable ${roundedUuid} >/dev/null 2>&1 || true
+      gnome-extensions enable ${alphabeticalUuid} >/dev/null 2>&1 || true
     '';
   };
 
@@ -271,11 +304,13 @@ PY
 in {
   services.desktopManager.gnome.enable = true;
   services.desktopManager.gnome.sessionPath = [
+    alphabeticalGrid
     chromaleon
     roundedWindows
   ];
 
   environment.systemPackages = [
+    alphabeticalGrid
     appIndicator
     dashToDock
     gnomeBackgrounds
