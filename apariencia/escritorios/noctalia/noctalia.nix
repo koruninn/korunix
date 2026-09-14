@@ -161,7 +161,7 @@
     launcher_position = "none"
     launcher_icon = "grid-dots"
     pinned = [
-      "zen",
+      "firefox",
       "org.gnome.Nautilus",
       "spotify",
       "steam",
@@ -264,9 +264,9 @@
       "obs",
       "obsidian",
       "prismlauncher",
+      "pywalfox-beta4",
       "steam",
-      "vscode",
-      "zen-browser"
+      "vscode"
     ]
   '';
 in {

@@ -97,7 +97,7 @@
       "Alt+Tab" = "spawn:noctalia msg window-switcher";
       "Mod+T" = "spawn:alacritty";
       "Mod+E" = "spawn:nautilus";
-      "Mod+B" = "spawn:zen";
+      "Mod+B" = "spawn:firefox";
 
       # Ventanas y overview.
       "Mod+Q" = "window-close";

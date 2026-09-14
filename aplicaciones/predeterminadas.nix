@@ -8,12 +8,12 @@
   webDefaults =
     if navegadorPredeterminado == null
     then {}
-    else if navegadorPredeterminado == "zen"
+    else if navegadorPredeterminado == "firefox"
     then {
-      "x-scheme-handler/http" = "zen.desktop";
-      "x-scheme-handler/https" = "zen.desktop";
-      "text/html" = "zen.desktop";
-      "application/xhtml+xml" = "zen.desktop";
+      "x-scheme-handler/http" = "firefox.desktop";
+      "x-scheme-handler/https" = "firefox.desktop";
+      "text/html" = "firefox.desktop";
+      "application/xhtml+xml" = "firefox.desktop";
     }
     else throw "Navegador predeterminado declarativo no permitido: ${navegadorPredeterminado}. Chrome solo puede elegirse manualmente.";
 in {

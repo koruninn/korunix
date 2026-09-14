@@ -1,14 +1,11 @@
-{
-  inputs,
-  pkgs,
-  ...
-}: {
+{pkgs, ...}: {
   # Acceso a dispositivos y medios extraíbles desde aplicaciones GTK.
   services.gvfs.enable = true;
   services.udisks2.enable = true;
 
   # Lista de paquetes instalados en el perfil del sistema.
-  # Los programas habilitados por módulos propios (como Sunshine) no se repiten aquí.
+  # Los programas habilitados por módulos propios (como Firefox o Sunshine)
+  # no se repiten aquí.
   environment.systemPackages = with pkgs; [
     alacritty
     android-tools
@@ -22,7 +19,6 @@
     google-chrome
     heroic
     inkscape
-    inputs.zen-browser.packages.${pkgs.stdenv.hostPlatform.system}.default
     kdePackages.kate
     kdePackages.kdenlive
     libreoffice

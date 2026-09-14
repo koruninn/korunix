@@ -105,7 +105,7 @@
     }
 
     window-rule {
-        match app-id=r#"zen$"# title="^Picture-in-Picture$"
+        match app-id=r#"firefox$"# title="^Picture-in-Picture$"
         open-floating true
     }
 
@@ -191,7 +191,7 @@
         Mod+Shift+Ctrl+K { move-window-up; }
         Mod+Shift+Ctrl+L { move-column-to-monitor-right; }
         Mod+E { spawn "nautilus"; }
-        Mod+B { spawn "zen"; }
+        Mod+B { spawn "firefox"; }
         Mod+Page_Down { focus-workspace-down; }
         Mod+Page_Up { focus-workspace-up; }
         Mod+U { focus-workspace-down; }

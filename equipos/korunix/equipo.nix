@@ -8,7 +8,7 @@
 
   # Navegador predeterminado de este equipo. Chrome puede seguir instalado,
   # pero Korunix no lo selecciona automáticamente como predeterminado.
-  navegadorPredeterminado = "zen";
+  navegadorPredeterminado = "firefox";
 
   # Pantalla principal de este equipo. Los compositores pueden reutilizar estos
   # datos sin incrustar detalles de hardware dentro de sus módulos.

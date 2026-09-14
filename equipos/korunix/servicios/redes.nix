@@ -17,6 +17,10 @@
     openFirewall = true;
   };
 
+  # Tailscale crea la red privada cifrada para acceder a Korunix desde fuera de
+  # casa sin abrir Sunshine directamente a Internet ni configurar port-forwarding.
+  services.tailscale.enable = true;
+
   # Sunshine
   services.sunshine = {
     enable = true;

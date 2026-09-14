@@ -6,6 +6,7 @@
     ./alacritty.nix
     ./fastfetch.nix
     ./figma.nix
+    ./firefox.nix
     ./fish.nix
     ./flatpak.nix
     ./localsend.nix
