@@ -5,31 +5,7 @@
   ...
 }: let
   usuario = config.users.users.${equipo.persona};
-
-  plasmaDynamicScheme = pkgs.runCommand "korunix-plasma-dynamic-colors" {} ''
-    mkdir -p "$out/share/color-schemes"
-
-    awk '
-      /^\[General\]$/ {
-        print
-        print "TintFactor=0.15"
-        next
-      }
-      /^ColorScheme=BreezeDark$/ {
-        print "ColorScheme=KorunixDynamic"
-        next
-      }
-      /^Name=Breeze Dark$/ {
-        print "Name=Korunix Dynamic"
-        next
-      }
-      /^Name\[/ {
-        next
-      }
-      { print }
-    ' ${pkgs.kdePackages.breeze}/share/color-schemes/BreezeDark.colors \
-      > "$out/share/color-schemes/KorunixDynamic.colors"
-  '';
+  materialYou = pkgs.python3Packages."kde-material-you-colors";
 
   plasmaAppColors = pkgs.writeShellApplication {
     name = "korunix-plasma-app-colors";
@@ -119,9 +95,6 @@
         ' "$json" > "$rewritten"
         mv "$rewritten" "$json"
 
-        # Noctalia admite rutas de salida calculadas por la propia plantilla.
-        # Matugen no tiene ese campo, así que resolvemos el comando de manera
-        # genérica y convertimos el resultado en output_path antes de renderizar.
         while IFS=$'\t' read -r name command; do
           [ -n "$name" ] || continue
 
@@ -192,15 +165,10 @@
         )
       }
 
-      apply_current() {
-        local accent
-        accent="$(accent_hex)" || return 0
-        apply_templates "$accent"
-      }
-
       case "''${1:-apply}" in
         apply)
-          apply_current
+          accent="$(accent_hex)" || exit 0
+          apply_templates "$accent"
           ;;
 
         watch|--watch)
@@ -212,8 +180,6 @@
               last="$current"
             fi
 
-            # Plasma actualiza AccentColor en kdeglobals cuando cambia el fondo.
-            # Vigilamos el directorio porque KConfig puede reemplazar el archivo.
             inotifywait \
               -q \
               -e close_write,moved_to,create \
@@ -230,21 +196,18 @@
     '';
   };
 
-  plasmaNativeColors = pkgs.writeShellApplication {
-    name = "korunix-plasma-colors";
+  plasmaMaterialYou = pkgs.writeShellApplication {
+    name = "korunix-plasma-material-you";
     runtimeInputs = [
       pkgs.dbus
-      pkgs.kdePackages.plasma-workspace
+      materialYou
       plasmaAppColors
     ];
     text = ''
-      # La frontera GTK se conmuta por sesión: Plasma desconecta la capa GTK de
-      # Noctalia, pero deja sus archivos disponibles para restaurarlos al volver.
+      # Plasma desconecta la capa GTK de Noctalia antes de aplicar su propio tema.
       korunix-gtk-session plasma
 
-      # Plasma mantiene su motor nativo de acento derivado del fondo.
-      plasma-apply-colorscheme KorunixDynamic >/dev/null 2>&1 || true
-
+      # KDE mantiene Breeze como integración GTK de la sesión Plasma.
       dbus-send \
         --session \
         --type=method_call \
@@ -265,10 +228,11 @@
         string:Breeze \
         >/dev/null 2>&1 || true
 
-      # Las plantillas de aplicaciones que Noctalia dejó en el HOME se vuelven
-      # a renderizar con una paleta M3 basada en el AccentColor de Plasma. El
-      # mismo proceso queda atento a cambios del fondo durante toda la sesión.
-      exec korunix-plasma-app-colors --watch
+      # Las plantillas comunitarias siguen el AccentColor que KDE Material You
+      # Colors escriba en kdeglobals, sin tocar la configuración Qt de Niri/Umbriel.
+      korunix-plasma-app-colors --watch &
+
+      exec kde-material-you-colors
     '';
   };
 in {
@@ -278,48 +242,22 @@ in {
     pkgs.kdePackages.kwin-x11
   ];
 
-  # Plasma usa únicamente su motor nativo para el escritorio. Matugen se limita
-  # a traducir ese mismo acento a la paleta M3 que necesitan las plantillas de
-  # aplicaciones, sin sustituir el sistema de colores de Plasma.
   environment.systemPackages = [
-    plasmaDynamicScheme
+    materialYou
     plasmaAppColors
-    plasmaNativeColors
+    plasmaMaterialYou
   ];
 
-  # Dejamos preparada la selección antes de que arranque Plasma para que su
-  # servicio nativo de acento pueda reaccionar al fondo desde el inicio.
-  system.activationScripts.plasmaNativeColors.text = ''
-    install -d -m 0755 \
-      -o ${usuario.name} \
-      -g ${usuario.group} \
-      ${usuario.home}/.config
-
-    HOME=${usuario.home} \
-    XDG_CONFIG_HOME=${usuario.home}/.config \
-      ${pkgs.kdePackages.kconfig}/bin/kwriteconfig6 \
-        --file kdeglobals \
-        --group General \
-        --key ColorScheme \
-        KorunixDynamic
-
-    HOME=${usuario.home} \
-    XDG_CONFIG_HOME=${usuario.home}/.config \
-      ${pkgs.kdePackages.kconfig}/bin/kwriteconfig6 \
-        --file kdeglobals \
-        --group General \
-        --key accentColorFromWallpaper \
-        true
-
-    chown ${usuario.name}:${usuario.group} ${usuario.home}/.config/kdeglobals
-  '';
-
-  environment.etc."xdg/autostart/korunix-plasma-colors.desktop".text = ''
+  # KDE Material You Colors vuelve a ser el motor de colores dinámicos de Plasma.
+  # No se fuerza KorunixDynamic ni accentColorFromWallpaper: evitamos dos motores
+  # escribiendo simultáneamente la misma configuración de KDE.
+  environment.etc."xdg/autostart/kde-material-you-colors.desktop".text = ''
 [Desktop Entry]
 Type=Application
-Name=Korunix Plasma Colors
-Comment=Aplica los colores dinámicos del fondo a Plasma y sus aplicaciones
-Exec=${plasmaNativeColors}/bin/korunix-plasma-colors
+Name=KDE Material You Colors
+Comment=Genera los colores de Plasma a partir del fondo de pantalla
+Exec=${plasmaMaterialYou}/bin/korunix-plasma-material-you
+Icon=color-management
 OnlyShowIn=KDE;
 NoDisplay=true
 X-KDE-AutostartScript=true
