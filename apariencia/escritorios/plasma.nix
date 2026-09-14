@@ -24,6 +24,12 @@ autoload=false
 inode/directory=org.kde.dolphin.desktop;
   '';
 
+  # Orden declarativo de los lanzadores fijados del panel de Plasma.
+  environment.etc."xdg/plasma-org.kde.plasma.desktop-appletsrc".text = ''
+[Containments][2][Applets][5][Configuration][General]
+launchers=applications:systemsettings.desktop,applications:org.kde.dolphin.desktop,applications:zen.desktop
+  '';
+
   environment.variables = {
     XKB_DEFAULT_LAYOUT = "es";
     XKB_DEFAULT_VARIANT = "deadtilde";
