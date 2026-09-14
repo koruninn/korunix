@@ -14,6 +14,7 @@
       coreutils
       findutils
       gawk
+      glib
       gnugrep
       gnused
       jq
@@ -109,6 +110,12 @@
       run_undo "$noctalia_templates/gtk/undo-gtk4.sh"
       run_undo "$noctalia_templates/qt/undo.sh"
 
+      # Noctalia deja adw-gtk3 seleccionado en GSettings. Plasma necesita Breeze
+      # para que kde-gtk-config traduzca su esquema dinámico a aplicaciones GTK.
+      if command -v gsettings >/dev/null 2>&1; then
+        gsettings set org.gnome.desktop.interface gtk-theme 'Breeze' >/dev/null 2>&1 || true
+      fi
+
       # Plantillas comunitarias que solo escriben archivos de tema. Al volver a
       # Niri/Umbriel, Noctalia los genera de nuevo con la paleta vigente.
       remove_file "$config_home/darktable/themes/noctalia.css"
@@ -201,16 +208,17 @@ OnlyShowIn=KDE;
 X-KDE-AutostartScript=true
   '';
 
+  # kde-gtk-config mantiene Breeze GTK sincronizado con el esquema de colores
+  # activo de Plasma, incluido el que genera KDE Material You Colors.
+  environment.etc."xdg/kded5rc".text = ''
+[Module-gtkconfig]
+autoload=true
+  '';
+
   # Num Lock encendido al iniciar Plasma.
   environment.etc."xdg/kcminputrc".text = ''
 [Keyboard]
 NumLock=0
-  '';
-
-  # Plasma no debe copiar su apariencia hacia GTK.
-  environment.etc."xdg/kded5rc".text = ''
-[Module-gtkconfig]
-autoload=false
   '';
 
   # Plasma usa Dolphin como gestor de archivos sin cambiar Umbriel.
