@@ -114,6 +114,11 @@
       "Mod+E" = "spawn:nautilus";
       "Mod+B" = "spawn:firefox";
 
+      # Scratchpad global de Umbriel.
+      "Mod+Shift+S" = "window-move-to-scratchpad";
+      "Mod+Ctrl+S" = "scratchpad-toggle";
+      "Mod+Ctrl+Shift+S" = "window-restore-from-scratchpad";
+
       # Ventanas y overview.
       "Mod+Q" = "window-close";
       "Mod+O" = {
