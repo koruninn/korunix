@@ -104,7 +104,7 @@
     margin_opposite_edge = 0
     padding = 14
     widget_spacing = 12
-    scale = 1.0
+    scale = 0.9
     font_weight = "regular"
     font_family = ""
     capsule = false
