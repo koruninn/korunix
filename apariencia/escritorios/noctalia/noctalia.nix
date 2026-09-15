@@ -235,6 +235,12 @@
     order = "random"
     recursive = true
 
+    [plugins]
+    enabled = [
+      "noctalia/umbriel-companion",
+      "prponkshe/umbriel-displays"
+    ]
+
     [theme]
     mode = "auto"
     source = "wallpaper"
