@@ -13,7 +13,6 @@
   # Aplicaciones instaladas declarativamente desde Flathub.
   services.flatpak.packages = [
     "io.github.brunofin.Cohesion"
-    "net.nokyan.Resources"
   ];
 
   services.flatpak.update.auto = {
