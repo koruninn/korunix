@@ -4,7 +4,7 @@
 }: {
   users.users.${equipo.persona} = {
     isNormalUser = true;
-    description = equipo.persona;
+    description = equipo.nombre or equipo.persona;
     extraGroups = ["networkmanager" "wheel"];
   };
 }

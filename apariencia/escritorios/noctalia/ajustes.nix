@@ -2,7 +2,9 @@
   equipo,
   lib,
   plugins,
-}: {
+}: let
+  compartido = import ../compartido.nix;
+in {
   # ESTE ES EL ARCHIVO FÁCIL DE NOCTALIA.
   # Aquí viven los ajustes que Korunix quiere conservar después de un rebuild.
   # No hay que editar el "motor" noctalia.nix para mover widgets o cambiar el dock.
@@ -14,7 +16,7 @@
 
   shell = {
     corner_radius_scale = 1.0;
-    font_family = "sans-serif";
+    font_family = compartido.tipografia;
     lang = "es";
     time_format = "{:%H:%M:%S}";
     date_format = "%A, %x";
@@ -23,7 +25,10 @@
     setup_wizard_enabled = false;
     polkit_agent = true;
     password_style = "default";
-    avatar_path = "${./.face/avatar.jpg}";
+    avatar_path =
+      if equipo ? foto
+      then "${equipo.foto}"
+      else "${./.face/avatar.jpg}";
     settings_show_advanced = false;
     show_location = true;
     launch_apps_as_systemd_services = false;
@@ -77,7 +82,6 @@
 
     screenshot = {
       save_to_file = true;
-      directory = "~/Imágenes/Capturas de pantalla";
       filename_pattern = "Captura de pantalla %Y-%m-%d %H-%M-%S";
       copy_to_clipboard = true;
       freeze_screen = true;
@@ -273,7 +277,7 @@
     show_dots = true;
     launcher_position = "none";
     launcher_icon = "grid-dots";
-    pinned = ["firefox" "org.gnome.Nautilus" "spotify" "steam" "net.lutris.Lutris" "anime-game-launcher" "honkers-railway-launcher" "vesktop" "LocalSend" "code" "com.obsproject.Studio" "org.kde.kdenlive" "com.heroicgameslauncher.hgl" "onlyoffice-desktopeditors" "birdfont"];
+    pinned = map (entrada: entrada.noctalia) compartido.dock;
   };
 
   osd = {

@@ -2,9 +2,10 @@
   canal = "unstable";
   arquitectura = "x86_64-linux";
 
-  # Persona principal del equipo. Los módulos reutilizables usan este nombre
-  # en vez de asumir un usuario concreto.
+  # Cuenta y nombre visible de la persona principal de este equipo.
   persona = "koru";
+  nombre = "André";
+  foto = ./perfil.jpg;
 
   # Navegador predeterminado de este equipo. Chrome puede seguir instalado,
   # pero Korunix no lo selecciona automáticamente como predeterminado.

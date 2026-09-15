@@ -5,10 +5,12 @@
   # Arquitectura de la máquina.
   arquitectura = "x86_64-linux";
 
-  # Nombre de la persona principal configurada en este equipo.
+  # Cuenta de inicio de sesión de la persona principal.
   persona = "usuario";
 
   # Opcionales. Añádelos solo si ese equipo los necesita:
+  # nombre = "Nombre visible";
+  # foto = ./perfil.jpg;
   # navegadorPredeterminado = "firefox";
   # secretService = "gnome-keyring";
   # pantalla = {
