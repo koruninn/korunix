@@ -19,14 +19,14 @@
     date_format = "%A, %x"
     offline_mode = false
     telemetry_enabled = false
-    setup_wizard_enabled = true
+    setup_wizard_enabled = false
     polkit_agent = true
     password_style = "default"
     avatar_path = "${./.face/avatar.jpg}"
     settings_show_advanced = false
     show_location = true
     launch_apps_as_systemd_services = false
-    screen_time_enabled = false
+    screen_time_enabled = true
     app_icon_colorize = false
     app_icon_color = "on_surface"
     clipboard_enabled = true
@@ -65,7 +65,7 @@
     open_near_click_session = false
 
     [shell.screen_corners]
-    enabled = false
+    enabled = true
     size = 32
 
     [shell.mpris]
@@ -99,7 +99,7 @@
     radius_top_right = 24
     radius_bottom_left = 24
     radius_bottom_right = 24
-    margin_ends = 180
+    margin_ends = 15
     margin_edge = 10
     margin_opposite_edge = 0
     padding = 14
@@ -137,7 +137,7 @@
     main_axis_padding = 16
     cross_axis_padding = 8
     item_spacing = 6
-    background_opacity = 0.50
+    background_opacity = 0.25
     shadow = false
     radius = 24
     radius_top_left = 24
@@ -182,7 +182,7 @@
     position_vertical = "top_center"
     orientation = "horizontal"
     scale = 1.0
-    background_opacity = 0.50
+    background_opacity = 0.25
     offset_x = 20
     offset_y = 8
 
