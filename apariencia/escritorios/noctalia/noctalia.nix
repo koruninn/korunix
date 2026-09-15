@@ -447,14 +447,7 @@ in {
       skip_managed=false
       while IFS= read -r line || [ -n "$line" ]; do
         case "$line" in
-          "[theme.templates]"|
-          "[plugin_settings.\"noctalia/notes\"]"|
-          "[control_center]"|
-          "[[control_center.shortcuts]]"|
-          "[bar]"|
-          "[bar."*|
-          "[[bar."*|
-          "[widget.bongo_cat]")
+          "[theme.templates]"|"[plugin_settings.\"noctalia/notes\"]"|"[control_center]"|"[[control_center.shortcuts]]"|"[bar]"|"[bar."*|"[[bar."*|"[widget.bongo_cat]")
             skip_managed=true
             continue
             ;;
