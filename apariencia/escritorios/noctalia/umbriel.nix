@@ -114,11 +114,6 @@
       "Mod+E" = "spawn:nautilus";
       "Mod+B" = "spawn:firefox";
 
-      # Scratchpad global de Umbriel.
-      "Mod+Shift+S" = "window-move-to-scratchpad";
-      "Mod+Ctrl+S" = "scratchpad-toggle";
-      "Mod+Ctrl+Shift+S" = "window-restore-from-scratchpad";
-
       # Ventanas y overview.
       "Mod+Q" = "window-close";
       "Mod+O" = {
@@ -335,17 +330,6 @@
         duration_ms = 260;
         curve = "easeout";
         workspace_curve = "spring:1,1000";
-      };
-
-      scratchpad = {
-        enabled = true;
-        duration_ms = 220;
-        curve = "easeout";
-        dim = 0.20;
-        blur = true;
-        scale = 0.96;
-        maximize = false;
-        fullscreen = false;
       };
 
       layers = {
