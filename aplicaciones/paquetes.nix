@@ -73,6 +73,7 @@ in {
     protonplus
     pywalfox-native
     rar
+    resources
     scrcpy
     stirling-pdf-desktop
     mailspringEquipo
