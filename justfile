@@ -22,6 +22,11 @@ revisar:
 formatear:
 	nix fmt .
 
+# Busca código Nix innecesario o sospechoso sin modificar archivos.
+analizar:
+	nix run nixpkgs#deadnix -- --fail .
+	nix run nixpkgs#statix -- check .
+
 # Construye un equipo sin instalarlo. Sirve para probar cambios con seguridad.
 probar equipo:
 	nix build ".#nixosConfigurations.{{equipo}}.config.system.build.toplevel" --no-link
