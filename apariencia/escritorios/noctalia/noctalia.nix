@@ -320,7 +320,7 @@
     position_vertical = "top_center"
     orientation = "horizontal"
     scale = 1.0
-    background_opacity = 0.25
+    background_opacity = 0.30
     offset_x = 20
     offset_y = 8
 
