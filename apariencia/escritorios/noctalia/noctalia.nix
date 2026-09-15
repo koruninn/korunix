@@ -71,15 +71,43 @@
     [shell.mpris]
     blacklist = []
 
+    [shell.launcher]
+    sort_by_usage = false
+
     [shell.screenshot]
     save_to_file = true
     directory = "~/Imágenes/Capturas de pantalla"
     filename_pattern = "Captura de pantalla %Y-%m-%d %H-%M-%S"
     copy_to_clipboard = true
     freeze_screen = true
+    confirm_region = true
+    annotate = true
+
+    [location]
+    auto_locate = true
+
+    [control_center]
+
+    [[control_center.shortcuts]]
+    type = "wifi"
+
+    [[control_center.shortcuts]]
+    type = "bluetooth"
+
+    [[control_center.shortcuts]]
+    type = "nightlight"
+
+    [[control_center.shortcuts]]
+    type = "notification"
+
+    [[control_center.shortcuts]]
+    type = "power_profile"
+
+    [[control_center.shortcuts]]
+    type = "dark_mode"
 
     [bar]
-    order = ["default"]
+    order = ["default", "derecha"]
 
     [bar.default]
     position = "top"
@@ -112,21 +140,166 @@
     capsule_thickness = 0.76
     capsule_radius = 8.0
     capsule_opacity = 1.0
-    start = ["launcher", "wallpaper", "workspaces"]
-    center = ["clock"]
+    start = ["workspaces", "volume", "cat", "group:inicio"]
+    center = ["group:centro"]
     end = [
-      "media",
       "tray",
       "notifications",
-      "clipboard",
+      "group:fin",
+      "udiskie_manager",
       "network",
-      "bluetooth",
-      "volume",
-      "brightness",
-      "battery",
-      "control-center",
-      "session"
+      "bluetooth"
     ]
+
+    [[bar.default.capsule_group]]
+    id = "inicio"
+    members = ["bongo_cat", "media", "audio_visualizer"]
+
+    [[bar.default.capsule_group]]
+    id = "centro"
+    members = ["fecha", "clock", "weather"]
+
+    [[bar.default.capsule_group]]
+    id = "fin"
+    members = ["clipboard", "calculator", "pomodoro_timer", "notes"]
+
+    [bar.derecha]
+    position = "right"
+    enabled = true
+    auto_hide = false
+    reserve_space = true
+    layer = "top"
+    thickness = 34
+    background_opacity = 0.5
+    border = "outline"
+    border_width = 0.0
+    shadow = false
+    contact_shadow = false
+    panel_overlap = 1
+    radius = 24
+    radius_top_left = 24
+    radius_top_right = 24
+    radius_bottom_left = 24
+    radius_bottom_right = 24
+    margin_ends = 15
+    margin_edge = 10
+    margin_opposite_edge = 0
+    padding = 14
+    widget_spacing = 12
+    scale = 0.9
+    font_weight = "regular"
+    font_family = ""
+    capsule = false
+    capsule_fill = "surface_variant"
+    capsule_thickness = 0.76
+    capsule_radius = 8.0
+    capsule_opacity = 1.0
+    start = ["lock_keys", "temperatura", "group:umbriel", "speedtest_meter"]
+    center = ["phone_connect", "printers"]
+    end = ["wallpaper", "group:red", "group:captura"]
+
+    [[bar.derecha.capsule_group]]
+    id = "umbriel"
+    members = ["umbriel_displays", "umbriel_companion"]
+
+    [[bar.derecha.capsule_group]]
+    id = "red"
+    members = ["red_rx", "red_tx"]
+
+    [[bar.derecha.capsule_group]]
+    id = "captura"
+    members = ["privacy", "screenshot", "screen_recorder"]
+
+    [widget.fecha]
+    type = "clock"
+    format = "{:%A, %d de %B}"
+
+    [widget.weather]
+    type = "weather"
+    max_length = 250
+    anchor = true
+
+    [widget.media]
+    type = "media"
+    max_length = 400
+    hide_when_no_media = true
+
+    [widget.cat]
+    type = "dotnetrob/cat:cat"
+    show_cpu_percent = true
+    interactive = false
+
+    [widget.bongo_cat]
+    type = "noctalia/bongocat:cat"
+
+    [widget.calculator]
+    type = "yuuto/calculator:bar"
+
+    [widget.pomodoro_timer]
+    type = "thepunkoff/pomodoro:widget"
+
+    [widget.notes]
+    type = "noctalia/notes:notes"
+
+    [widget.udiskie_manager]
+    type = "aristides/udiskie:status"
+
+    [widget.tray]
+    type = "tray"
+    drawer = true
+
+    [widget.network]
+    type = "network"
+    show_label = false
+
+    [widget.bluetooth]
+    type = "bluetooth"
+    hide_when_adapter_off = true
+
+    [widget.lock_keys]
+    type = "lock_keys"
+    hide_when_off = true
+    display = "full"
+
+    [widget.temperatura]
+    type = "sysmon"
+    stat = "cpu_temp"
+
+    [widget.umbriel_displays]
+    type = "prponkshe/umbriel-displays:bar"
+
+    [widget.umbriel_companion]
+    type = "noctalia/umbriel-companion:bar"
+
+    [widget.speedtest_meter]
+    type = "nilsonlinux/speedtest-meter:speedtest-widget"
+
+    [widget.phone_connect]
+    type = "icefish/phone-connect:bar"
+
+    [widget.printers]
+    type = "andrewdems/printers:printer"
+
+    [widget.red_rx]
+    type = "sysmon"
+    stat = "net_rx"
+
+    [widget.red_tx]
+    type = "sysmon"
+    stat = "net_tx"
+
+    [widget.privacy]
+    type = "privacy"
+    hide_inactive = true
+
+    [widget.screen_recorder]
+    type = "noctalia/screen_recorder:recorder"
+
+    [plugin_settings."noctalia/notes"]
+    extension = "md"
+    panel_placement = "floating"
+    panel_position = "center_right"
+    panel_layer = "top"
 
     [dock]
     enabled = true
@@ -294,24 +467,37 @@ in {
   environment.etc."noctalia/config.toml".source = noctaliaConfig;
 
   system.activationScripts.noctaliaConfig.text = ''
+    install -d -m 0755 \
+      -o ${usuario.name} \
+      -g ${usuario.group} \
+      ${usuario.home}/.config/noctalia
+
     # La interfaz de Noctalia guarda sus cambios en settings.toml, que tiene
-    # prioridad sobre config.toml. Eliminamos solo el bloque de plantillas para
-    # que la selección declarativa de Korunix sea la fuente de verdad por defecto.
+    # prioridad sobre config.toml. Las plantillas y los ajustes de Notes que ya
+    # declaramos no deben quedar duplicados como sobreescrituras de la GUI.
     settings_file=${usuario.home}/.local/state/noctalia/settings.toml
     if [ -f "$settings_file" ]; then
       tmp_file="$settings_file.korunix-tmp"
       skip_templates=false
+      skip_notes=false
       while IFS= read -r line || [ -n "$line" ]; do
         case "$line" in
           "[theme.templates]")
             skip_templates=true
+            skip_notes=false
+            continue
+            ;;
+          "[plugin_settings.\"noctalia/notes\"]")
+            skip_templates=false
+            skip_notes=true
             continue
             ;;
           "["*)
             skip_templates=false
+            skip_notes=false
             ;;
         esac
-        if [ "$skip_templates" = false ]; then
+        if [ "$skip_templates" = false ] && [ "$skip_notes" = false ]; then
           printf '%s\n' "$line"
         fi
       done < "$settings_file" > "$tmp_file"
@@ -319,15 +505,27 @@ in {
       rm -f "$tmp_file"
     fi
 
-    install -d -m 0755 \
-      -o ${usuario.name} \
-      -g ${usuario.group} \
-      ${usuario.home}/.config/noctalia
-
     install -m 0644 \
       -o ${usuario.name} \
       -g ${usuario.group} \
       ${noctaliaConfig} \
       ${usuario.home}/.config/noctalia/config.toml
+
+    # Notes sigue el directorio XDG de Documentos en vez de asumir ~/Documents.
+    # Se genera como una segunda capa TOML para conservar la localización real
+    # de cada usuario (Documentos, Documents, Dokumente, etc.).
+    documents_dir="$(HOME=${usuario.home} ${pkgs.xdg-user-dirs}/bin/xdg-user-dir DOCUMENTS)"
+    if [ -n "$documents_dir" ]; then
+      notes_dir="$documents_dir/Notes"
+      notes_value="$(${pkgs.python3}/bin/python3 -c 'import json, sys; print(json.dumps(sys.argv[1], ensure_ascii=False))' "$notes_dir")"
+      xdg_file=${usuario.home}/.config/noctalia/zz-korunix-xdg.toml
+      xdg_tmp="$xdg_file.korunix-tmp"
+      {
+        printf '%s\n' '[plugin_settings."noctalia/notes"]'
+        printf 'notes_dir = %s\n' "$notes_value"
+      } > "$xdg_tmp"
+      install -m 0644 -o ${usuario.name} -g ${usuario.group} "$xdg_tmp" "$xdg_file"
+      rm -f "$xdg_tmp"
+    fi
   '';
 }
