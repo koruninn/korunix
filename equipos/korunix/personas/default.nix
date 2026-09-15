@@ -3,8 +3,8 @@
     isNormalUser = true;
     description = "André";
 
-    # input se queda: Bongo Cat lee dispositivos de entrada y los mandos de
-    # Xbox también forman parte del uso normal de Korunix.
-    extraGroups = ["networkmanager" "wheel" "input"];
+    # input: Bongo Cat y lectura directa de mandos.
+    # uinput: Steam Input y otras capas de compatibilidad/remapeo.
+    extraGroups = ["networkmanager" "wheel" "input" "uinput"];
   };
 }
