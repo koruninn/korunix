@@ -119,7 +119,7 @@
     background_opacity = 0.5
     border = "outline"
     border_width = 0.0
-    shadow = false
+    shadow = true
     contact_shadow = false
     panel_overlap = 1
     radius = 24
@@ -140,7 +140,7 @@
     capsule_thickness = 0.76
     capsule_radius = 8.0
     capsule_opacity = 1.0
-    start = ["workspaces", "volume", "cat", "group:inicio"]
+    start = ["workspaces", "cat", "group:inicio"]
     center = ["group:centro"]
     end = [
       "tray",
@@ -148,7 +148,8 @@
       "group:fin",
       "udiskie_manager",
       "network",
-      "bluetooth"
+      "bluetooth",
+      "volume",
     ]
 
     [[bar.default.capsule_group]]
@@ -170,7 +171,7 @@
     reserve_space = true
     layer = "top"
     thickness = 34
-    background_opacity = 0.5
+    background_opacity = 0.8
     border = "outline"
     border_width = 0.0
     shadow = false
@@ -310,8 +311,8 @@
     main_axis_padding = 16
     cross_axis_padding = 8
     item_spacing = 6
-    background_opacity = 0.25
-    shadow = false
+    background_opacity = 0.30
+    shadow = true
     radius = 24
     radius_top_left = 24
     radius_top_right = 24
