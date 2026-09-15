@@ -1,0 +1,21 @@
+name: Revisar Korunix
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar la repo
+        uses: actions/checkout@v4
+
+      - name: Instalar Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Revisar formato
+        run: nix fmt -- --check .
+
+      - name: Revisar que el flake evalúe
+        run: nix flake check --no-build
