@@ -24,7 +24,15 @@ jobs:
           equipos="$(nix eval --raw .#nixosConfigurations --apply 'x: builtins.concatStringsSep " " (builtins.attrNames x)')"
           for equipo in $equipos; do
             echo "Construyendo $equipo"
-            nix build ".#nixosConfigurations.$equipo.config.system.build.toplevel" --no-link -L
+            set +e
+            nix build ".#nixosConfigurations.$equipo.config.system.build.toplevel" --no-link -L 2>&1 | tee "/tmp/korunix-$equipo.log"
+            estado=${PIPESTATUS[0]}
+            set -e
+            if [ "$estado" -ne 0 ]; then
+              resumen="$(tail -n 80 "/tmp/korunix-$equipo.log" | tr '\n' ' ' | sed 's/%/%25/g; s/\r/%0D/g')"
+              echo "::error title=Falló la construcción de $equipo::$resumen"
+              exit "$estado"
+            fi
           done
 
       - name: Buscar código Nix innecesario o sospechoso
