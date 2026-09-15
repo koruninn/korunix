@@ -13,7 +13,7 @@
     text = ''
       materialized_root=${lib.escapeShellArg "${usuario.home}/.local/state/noctalia/plugins/materialized"}
       for plugin_dir in ${lib.concatMapStringsSep " " lib.escapeShellArg plugins.descartados}; do
-        rm -rf -- "${materialized_root:?}/$plugin_dir"
+        rm -rf -- "''${materialized_root:?}/$plugin_dir"
       done
     '';
   };
