@@ -76,8 +76,6 @@ in {
     scrcpy
     stirling-pdf-desktop
     mailspringEquipo
-    thunderbird
-    valent
     vesktop
     vlc
     vscode
