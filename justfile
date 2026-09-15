@@ -9,15 +9,18 @@ korunix:
 optiplex:
 	just switch optiplex
 
-# Revisa formato y evaluación sin modificar el sistema.
+# Revisa que la configuración tenga sentido sin modificar el sistema.
 revisar:
-	nix fmt -- --check .
 	nix flake check --no-build
 	@set -eu; for equipo in $(nix eval --raw .#nixosConfigurations --apply 'x: builtins.concatStringsSep " " (builtins.attrNames x)'); do \
 		echo "Evaluando $equipo"; \
 		nix eval --raw ".#nixosConfigurations.$equipo.config.system.build.toplevel.drvPath"; \
 		echo; \
 	done
+
+# Da formato al código Nix cuando tú quieras. No se ejecuta automáticamente.
+formatear:
+	nix fmt .
 
 # Construye un equipo sin instalarlo. Sirve para probar cambios con seguridad.
 probar equipo:
