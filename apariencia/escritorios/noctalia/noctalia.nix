@@ -87,15 +87,15 @@
     auto_locate = true
 
     [control_center]
-
-    [[control_center.shortcuts]]
-    type = "wifi"
+    sidebar = "full"
+    sidebar_section = "full"
+    width = 700
+    show_shortcut_labels = true
+    show_session_button = true
+    hidden_tabs = []
 
     [[control_center.shortcuts]]
     type = "bluetooth"
-
-    [[control_center.shortcuts]]
-    type = "nightlight"
 
     [[control_center.shortcuts]]
     type = "notification"
@@ -104,10 +104,16 @@
     type = "power_profile"
 
     [[control_center.shortcuts]]
+    type = "screen_recorder"
+
+    [[control_center.shortcuts]]
+    type = "nightlight"
+
+    [[control_center.shortcuts]]
     type = "dark_mode"
 
     [bar]
-    order = ["default", "derecha"]
+    order = ["default"]
 
     [bar.default]
     position = "top"
@@ -116,11 +122,11 @@
     reserve_space = true
     layer = "top"
     thickness = 34
-    background_opacity = 0.5
+    background_opacity = 0.35
     border = "outline"
     border_width = 0.0
     shadow = true
-    contact_shadow = false
+    contact_shadow = true
     panel_overlap = 1
     radius = 24
     radius_top_left = 24
@@ -140,76 +146,27 @@
     capsule_thickness = 0.76
     capsule_radius = 8.0
     capsule_opacity = 1.0
-    start = ["workspaces", "cat", "group:inicio"]
-    center = ["group:centro"]
+    start = ["workspaces", "group:inicio", "cat", "temperatura", "wallpaper"]
+    center = ["bongo_cat", "media", "audio_visualizer"]
     end = [
       "tray",
       "notifications",
-      "group:fin",
+      "clipboard",
+      "calculator",
+      "pomodoro_timer",
+      "notes",
+      "umbriel_companion",
       "udiskie_manager",
       "network",
       "bluetooth",
+      "lock_keys",
       "volume",
+      "volume_input",
     ]
 
     [[bar.default.capsule_group]]
     id = "inicio"
-    members = ["bongo_cat", "media", "audio_visualizer"]
-
-    [[bar.default.capsule_group]]
-    id = "centro"
-    members = ["fecha", "clock", "weather"]
-
-    [[bar.default.capsule_group]]
-    id = "fin"
-    members = ["clipboard", "calculator", "pomodoro_timer", "notes"]
-
-    [bar.derecha]
-    position = "right"
-    enabled = true
-    auto_hide = false
-    reserve_space = true
-    layer = "top"
-    thickness = 34
-    background_opacity = 0.8
-    border = "outline"
-    border_width = 0.0
-    shadow = false
-    contact_shadow = false
-    panel_overlap = 1
-    radius = 24
-    radius_top_left = 24
-    radius_top_right = 24
-    radius_bottom_left = 24
-    radius_bottom_right = 24
-    margin_ends = 15
-    margin_edge = 10
-    margin_opposite_edge = 0
-    padding = 14
-    widget_spacing = 12
-    scale = 0.9
-    font_weight = "regular"
-    font_family = ""
-    capsule = false
-    capsule_fill = "surface_variant"
-    capsule_thickness = 0.76
-    capsule_radius = 8.0
-    capsule_opacity = 1.0
-    start = ["lock_keys", "temperatura", "group:umbriel", "speedtest_meter"]
-    center = ["phone_connect", "printers"]
-    end = ["wallpaper", "group:red", "group:captura"]
-
-    [[bar.derecha.capsule_group]]
-    id = "umbriel"
-    members = ["umbriel_displays", "umbriel_companion"]
-
-    [[bar.derecha.capsule_group]]
-    id = "red"
-    members = ["red_rx", "red_tx"]
-
-    [[bar.derecha.capsule_group]]
-    id = "captura"
-    members = ["privacy", "screenshot", "screen_recorder"]
+    members = ["fecha", "clock"]
 
     [widget.fecha]
     type = "clock"
@@ -232,6 +189,9 @@
 
     [widget.bongo_cat]
     type = "noctalia/bongocat:cat"
+    audio_spectrum = true
+    tappy_mode = true
+    enable_scroll = false
 
     [widget.calculator]
     type = "yuuto/calculator:bar"
@@ -261,6 +221,10 @@
     type = "lock_keys"
     hide_when_off = true
     display = "full"
+
+    [widget.volume_input]
+    type = "volume"
+    device = "input"
 
     [widget.temperatura]
     type = "sysmon"
@@ -474,31 +438,31 @@ in {
       ${usuario.home}/.config/noctalia
 
     # La interfaz de Noctalia guarda sus cambios en settings.toml, que tiene
-    # prioridad sobre config.toml. Las plantillas y los ajustes de Notes que ya
-    # declaramos no deben quedar duplicados como sobreescrituras de la GUI.
+    # prioridad sobre config.toml. Las secciones que Korunix ya declara deben
+    # salir del estado de la GUI para que la configuración declarativa sea la
+    # fuente de verdad, incluida la lista de barras.
     settings_file=${usuario.home}/.local/state/noctalia/settings.toml
     if [ -f "$settings_file" ]; then
       tmp_file="$settings_file.korunix-tmp"
-      skip_templates=false
-      skip_notes=false
+      skip_managed=false
       while IFS= read -r line || [ -n "$line" ]; do
         case "$line" in
-          "[theme.templates]")
-            skip_templates=true
-            skip_notes=false
-            continue
-            ;;
-          "[plugin_settings.\"noctalia/notes\"]")
-            skip_templates=false
-            skip_notes=true
+          "[theme.templates]"|
+          "[plugin_settings.\"noctalia/notes\"]"|
+          "[control_center]"|
+          "[[control_center.shortcuts]]"|
+          "[bar]"|
+          "[bar."*|
+          "[[bar."*|
+          "[widget.bongo_cat]")
+            skip_managed=true
             continue
             ;;
           "["*)
-            skip_templates=false
-            skip_notes=false
+            skip_managed=false
             ;;
         esac
-        if [ "$skip_templates" = false ] && [ "$skip_notes" = false ]; then
+        if [ "$skip_managed" = false ]; then
           printf '%s\n' "$line"
         fi
       done < "$settings_file" > "$tmp_file"
