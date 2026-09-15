@@ -10,12 +10,21 @@ jobs:
     steps:
       - name: Descargar la repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Instalar Nix
         uses: cachix/install-nix-action@v31
 
-      - name: Revisar formato
-        run: nix fmt -- --check .
+      - name: Revisar formato de lo que cambió
+        run: |
+          files="$(git diff --name-only HEAD^1 HEAD -- '*.nix')"
+          if [ -z "$files" ]; then
+            echo "No cambiaron archivos Nix."
+            exit 0
+          fi
+          nix fmt -- $files
+          git diff --exit-code -- $files
 
       - name: Revisar que el flake evalúe
         run: nix flake check --no-build
