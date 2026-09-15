@@ -2,6 +2,9 @@
   users.users.${equipo.persona} = {
     isNormalUser = true;
     description = "André";
-    extraGroups = ["networkmanager" "wheel" "input" "libvirtd"];
+
+    # input se queda: Bongo Cat lee dispositivos de entrada y los mandos de
+    # Xbox también forman parte del uso normal de Korunix.
+    extraGroups = ["networkmanager" "wheel" "input"];
   };
 }

@@ -25,19 +25,15 @@
         ocultar nixos-manual.desktop "Manual de NixOS"
   '';
 
-  # Umbriel no es identificado por Chromium/Electron como GNOME o KDE, así
-  # que Mailspring no selecciona libsecret automáticamente aunque el Secret
-  # Service esté disponible. Solo Korunix fuerza GNOME Keyring; Optiplex
-  # conserva el comportamiento normal del paquete.
+  usaGnomeKeyring = (equipo.secretService or null) == "gnome-keyring";
   mailspringEquipo =
-    if equipo.persona == "koru"
+    if usaGnomeKeyring
     then pkgs.mailspring.override {commandLineArgs = "--password-store=gnome-libsecret";}
     else pkgs.mailspring;
 in {
   services.gvfs.enable = true;
   services.udisks2.enable = true;
 
-  # GNOME sigue completo, pero sin aplicaciones auxiliares que Korunix no usa.
   environment.gnome.excludePackages = with pkgs; [
     epiphany
     gnome-tour

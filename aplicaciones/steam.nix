@@ -3,7 +3,6 @@
   pkgs,
   ...
 }: {
-  # Millennium publica un overlay que sustituye Steam por su paquete integrado.
   nixpkgs.overlays = [
     inputs.millennium.overlays.default
   ];
@@ -15,5 +14,8 @@
     dedicatedServer.openFirewall = true;
   };
 
+  # Reglas udev para mandos y hardware de juego. Complementa el grupo input,
+  # que Korunix conserva para Bongo Cat y los mandos de Xbox.
+  hardware.steam-hardware.enable = true;
   programs.gamemode.enable = true;
 }
