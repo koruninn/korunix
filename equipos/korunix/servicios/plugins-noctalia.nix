@@ -13,7 +13,7 @@
     text = ''
       materialized_root=${lib.escapeShellArg "${usuario.home}/.local/state/noctalia/plugins/materialized"}
       for plugin_dir in ${lib.concatMapStringsSep " " lib.escapeShellArg plugins.descartados}; do
-        rm -rf -- "$materialized_root/$plugin_dir"
+        rm -rf -- "${materialized_root:?}/$plugin_dir"
       done
     '';
   };
@@ -32,7 +32,7 @@ in {
     pkgs.yt-dlp
   ];
 
-  # input vive en personas/default.nix: Bongo Cat y los mandos de Xbox lo usan.
+  # input se conserva: Bongo Cat y los mandos usan dispositivos de entrada.
   system.activationScripts.noctaliaPlugins = {
     deps = ["noctaliaConfig"];
     text = ''
