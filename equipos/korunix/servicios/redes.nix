@@ -1,4 +1,4 @@
-{...}: {
+{pkgs, ...}: {
   # El hostname se deriva del nombre del equipo en flake.nix.
   networking.networkmanager.enable = true;
 
@@ -20,6 +20,7 @@
   # Tailscale crea la red privada cifrada para acceder a Korunix desde fuera de
   # casa sin abrir Sunshine directamente a Internet ni configurar port-forwarding.
   services.tailscale.enable = true;
+  environment.systemPackages = [pkgs.trayscale];
 
   # Sunshine
   services.sunshine = {
