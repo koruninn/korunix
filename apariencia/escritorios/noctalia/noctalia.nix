@@ -8,12 +8,13 @@
   usuario = config.users.users.${equipo.persona};
   plugins = import ./plugins.nix;
   toml = pkgs.formats.toml {};
+  python = pkgs.python3.withPackages (ps: [ps.tomli-w]);
   ajustes = import ./ajustes.nix {inherit equipo lib plugins;};
   noctaliaConfig = toml.generate "noctalia-config.toml" ajustes;
 
   noctaliaConfigSync = pkgs.writeShellApplication {
     name = "korunix-noctalia-config-sync";
-    runtimeInputs = [pkgs.coreutils pkgs.python3 pkgs.xdg-user-dirs];
+    runtimeInputs = [pkgs.coreutils pkgs.xdg-user-dirs];
     text = ''
       home=${lib.escapeShellArg usuario.home}
       owner=${lib.escapeShellArg usuario.name}
@@ -23,61 +24,136 @@
 
       install -d -m 0755 -o "$owner" -g "$group" "$config_dir"
 
+      # Limpia únicamente las secciones que Korunix administra. El parser TOML
+      # evita depender de la posición de las líneas y wallpaper queda intacto.
       if [ -f "$settings_file" ]; then
-        tmp_file="$settings_file.korunix-tmp"
-        skip_managed=false
-        while IFS= read -r line || [ -n "$line" ]; do
-          case "$line" in
-            "[accessibility]"|\
-            "[shell]"|"[shell."*|\
-            "[location]"|"[location."*|\
-            "[control_center]"|"[control_center."*|"[[control_center."*|\
-            "[bar]"|"[bar."*|"[[bar."*|\
-            "[dock]"|"[dock."*|\
-            "[osd]"|"[osd."*|\
-            "[lockscreen]"|"[lockscreen."*|\
-            "[calendar]"|"[calendar."*|\
-            "[plugins]"|"[plugins."*|\
-            "[theme]"|"[theme."*|\
-            "[plugin_settings.\"noctalia/notes\"]"|\
-            "[widget.fecha]"|"[widget.weather]"|"[widget.media]"|"[widget.cat]"|\
-            "[widget.bongo_cat]"|"[widget.calculator]"|"[widget.pomodoro_timer]"|\
-            "[widget.notes]"|"[widget.udiskie_manager]"|"[widget.tray]"|\
-            "[widget.network]"|"[widget.bluetooth]"|"[widget.lock_keys]"|\
-            "[widget.volume_input]"|"[widget.temperatura]"|"[widget.umbriel_displays]"|\
-            "[widget.umbriel_companion]"|"[widget.speedtest_meter]"|\
-            "[widget.phone_connect]"|"[widget.printers]"|"[widget.red_rx]"|\
-            "[widget.red_tx]"|"[widget.privacy]"|"[widget.screen_recorder]")
-              skip_managed=true
-              continue
-              ;;
-            "["*)
-              skip_managed=false
-              ;;
-          esac
-          if [ "$skip_managed" = false ]; then
-            printf '%s\n' "$line"
-          fi
-        done < "$settings_file" > "$tmp_file"
-        install -m 0644 -o "$owner" -g "$group" "$tmp_file" "$settings_file"
-        rm -f "$tmp_file"
+        ${python}/bin/python - "$settings_file" <<'PY'
+import os
+from pathlib import Path
+import shutil
+import sys
+import tomllib
+import tomli_w
+
+settings = Path(sys.argv[1])
+with settings.open("rb") as handle:
+    data = tomllib.load(handle)
+
+managed_top = {
+    "accessibility",
+    "shell",
+    "location",
+    "control_center",
+    "bar",
+    "dock",
+    "osd",
+    "lockscreen",
+    "calendar",
+    "plugins",
+    "theme",
+}
+managed_widgets = {
+    "fecha",
+    "weather",
+    "media",
+    "cat",
+    "bongo_cat",
+    "calculator",
+    "pomodoro_timer",
+    "notes",
+    "udiskie_manager",
+    "tray",
+    "network",
+    "bluetooth",
+    "lock_keys",
+    "volume_input",
+    "temperatura",
+    "umbriel_displays",
+    "umbriel_companion",
+    "speedtest_meter",
+    "phone_connect",
+    "printers",
+    "red_rx",
+    "red_tx",
+    "privacy",
+    "screen_recorder",
+}
+
+changed = False
+for key in managed_top:
+    if key in data:
+        del data[key]
+        changed = True
+
+widgets = data.get("widget")
+if isinstance(widgets, dict):
+    for key in managed_widgets:
+        if key in widgets:
+            del widgets[key]
+            changed = True
+    if not widgets:
+        del data["widget"]
+
+plugin_settings = data.get("plugin_settings")
+if isinstance(plugin_settings, dict) and "noctalia/notes" in plugin_settings:
+    del plugin_settings["noctalia/notes"]
+    changed = True
+    if not plugin_settings:
+        del data["plugin_settings"]
+
+if changed:
+    backup = settings.with_name(settings.name + ".korunix-backup")
+    shutil.copy2(settings, backup)
+    temporary = settings.with_name(settings.name + ".korunix-tmp")
+    with temporary.open("wb") as handle:
+        tomli_w.dump(data, handle)
+    os.replace(temporary, settings)
+PY
+        chown "$owner:$group" "$settings_file"
+        if [ -f "$settings_file.korunix-backup" ]; then
+          chown "$owner:$group" "$settings_file.korunix-backup"
+        fi
       fi
 
       install -m 0644 -o "$owner" -g "$group" ${noctaliaConfig} "$config_dir/config.toml"
 
+      # Las rutas personales se resuelven desde XDG, así funcionan aunque la
+      # carpeta se llame Imágenes, Pictures u otra traducción.
       documents_dir="$(HOME="$home" xdg-user-dir DOCUMENTS)"
-      if [ -n "$documents_dir" ]; then
-        notes_dir="$documents_dir/Notes"
-        notes_value="$(python3 -c 'import json, sys; print(json.dumps(sys.argv[1], ensure_ascii=False))' "$notes_dir")"
-        xdg_file="$config_dir/zz-korunix-xdg.toml"
-        xdg_tmp="$xdg_file.korunix-tmp"
-        {
-          printf '%s\n' '[plugin_settings."noctalia/notes"]'
-          printf 'notes_dir = %s\n' "$notes_value"
-        } > "$xdg_tmp"
-        install -m 0644 -o "$owner" -g "$group" "$xdg_tmp" "$xdg_file"
-        rm -f "$xdg_tmp"
-      fi
+      pictures_dir="$(HOME="$home" xdg-user-dir PICTURES)"
+      [ -n "$documents_dir" ] || documents_dir="$home/Documents"
+      [ -n "$pictures_dir" ] || pictures_dir="$home/Pictures"
+
+      notes_dir="$documents_dir/Notes"
+      screenshots_dir="$pictures_dir/Capturas de pantalla"
+      install -d -m 0755 -o "$owner" -g "$group" "$notes_dir" "$screenshots_dir"
+
+      xdg_file="$config_dir/zz-korunix-xdg.toml"
+      ${python}/bin/python - "$xdg_file" "$notes_dir" "$screenshots_dir" <<'PY'
+from pathlib import Path
+import sys
+import tomli_w
+
+output = Path(sys.argv[1])
+notes = sys.argv[2]
+screenshots = sys.argv[3]
+data = {
+    "plugin_settings": {
+        "noctalia/notes": {
+            "notes_dir": notes,
+        },
+    },
+    "shell": {
+        "screenshot": {
+            "directory": screenshots,
+        },
+    },
+}
+with output.open("wb") as handle:
+    tomli_w.dump(data, handle)
+PY
+      chown "$owner:$group" "$xdg_file"
+      chmod 0644 "$xdg_file"
     '';
   };
 in {

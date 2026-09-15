@@ -1,42 +1,54 @@
 {
-  config,
   equipo,
   lib,
   pkgs,
   ...
 }: let
-  usuario = config.users.users.${equipo.persona};
   plugins = import ../../../apariencia/escritorios/noctalia/plugins.nix;
+
+  paquetes = {
+    cups = pkgs.cups;
+    "gpu-screen-recorder" = pkgs.gpu-screen-recorder;
+    kdeconnect = pkgs.kdePackages.kdeconnect-kde;
+    "speedtest-cli" = pkgs.speedtest-cli;
+    sshfs = pkgs.sshfs;
+    udiskie = pkgs.udiskie;
+    "xdg-utils" = pkgs.xdg-utils;
+    "yt-dlp" = pkgs.yt-dlp;
+  };
+
+  paquetesPlugins = map (nombre: paquetes.${nombre}) (lib.unique plugins.dependencias);
+
   limpiarPlugins = pkgs.writeShellApplication {
     name = "korunix-noctalia-plugin-cleanup";
     runtimeInputs = [pkgs.coreutils];
     text = ''
-      materialized_root=${lib.escapeShellArg "${usuario.home}/.local/state/noctalia/plugins/materialized"}
+      materialized_root="''${XDG_STATE_HOME:-$HOME/.local/state}/noctalia/plugins/materialized"
+      [ -d "$materialized_root" ] || exit 0
+
       for plugin_dir in ${lib.concatMapStringsSep " " lib.escapeShellArg plugins.descartados}; do
         rm -rf -- "''${materialized_root:?}/$plugin_dir"
       done
     '';
   };
 in {
+  # Herramientas generales del equipo. FFmpeg permanece disponible aunque no
+  # haya ningún plugin que lo pida.
   environment.systemPackages = [
     pkgs.coreutils
-    pkgs.cups
     pkgs.evtest
     pkgs.ffmpeg
-    pkgs.gpu-screen-recorder
-    pkgs.kdePackages.kdeconnect-kde
-    pkgs.speedtest-cli
-    pkgs.sshfs
-    pkgs.udiskie
-    pkgs.xdg-utils
-    pkgs.yt-dlp
-  ];
+  ] ++ paquetesPlugins;
 
-  # input se conserva: Bongo Cat y los mandos usan dispositivos de entrada.
-  system.activationScripts.noctaliaPlugins = {
-    deps = ["noctaliaConfig"];
-    text = ''
-      ${limpiarPlugins}/bin/korunix-noctalia-plugin-cleanup
-    '';
+  # La limpieza del estado de plugins pertenece a la sesión de la persona, no
+  # a una activación ejecutada como root.
+  systemd.user.services.korunix-noctalia-plugin-cleanup = {
+    description = "Limpia plugins descartados de Noctalia";
+    wantedBy = ["default.target"];
+    unitConfig.ConditionUser = equipo.persona;
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${limpiarPlugins}/bin/korunix-noctalia-plugin-cleanup";
+    };
   };
 }
