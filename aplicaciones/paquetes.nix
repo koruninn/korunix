@@ -4,24 +4,24 @@
   ...
 }: let
   lanzadoresOcultos = pkgs.runCommand "korunix-lanzadores-ocultos" {} ''
-    mkdir -p "$out/share/applications"
+        mkdir -p "$out/share/applications"
 
-    ocultar() {
-      id="$1"
-      nombre="$2"
-      cat > "$out/share/applications/$id" <<EOF
-[Desktop Entry]
-Type=Application
-Name=$nombre
-NoDisplay=true
-Hidden=true
-EOF
-    }
+        ocultar() {
+          id="$1"
+          nombre="$2"
+          cat > "$out/share/applications/$id" <<EOF
+    [Desktop Entry]
+    Type=Application
+    Name=$nombre
+    NoDisplay=true
+    Hidden=true
+    EOF
+        }
 
-    ocultar qt5ct.desktop "Ajustes de Qt5"
-    ocultar qt6ct.desktop "Ajustes de Qt6"
-    ocultar scrcpy-console.desktop "scrcpy (consola)"
-    ocultar nixos-manual.desktop "Manual de NixOS"
+        ocultar qt5ct.desktop "Ajustes de Qt5"
+        ocultar qt6ct.desktop "Ajustes de Qt6"
+        ocultar scrcpy-console.desktop "scrcpy (consola)"
+        ocultar nixos-manual.desktop "Manual de NixOS"
   '';
 in {
   services.gvfs.enable = true;
@@ -65,6 +65,7 @@ in {
     rar
     scrcpy
     stirling-pdf-desktop
+    mailspring
     thunderbird
     valent
     vesktop
