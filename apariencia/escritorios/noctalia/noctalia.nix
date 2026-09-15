@@ -37,7 +37,6 @@
             "[osd]"|"[osd."*|\
             "[lockscreen]"|"[lockscreen."*|\
             "[calendar]"|"[calendar."*|\
-            "[wallpaper]"|"[wallpaper."*|\
             "[plugins]"|"[plugins."*|\
             "[theme]"|"[theme."*|\
             "[plugin_settings.\"noctalia/notes\"]"|\
