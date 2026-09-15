@@ -316,6 +316,37 @@
         enabled = true;
         duration_ms = 220;
         curve = "snappy";
+        shader = "${umbrielActualizado}/share/umbriel/shaders/squash.glsl";
+      };
+
+      workspaces = {
+        enabled = true;
+        duration_ms = 220;
+        curve = "snappy";
+      };
+
+      overview = {
+        enabled = true;
+        duration_ms = 260;
+        curve = "easeout";
+        workspace_curve = "spring:1,1000";
+      };
+
+      scratchpad = {
+        enabled = true;
+        duration_ms = 220;
+        curve = "easeout";
+        dim = 0.20;
+        blur = true;
+        scale = 0.96;
+        maximize = false;
+        fullscreen = false;
+      };
+
+      layers = {
+        enabled = true;
+        duration_ms = 180;
+        curve = "easeout";
       };
     };
   };
