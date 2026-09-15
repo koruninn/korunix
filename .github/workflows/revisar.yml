@@ -24,7 +24,7 @@ jobs:
           equipos="$(nix eval --raw .#nixosConfigurations --apply 'x: builtins.concatStringsSep " " (builtins.attrNames x)')"
           for equipo in $equipos; do
             echo "Construyendo $equipo"
-            nix build ".#nixosConfigurations.$equipo.config.system.build.toplevel" --no-link
+            nix build ".#nixosConfigurations.$equipo.config.system.build.toplevel" --no-link -L
           done
 
       - name: Buscar código Nix innecesario o sospechoso
