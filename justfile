@@ -1,6 +1,10 @@
-# Aplica la configuración de un equipo.
-aplicar equipo:
-	sudo nixos-rebuild switch --flake ".#{{equipo}}"
+# Aplica la configuración de Korunix.
+korunix:
+	sudo nixos-rebuild switch --flake .#korunix
+
+# Aplica la configuración de OptiPlex.
+optiplex:
+	sudo nixos-rebuild switch --flake .#optiplex
 
 # Revisa formato y configuraciones sin modificar el sistema.
 revisar:
