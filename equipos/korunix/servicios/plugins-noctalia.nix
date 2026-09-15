@@ -1,10 +1,10 @@
 {
-  config,
   equipo,
   pkgs,
   ...
 }: let
-  usuario = config.users.users.${equipo.persona};
+  usuario = equipo.persona;
+  home = "/home/${usuario}";
 
   pythonNoctalia = pkgs.python3.withPackages (pythonPackages: [
     pythonPackages.syncedlyrics
@@ -111,19 +111,19 @@ in {
   virtualisation.libvirtd.enable = true;
 
   # Bongo Cat necesita leer dispositivos de entrada y VM Manager acceder a libvirt.
-  users.users.${equipo.persona}.extraGroups = [
+  users.users.${usuario}.extraGroups = [
     "input"
     "libvirtd"
   ];
 
-  services.tailscale.extraSetFlags = ["--operator=${equipo.persona}"];
+  services.tailscale.extraSetFlags = ["--operator=${usuario}"];
 
   services.syncthing = {
     enable = true;
-    user = usuario.name;
-    group = usuario.group;
-    dataDir = "${usuario.home}/Sync";
-    configDir = "${usuario.home}/.config/syncthing";
+    user = usuario;
+    group = "users";
+    dataDir = "${home}/Sync";
+    configDir = "${home}/.config/syncthing";
     openDefaultPorts = true;
   };
 
@@ -143,7 +143,7 @@ in {
   system.activationScripts.noctaliaPlugins = {
     deps = ["noctaliaConfig"];
     text = ''
-      settings_file=${usuario.home}/.local/state/noctalia/settings.toml
+      settings_file=${home}/.local/state/noctalia/settings.toml
       if [ -f "$settings_file" ]; then
         tmp_file="$settings_file.korunix-plugins-tmp"
         skip_plugins=false
@@ -161,7 +161,7 @@ in {
             printf '%s\n' "$line"
           fi
         done < "$settings_file" > "$tmp_file"
-        install -m 0644 -o ${usuario.name} -g ${usuario.group} "$tmp_file" "$settings_file"
+        install -m 0644 -o ${usuario} -g users "$tmp_file" "$settings_file"
         rm -f "$tmp_file"
       fi
     '';
