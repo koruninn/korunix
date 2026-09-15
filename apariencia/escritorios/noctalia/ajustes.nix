@@ -161,29 +161,77 @@
   };
 
   widget = {
-    fecha = {type = "clock"; format = "{:%A, %d de %B}";};
-    weather = {type = "weather"; max_length = 250; anchor = true;};
-    media = {type = "media"; max_length = 400; hide_when_no_media = true;};
-    cat = {type = "dotnetrob/cat:cat"; show_cpu_percent = true; interactive = false;};
-    bongo_cat = {type = "noctalia/bongocat:cat"; audio_spectrum = true; tappy_mode = true; enable_scroll = false;};
+    fecha = {
+      type = "clock";
+      format = "{:%A, %d de %B}";
+    };
+    weather = {
+      type = "weather";
+      max_length = 250;
+      anchor = true;
+    };
+    media = {
+      type = "media";
+      max_length = 400;
+      hide_when_no_media = true;
+    };
+    cat = {
+      type = "dotnetrob/cat:cat";
+      show_cpu_percent = true;
+      interactive = false;
+    };
+    bongo_cat = {
+      type = "noctalia/bongocat:cat";
+      audio_spectrum = true;
+      tappy_mode = true;
+      enable_scroll = false;
+    };
     calculator.type = "yuuto/calculator:bar";
     pomodoro_timer.type = "thepunkoff/pomodoro:widget";
     notes.type = "noctalia/notes:notes";
     udiskie_manager.type = "aristides/udiskie:status";
-    tray = {type = "tray"; drawer = true;};
-    network = {type = "network"; show_label = false;};
-    bluetooth = {type = "bluetooth"; hide_when_adapter_off = true;};
-    lock_keys = {type = "lock_keys"; hide_when_off = true; display = "full";};
-    volume_input = {type = "volume"; device = "input";};
-    temperatura = {type = "sysmon"; stat = "cpu_temp";};
+    tray = {
+      type = "tray";
+      drawer = true;
+    };
+    network = {
+      type = "network";
+      show_label = false;
+    };
+    bluetooth = {
+      type = "bluetooth";
+      hide_when_adapter_off = true;
+    };
+    lock_keys = {
+      type = "lock_keys";
+      hide_when_off = true;
+      display = "full";
+    };
+    volume_input = {
+      type = "volume";
+      device = "input";
+    };
+    temperatura = {
+      type = "sysmon";
+      stat = "cpu_temp";
+    };
     umbriel_displays.type = "prponkshe/umbriel-displays:bar";
     umbriel_companion.type = "noctalia/umbriel-companion:bar";
     speedtest_meter.type = "nilsonlinux/speedtest-meter:speedtest-widget";
     phone_connect.type = "icefish/phone-connect:bar";
     printers.type = "andrewdems/printers:printer";
-    red_rx = {type = "sysmon"; stat = "net_rx";};
-    red_tx = {type = "sysmon"; stat = "net_tx";};
-    privacy = {type = "privacy"; hide_inactive = true;};
+    red_rx = {
+      type = "sysmon";
+      stat = "net_rx";
+    };
+    red_tx = {
+      type = "sysmon";
+      stat = "net_tx";
+    };
+    privacy = {
+      type = "privacy";
+      hide_inactive = true;
+    };
     screen_recorder.type = "noctalia/screen_recorder:recorder";
   };
 
@@ -262,7 +310,10 @@
     monitors = [];
   };
 
-  calendar = {enabled = true; refresh_minutes = 15;};
+  calendar = {
+    enabled = true;
+    refresh_minutes = 15;
+  };
 
   # Solo apuntamos a los fondos existentes. No se modifica ninguna imagen ni
   # el motor de sincronización de fondos.
@@ -279,7 +330,12 @@
     directory_dark = "${./fondos/oscuro}";
     per_monitor_directories = false;
     default.path = "${./fondos/oscuro}/capriccio-arco-rovinato-e-una-villa-nello-sfondo.jpg";
-    automation = {enabled = false; interval_seconds = 1800; order = "random"; recursive = true;};
+    automation = {
+      enabled = false;
+      interval_seconds = 1800;
+      order = "random";
+      recursive = true;
+    };
   };
 
   plugins.enabled = plugins.activos;
