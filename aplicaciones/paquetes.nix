@@ -1,4 +1,5 @@
 {
+  equipo,
   lib,
   pkgs,
   ...
@@ -23,6 +24,15 @@
         ocultar scrcpy-console.desktop "scrcpy (consola)"
         ocultar nixos-manual.desktop "Manual de NixOS"
   '';
+
+  # Umbriel no es identificado por Chromium/Electron como GNOME o KDE, así
+  # que Mailspring no selecciona libsecret automáticamente aunque el Secret
+  # Service esté disponible. Solo Korunix fuerza GNOME Keyring; Optiplex
+  # conserva el comportamiento normal del paquete.
+  mailspringEquipo =
+    if equipo.persona == "koru"
+    then pkgs.mailspring.override {commandLineArgs = "--password-store=gnome-libsecret";}
+    else pkgs.mailspring;
 in {
   services.gvfs.enable = true;
   services.udisks2.enable = true;
@@ -65,7 +75,7 @@ in {
     rar
     scrcpy
     stirling-pdf-desktop
-    mailspring
+    mailspringEquipo
     thunderbird
     valent
     vesktop
