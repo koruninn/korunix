@@ -2,6 +2,9 @@
   users.users.${equipo.persona} = {
     isNormalUser = true;
     description = "André";
-    extraGroups = ["networkmanager" "wheel" "input" "libvirtd"];
+
+    # input: Bongo Cat y lectura directa de mandos.
+    # uinput: Steam Input y otras capas de compatibilidad/remapeo.
+    extraGroups = ["networkmanager" "wheel" "input" "uinput"];
   };
 }

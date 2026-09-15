@@ -10,6 +10,10 @@
   # pero Korunix no lo selecciona automáticamente como predeterminado.
   navegadorPredeterminado = "firefox";
 
+  # Servicio de contraseñas del escritorio. Mailspring usa este dato y ya no
+  # depende de que la persona se llame "koru".
+  secretService = "gnome-keyring";
+
   # Pantalla principal de este equipo. Los compositores pueden reutilizar estos
   # datos sin incrustar detalles de hardware dentro de sus módulos.
   pantalla = {
