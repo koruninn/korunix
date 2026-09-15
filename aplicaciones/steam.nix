@@ -14,8 +14,12 @@
     dedicatedServer.openFirewall = true;
   };
 
-  # Reglas udev para mandos y hardware de juego. Complementa el grupo input,
-  # que Korunix conserva para Bongo Cat y los mandos de Xbox.
+  # Soporte general para mandos: Xbox por Bluetooth, PlayStation, Nintendo,
+  # 8BitDo, PowerA y otros dispositivos cubiertos por reglas udev comunes.
   hardware.steam-hardware.enable = true;
+  hardware.uinput.enable = true;
+  hardware.xpadneo.enable = true;
+  services.udev.packages = [pkgs.game-devices-udev-rules];
+
   programs.gamemode.enable = true;
 }
