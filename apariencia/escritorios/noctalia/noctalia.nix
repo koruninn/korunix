@@ -146,7 +146,7 @@
     capsule_thickness = 0.76
     capsule_radius = 8.0
     capsule_opacity = 1.0
-    start = ["workspaces", "group:inicio", "cat", "temperatura", "wallpaper"]
+    start = ["workspaces", "fecha", "clock", "cat", "temperatura", "wallpaper"]
     center = ["bongo_cat", "media", "audio_visualizer"]
     end = [
       "tray",
@@ -163,10 +163,6 @@
       "volume",
       "volume_input",
     ]
-
-    [[bar.default.capsule_group]]
-    id = "inicio"
-    members = ["fecha", "clock"]
 
     [widget.fecha]
     type = "clock"
@@ -270,12 +266,12 @@
     enabled = true
     position = "bottom"
     active_monitor_only = false
-    monitors = []
+    monitors = ["${equipo.pantalla.nombre}"]
     icon_size = 40
     main_axis_padding = 16
     cross_axis_padding = 8
     item_spacing = 6
-    background_opacity = 0.30
+    background_opacity = 0.35
     shadow = true
     radius = 24
     radius_top_left = 24
@@ -440,14 +436,14 @@ in {
     # La interfaz de Noctalia guarda sus cambios en settings.toml, que tiene
     # prioridad sobre config.toml. Las secciones que Korunix ya declara deben
     # salir del estado de la GUI para que la configuración declarativa sea la
-    # fuente de verdad, incluida la lista de barras.
+    # fuente de verdad, incluida la lista de barras y el dock.
     settings_file=${usuario.home}/.local/state/noctalia/settings.toml
     if [ -f "$settings_file" ]; then
       tmp_file="$settings_file.korunix-tmp"
       skip_managed=false
       while IFS= read -r line || [ -n "$line" ]; do
         case "$line" in
-          "[theme.templates]"|"[plugin_settings.\"noctalia/notes\"]"|"[control_center]"|"[[control_center.shortcuts]]"|"[bar]"|"[bar."*|"[[bar."*|"[widget.bongo_cat]")
+          "[theme.templates]"|"[plugin_settings.\"noctalia/notes\"]"|"[control_center]"|"[[control_center.shortcuts]]"|"[bar]"|"[bar."*|"[[bar."*|"[dock]"|"[widget.bongo_cat]")
             skip_managed=true
             continue
             ;;
