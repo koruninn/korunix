@@ -1,10 +1,30 @@
 {
-  config,
   equipo,
   pkgs,
   ...
 }: let
-  usuario = config.users.users.${equipo.persona};
+  prepararQt = pkgs.writeShellApplication {
+    name = "korunix-qt-config";
+    runtimeInputs = [pkgs.coreutils];
+    text = ''
+      config_home="''${XDG_CONFIG_HOME:-$HOME/.config}"
+
+      for version in qt5ct qt6ct; do
+        config_dir="$config_home/$version"
+        colors_dir="$config_dir/colors"
+        config_file="$config_dir/$version.conf"
+
+        install -d -m 0755 "$colors_dir"
+        printf '%s\n' \
+          '[Appearance]' \
+          "color_scheme_path=$colors_dir/noctalia.conf" \
+          'custom_palette=true' \
+          'standard_dialogs=default' \
+          > "$config_file"
+        chmod 0644 "$config_file"
+      done
+    '';
+  };
 in {
   # Umbriel y GNOME comparten qt5ct/qt6ct. La paleta noctalia.conf se regenera
   # desde el mismo fondo en cada sesión, así Qt deja de ser una isla.
@@ -17,26 +37,13 @@ in {
 
   environment.variables.QT_QPA_PLATFORMTHEME = "qt5ct:qt6ct";
 
-  system.activationScripts.noctaliaQtConfig.text = ''
-    for version in qt5ct qt6ct; do
-      config_dir=${usuario.home}/.config/$version
-      colors_dir="$config_dir/colors"
-      config_file="$config_dir/$version.conf"
-
-      install -d -m 0755 \
-        -o ${usuario.name} \
-        -g ${usuario.group} \
-        "$colors_dir"
-
-      printf '%s\n' \
-        '[Appearance]' \
-        "color_scheme_path=${usuario.home}/.config/$version/colors/noctalia.conf" \
-        'custom_palette=true' \
-        'standard_dialogs=default' \
-        > "$config_file"
-
-      chown ${usuario.name}:${usuario.group} "$config_file"
-      chmod 0644 "$config_file"
-    done
-  '';
+  systemd.user.services.korunix-qt-config = {
+    description = "Prepara Qt para la paleta de Noctalia";
+    wantedBy = ["default.target"];
+    unitConfig.ConditionUser = equipo.persona;
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${prepararQt}/bin/korunix-qt-config";
+    };
+  };
 }
