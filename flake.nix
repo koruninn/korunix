@@ -8,15 +8,18 @@
     # NixOS stable para los equipos que requieren una base estable.
     nixpkgs-stable.url = "nixpkgs/nixos-26.05";
 
-    # Anime Game Launcher
-    aagl.url = "github:ezKEa/aagl-gtk-on-nix";
-    aagl.inputs.nixpkgs.follows = "nixpkgs";
+    # AAGL acompaña automáticamente al canal de NixOS de cada equipo.
+    aagl-unstable.url = "github:ezKEa/aagl-gtk-on-nix";
+    aagl-unstable.inputs.nixpkgs.follows = "nixpkgs";
+    aagl-stable.url = "github:ezKEa/aagl-gtk-on-nix/release-26.05";
+    aagl-stable.inputs.nixpkgs.follows = "nixpkgs-stable";
 
     # Flatpak declarativo
     nix-flatpak.url = "github:gmodena/nix-flatpak?ref=latest";
 
-    # Figma
+    # Figma usa el mismo nixpkgs que Korunix en vez de arrastrar otro distinto.
     figma-linux-next.url = "github:arximus88/figma-linux-next";
+    figma-linux-next.inputs.nixpkgs.follows = "nixpkgs";
 
     # Millennium para Steam
     millennium.url = "github:SteamClientHomebrew/Millennium?dir=packages/nix";
@@ -59,7 +62,29 @@
 
       canalEquipo = cadenaObligatoria "canal";
       arquitecturaEquipo = cadenaObligatoria "arquitectura";
-      personaEquipo = cadenaObligatoria "persona";
+
+      personaOriginal =
+        if !(equipoOriginal ? persona) || !builtins.isAttrs equipoOriginal.persona
+        then throw "persona debe ser una ficha con al menos usuario en equipos/${nombre}/equipo.nix."
+        else equipoOriginal.persona;
+
+      usuarioPersona =
+        if !(personaOriginal ? usuario) || !builtins.isString personaOriginal.usuario || personaOriginal.usuario == ""
+        then throw "persona.usuario debe ser una cadena no vacía en equipos/${nombre}/equipo.nix."
+        else personaOriginal.usuario;
+
+      nombrePersona =
+        if personaOriginal ? nombre
+        then
+          if builtins.isString personaOriginal.nombre && personaOriginal.nombre != ""
+          then personaOriginal.nombre
+          else throw "persona.nombre debe ser una cadena no vacía en equipos/${nombre}/equipo.nix."
+        else usuarioPersona;
+
+      personaEquipo = personaOriginal // {
+        usuario = usuarioPersona;
+        nombre = nombrePersona;
+      };
 
       pantallaEquipo =
         if !(equipoOriginal ? pantalla)
@@ -75,8 +100,7 @@
             && pantalla.escala > 0;
         in
           if faltantes != []
-          then
-            throw "Pantalla incompleta en equipos/${nombre}/equipo.nix. Faltan: ${builtins.concatStringsSep ", " faltantes}."
+          then throw "Pantalla incompleta en equipos/${nombre}/equipo.nix. Faltan: ${builtins.concatStringsSep ", " faltantes}."
           else if !nombreValido
           then throw "pantalla.nombre debe ser una cadena no vacía en equipos/${nombre}/equipo.nix."
           else if !modoValido
@@ -104,6 +128,12 @@
         else if canalEquipo == "unstable"
         then nixpkgs
         else throw "Canal no válido en equipos/${nombre}/equipo.nix: ${canalEquipo}. Usa stable o unstable.";
+
+      aaglSeleccionado =
+        if canalEquipo == "stable"
+        then inputs.aagl-stable
+        else inputs.aagl-unstable;
+
       system = arquitecturaEquipo;
       lib = nixpkgsSeleccionado.lib;
     in {
@@ -112,6 +142,7 @@
         inherit system;
         specialArgs = {
           inherit inputs equipo nombre;
+          aagl = aaglSeleccionado;
           canal = canalEquipo;
         };
         modules = [
