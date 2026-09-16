@@ -1,10 +1,33 @@
 {
-  config,
   equipo,
   pkgs,
   ...
 }: let
-  usuario = config.users.users.${equipo.persona};
+  prepararAlacritty = pkgs.writeShellApplication {
+    name = "korunix-alacritty-config";
+    runtimeInputs = [pkgs.coreutils pkgs.gnugrep];
+    text = ''
+      config_dir="''${XDG_CONFIG_HOME:-$HOME/.config}/alacritty"
+      config_file="$config_dir/alacritty.toml"
+
+      install -d -m 0755 "$config_dir"
+
+      if [ ! -f "$config_file" ]; then
+        cat > "$config_file" <<'EOF'
+[window]
+padding = { x = 8, y = 8 }
+dynamic_padding = true
+EOF
+      elif ! grep -q '^\[window\]' "$config_file"; then
+        cat >> "$config_file" <<'EOF'
+
+[window]
+padding = { x = 8, y = 8 }
+dynamic_padding = true
+EOF
+      fi
+    '';
+  };
 in {
   # Alacritty es la terminal única de Korunix en todos los escritorios.
   environment.sessionVariables.TERMINAL = "alacritty";
@@ -29,32 +52,15 @@ in {
     exec-arg='-e'
   '';
 
-  # Noctalia administra la paleta de Alacritty. Korunix solo añade un margen
-  # discreto para que el contenido de la terminal no quede pegado a los bordes.
-  system.activationScripts.alacrittyPadding.text = ''
-    config_dir=${usuario.home}/.config/alacritty
-    config_file="$config_dir/alacritty.toml"
-
-    install -d -m 0755 \
-      -o ${usuario.name} \
-      -g ${usuario.group} \
-      "$config_dir"
-
-    if [ ! -f "$config_file" ]; then
-      cat > "$config_file" <<'EOF'
-[window]
-padding = { x = 8, y = 8 }
-dynamic_padding = true
-EOF
-      chown ${usuario.name}:${usuario.group} "$config_file"
-    elif ! grep -q '^\[window\]' "$config_file"; then
-      cat >> "$config_file" <<'EOF'
-
-[window]
-padding = { x = 8, y = 8 }
-dynamic_padding = true
-EOF
-      chown ${usuario.name}:${usuario.group} "$config_file"
-    fi
-  '';
+  # Noctalia administra la paleta; este servicio solo conserva el margen y usa
+  # la ruta XDG real de la persona.
+  systemd.user.services.korunix-alacritty-config = {
+    description = "Prepara la configuración de Alacritty de Korunix";
+    wantedBy = ["default.target"];
+    unitConfig.ConditionUser = equipo.persona;
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${prepararAlacritty}/bin/korunix-alacritty-config";
+    };
+  };
 }
