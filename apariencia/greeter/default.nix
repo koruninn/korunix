@@ -1,30 +1,14 @@
 {
-  config,
   equipo,
+  inputs,
   pkgs,
   ...
 }: let
-  # La revisión de nixpkgs usada actualmente por Korunix todavía trae
-  # noctalia-greeter 1.3.1. La sincronización restringida sin contraseña
-  # requiere 1.5.0 o superior, así que actualizamos solo este paquete sin
-  # mover el resto del sistema.
-  greeterPackage = pkgs.noctalia-greeter.overrideAttrs (old: {
-    version = "1.5.0";
-
-    src = pkgs.fetchFromGitHub {
-      owner = "noctalia-dev";
-      repo = "noctalia-greeter";
-      tag = "v1.5.0";
-      hash = "sha256-JgPgbmlUOKlgCX/KDfRF+z9ID80+Q7CcdaJFh5eaFjU=";
-    };
-
-    buildInputs = (old.buildInputs or []) ++ [
-      pkgs.libxml2
-    ];
-  });
+  system = pkgs.stdenv.hostPlatform.system;
+  greeterPackage = inputs.noctalia-greeter.packages.${system}.default;
 in {
   # Korunix usa Noctalia Greeter sobre greetd como pantalla de inicio de sesión.
-  # El módulo oficial de NixOS habilita greetd, Polkit y AccountsService.
+  # La versión exacta queda registrada en flake.lock y se actualiza con Korunix.
   services.displayManager.noctalia-greeter = {
     enable = true;
     package = greeterPackage;
