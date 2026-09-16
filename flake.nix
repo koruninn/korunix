@@ -24,7 +24,36 @@
     };
 
     noctalia = {
-      url = "github:noctalia-dev/noctalia/";
+      url = "github:noctalia-dev/noctalia";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Componentes que Korunix sigue desde upstream. El commit exacto vive en
+    # flake.lock para poder volver atrás, no enterrado dentro de los módulos.
+    hatter = {
+      url = "github:Mibea/Hatter";
+      flake = false;
+    };
+    chromaleon = {
+      url = "github:Fabito02/ChromaLeon";
+      flake = false;
+    };
+    rounded-windows = {
+      url = "github:Nathanaelrc/rounded-windows";
+      flake = false;
+    };
+    alphabetical-grid = {
+      url = "github:stuarthayhurst/alphabetical-grid-extension";
+      flake = false;
+    };
+
+    noctalia-greeter = {
+      url = "github:noctalia-dev/noctalia-greeter";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    umbriel = {
+      url = "github:noctalia-dev/umbriel";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
