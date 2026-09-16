@@ -1,9 +1,16 @@
 {
   config,
+  inputs,
   lib,
   pkgs,
   ...
 }: let
+  compartido = import ./compartido.nix;
+  favoritosGnome =
+    "["
+    + lib.concatMapStringsSep ", " (entrada: "'${entrada.gnome}'") compartido.dock
+    + "]";
+
   uuid = "user-accent-colors@fabito02";
   fondosClaros = ./noctalia/fondos/claro;
   fondosOscuros = ./noctalia/fondos/oscuro;
@@ -63,15 +70,10 @@
     '';
   };
 
-  chromaleonSource = builtins.fetchGit {
-    url = "https://github.com/Fabito02/ChromaLeon.git";
-    rev = "f64d1135f749ed7b6f82777f6c13e30a1cb95e6b";
-  };
-
   chromaleon = pkgs.stdenvNoCC.mkDerivation {
     pname = "gnome-shell-extension-chromaleon";
-    version = "2.3.1-korunix";
-    src = chromaleonSource;
+    version = "git";
+    src = inputs.chromaleon;
 
     nativeBuildInputs = [
       pkgs.glib
@@ -133,17 +135,12 @@ PY
     '';
   };
 
-  roundedWindowsSource = builtins.fetchGit {
-    url = "https://github.com/Nathanaelrc/rounded-windows.git";
-    rev = "9d9eb77013b24e45ae75fc92a85a9b6d82e052f6";
-  };
-
   # Steam y Code necesitan redondeo adicional: las ventanas GNOME/libadwaita
   # ya tienen sus propias esquinas y no deben pasar por un segundo renderer.
   roundedWindows = pkgs.stdenvNoCC.mkDerivation {
     pname = "gnome-shell-extension-rounded-windows-korunix";
-    version = "2.2.0";
-    src = roundedWindowsSource;
+    version = "git";
+    src = inputs.rounded-windows;
     nativeBuildInputs = [pkgs.glib];
     dontConfigure = true;
     dontBuild = true;
@@ -157,15 +154,10 @@ PY
     '';
   };
 
-  alphabeticalGridSource = builtins.fetchGit {
-    url = "https://github.com/stuarthayhurst/alphabetical-grid-extension.git";
-    rev = "bdd0bd07469c9df5dd1fbaca4a59f841da619549";
-  };
-
   alphabeticalGrid = pkgs.stdenvNoCC.mkDerivation {
     pname = "gnome-shell-extension-alphabetical-app-grid-korunix";
-    version = "46";
-    src = alphabeticalGridSource;
+    version = "git";
+    src = inputs.alphabetical-grid;
     nativeBuildInputs = [pkgs.glib];
     dontConfigure = true;
     dontBuild = true;
@@ -229,6 +221,8 @@ PY
         fi
       fi
 
+      gsettings set org.gnome.desktop.interface font-name '${compartido.tipografia} 11' >/dev/null 2>&1 || true
+      gsettings set org.gnome.desktop.interface document-font-name '${compartido.tipografia} 11' >/dev/null 2>&1 || true
       gsettings set org.gnome.desktop.interface icon-theme Hatter-Slate >/dev/null 2>&1 || true
       gsettings set org.gnome.desktop.interface cursor-theme Bibata-Modern-Classic >/dev/null 2>&1 || true
       gsettings set org.gnome.desktop.interface cursor-size 24 >/dev/null 2>&1 || true
@@ -260,8 +254,8 @@ PY
       dconf write /org/gnome/shell/extensions/dash-to-dock/background-opacity 0.5
       dconf write /org/gnome/shell/extensions/dash-to-dock/running-indicator-style "'DOTS'"
 
-      # Mismo orden de fijados que [dock].pinned en Noctalia.
-      dconf write /org/gnome/shell/favorite-apps "['firefox.desktop', 'org.gnome.Nautilus.desktop', 'spotify.desktop', 'steam.desktop', 'net.lutris.Lutris.desktop', 'anime-game-launcher.desktop', 'honkers-railway-launcher.desktop', 'vesktop.desktop', 'org.localsend.localsend_app.desktop', 'code.desktop', 'com.obsproject.Studio.desktop', 'org.kde.kdenlive.desktop', 'com.heroicgameslauncher.hgl.desktop', 'onlyoffice-desktopeditors.desktop', 'birdfont.desktop']"
+      # Una única lista mantiene GNOME y Noctalia en el mismo orden.
+      dconf write /org/gnome/shell/favorite-apps ${lib.escapeShellArg favoritosGnome}
 
       # La cuadrícula de aplicaciones se mantiene ordenada alfabéticamente,
       # incluidas las aplicaciones dentro de carpetas.
