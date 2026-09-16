@@ -1,24 +1,15 @@
 {
   config,
   equipo,
+  inputs,
   lib,
   pkgs,
   ...
 }: let
   usuario = config.users.users.${equipo.persona};
   toml = pkgs.formats.toml {};
-
-  # La versión de nixpkgs fijada por Korunix aún no entiende `outputs --json`,
-  # que usan los plugins actuales de Noctalia para leer los monitores.
-  umbrielActualizado = pkgs.umbriel.overrideAttrs (_: {
-    version = "0-unstable-2026-09-13";
-    src = pkgs.fetchFromGitHub {
-      owner = "noctalia-dev";
-      repo = "umbriel";
-      rev = "11c0c99b85c5aa579224cf0d2302f4f7356ac5c4";
-      hash = "sha256-Ot18ZKFwRSPzyXhSkDhLOI8nAXfeoFPuB04Jk5DkzV4=";
-    };
-  });
+  system = pkgs.stdenv.hostPlatform.system;
+  umbrielActualizado = inputs.umbriel.packages.${system}.default;
 
   umbrielConfig = toml.generate "umbriel-config.toml" {
     include.files = [
@@ -349,48 +340,42 @@
       };
     };
   });
+
+  umbrielConfigSync = pkgs.writeShellApplication {
+    name = "korunix-umbriel-config-sync";
+    runtimeInputs = [pkgs.coreutils];
+    text = ''
+      config_dir=${lib.escapeShellArg "${usuario.home}/.config/umbriel"}
+      owner=${lib.escapeShellArg usuario.name}
+      group=${lib.escapeShellArg usuario.group}
+
+      install -d -m 0755 -o "$owner" -g "$group" "$config_dir"
+      install -m 0644 -o "$owner" -g "$group" ${umbrielConfig} "$config_dir/config.toml"
+
+      if [ ! -e "$config_dir/outputs.toml" ]; then
+        install -m 0644 -o "$owner" -g "$group" ${umbrielOutputs} "$config_dir/outputs.toml"
+      fi
+
+      if [ ! -e "$config_dir/noctalia.toml" ]; then
+        printf '%s\n' '# Noctalia generará aquí la paleta de Umbriel.' > "$config_dir/noctalia.toml"
+        chown "$owner:$group" "$config_dir/noctalia.toml"
+        chmod 0644 "$config_dir/noctalia.toml"
+      fi
+    '';
+  };
 in {
   programs.umbriel = {
     enable = true;
     package = umbrielActualizado;
   };
 
-  # xwayland-satellite habilita aplicaciones X11; Bibata queda disponible para
-  # el cursor de Umbriel sin imponer el tema al resto de escritorios.
+  # Xwayland Satellite está fijado globalmente a la versión funcional aprobada.
   environment.systemPackages = [
     pkgs.xwayland-satellite
     pkgs.bibata-cursors
   ];
 
-  # Umbriel consulta primero la configuración XDG de la persona. La base sigue
-  # siendo declarativa; Noctalia mantiene su paleta y el plugin de monitores
-  # administra outputs.toml sin tocar los atajos ni la gestión de ventanas.
   system.activationScripts.umbrielConfig.text = ''
-    config_dir=${usuario.home}/.config/umbriel
-
-    install -d -m 0755 \
-      -o ${usuario.name} \
-      -g ${usuario.group} \
-      "$config_dir"
-
-    install -m 0644 \
-      -o ${usuario.name} \
-      -g ${usuario.group} \
-      ${umbrielConfig} \
-      "$config_dir/config.toml"
-
-    if [ ! -e "$config_dir/outputs.toml" ]; then
-      install -m 0644 \
-        -o ${usuario.name} \
-        -g ${usuario.group} \
-        ${umbrielOutputs} \
-        "$config_dir/outputs.toml"
-    fi
-
-    if [ ! -e "$config_dir/noctalia.toml" ]; then
-      printf '%s\n' '# Noctalia generará aquí la paleta de Umbriel.' > "$config_dir/noctalia.toml"
-      chown ${usuario.name}:${usuario.group} "$config_dir/noctalia.toml"
-      chmod 0644 "$config_dir/noctalia.toml"
-    fi
+    ${umbrielConfigSync}/bin/korunix-umbriel-config-sync
   '';
 }
