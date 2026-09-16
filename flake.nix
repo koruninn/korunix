@@ -2,10 +2,7 @@
   description = "Korunix";
 
   inputs = {
-    # NixOS unstable para los equipos que siguen el canal de desarrollo.
     nixpkgs.url = "nixpkgs/nixos-unstable";
-
-    # NixOS stable para los equipos que requieren una base estable.
     nixpkgs-stable.url = "nixpkgs/nixos-26.05";
 
     # AAGL acompaña automáticamente al canal de NixOS de cada equipo.
@@ -14,23 +11,18 @@
     aagl-stable.url = "github:ezKEa/aagl-gtk-on-nix/release-26.05";
     aagl-stable.inputs.nixpkgs.follows = "nixpkgs-stable";
 
-    # Flatpak declarativo
     nix-flatpak.url = "github:gmodena/nix-flatpak?ref=latest";
 
-    # Figma usa el mismo nixpkgs que Korunix en vez de arrastrar otro distinto.
     figma-linux-next.url = "github:arximus88/figma-linux-next";
     figma-linux-next.inputs.nixpkgs.follows = "nixpkgs";
 
-    # Millennium para Steam
     millennium.url = "github:SteamClientHomebrew/Millennium?dir=packages/nix";
 
-    # Spicetify-Nix (Spotify + Spicetify)
     spicetify-nix = {
       url = "github:Gerg-L/spicetify-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Shell Noctalia
     noctalia = {
       url = "github:noctalia-dev/noctalia/";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -81,7 +73,7 @@
           else throw "persona.nombre debe ser una cadena no vacía en equipos/${nombre}/equipo.nix."
         else usuarioPersona;
 
-      personaEquipo = personaOriginal // {
+      perfilPersona = personaOriginal // {
         usuario = usuarioPersona;
         nombre = nombrePersona;
       };
@@ -109,18 +101,20 @@
           then throw "pantalla.escala debe ser un número mayor que cero en equipos/${nombre}/equipo.nix."
           else pantalla;
 
+      # Los archivos de equipo usan una ficha humana. El motor expone además
+      # los nombres internos antiguos para que el resto de módulos no necesite
+      # saber cómo está escrita esa ficha.
       equipo =
-        equipoOriginal
+        (builtins.removeAttrs equipoOriginal ["persona"])
         // {
           canal = canalEquipo;
           arquitectura = arquitecturaEquipo;
-          persona = personaEquipo;
+          persona = usuarioPersona;
+          nombre = nombrePersona;
+          perfil = perfilPersona;
         }
-        // (
-          if pantallaEquipo == null
-          then {}
-          else {pantalla = pantallaEquipo;}
-        );
+        // (if personaOriginal ? foto then {foto = personaOriginal.foto;} else {})
+        // (if pantallaEquipo == null then {} else {pantalla = pantallaEquipo;});
 
       nixpkgsSeleccionado =
         if canalEquipo == "stable"
@@ -148,9 +142,7 @@
         modules = [
           ./equipos/${nombre}
           ./modulos/base
-          {
-            networking.hostName = nombre;
-          }
+          {networking.hostName = nombre;}
         ];
       };
     };
