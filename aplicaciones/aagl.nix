@@ -1,11 +1,9 @@
 {
-  inputs,
+  aagl,
   ...
 }: {
-  # AAGL es autocontenido: este módulo carga por sí mismo el soporte oficial
-  # y luego declara únicamente los launchers que Korunix quiere habilitar.
   imports = [
-    inputs.aagl.nixosModules.default
+    aagl.nixosModules.default
   ];
 
   programs.anime-game-launcher.enable = true; # Genshin Impact
