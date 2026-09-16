@@ -1,16 +1,13 @@
-{ pkgs, lib, ... }:
-
-let
+{
+  inputs,
+  lib,
+  pkgs,
+  ...
+}: let
   hatter = pkgs.stdenvNoCC.mkDerivation {
     pname = "hatter-icon-theme";
-    version = "3";
-
-    src = pkgs.fetchFromGitHub {
-      owner = "Mibea";
-      repo = "Hatter";
-      rev = "2d7c78276adf11611733563b008fe021e3ecf";
-      hash = "sha256-axFx8DEdzY3XVCQcOWmr5tocNUhIAJqcARgxBWwg0aY=";
-    };
+    version = "git";
+    src = inputs.hatter;
 
     installPhase = ''
       runHook preInstall
@@ -27,7 +24,6 @@ let
       platforms = lib.platforms.linux;
     };
   };
-in
-{
-  environment.systemPackages = [ hatter ];
+in {
+  environment.systemPackages = [hatter];
 }
