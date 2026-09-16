@@ -28,7 +28,7 @@ in {
     avatar_path =
       if equipo ? foto
       then "${equipo.foto}"
-      else "${./.face/avatar.jpg}";
+      else "";
     settings_show_advanced = false;
     show_location = true;
     launch_apps_as_systemd_services = false;
