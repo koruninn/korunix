@@ -1,11 +1,8 @@
 {
-  config,
   equipo,
   pkgs,
   ...
 }: let
-  usuario = config.users.users.${equipo.persona};
-
   pywalfoxManifest = pkgs.writeText "pywalfox-native-messaging-host.json" (
     builtins.toJSON {
       name = "pywalfox";
@@ -15,6 +12,16 @@
       allowed_extensions = ["pywalfox@frewacom.org"];
     }
   );
+
+  registrarPywalfox = pkgs.writeShellApplication {
+    name = "korunix-pywalfox-native-host";
+    runtimeInputs = [pkgs.coreutils];
+    text = ''
+      manifest_dir="$HOME/.mozilla/native-messaging-hosts"
+      install -d -m 0755 "$manifest_dir"
+      install -m 0644 ${pywalfoxManifest} "$manifest_dir/pywalfox.json"
+    '';
+  };
 in {
   # Firefox es el navegador principal de Korunix. La extensión Pywalfox se
   # instala por política y el host nativo se registra declarativamente para
@@ -29,20 +36,13 @@ in {
     };
   };
 
-  # Instalar el manifest por usuario evita depender de ejecutar manualmente
-  # `pywalfox install` después de cada instalación limpia de Korunix.
-  system.activationScripts.pywalfoxNativeHost.text = ''
-    manifest_dir=${usuario.home}/.mozilla/native-messaging-hosts
-
-    install -d -m 0755 \
-      -o ${usuario.name} \
-      -g ${usuario.group} \
-      "$manifest_dir"
-
-    install -m 0644 \
-      -o ${usuario.name} \
-      -g ${usuario.group} \
-      ${pywalfoxManifest} \
-      "$manifest_dir/pywalfox.json"
-  '';
+  systemd.user.services.korunix-pywalfox-native-host = {
+    description = "Registra Pywalfox para Firefox";
+    wantedBy = ["default.target"];
+    unitConfig.ConditionUser = equipo.persona;
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${registrarPywalfox}/bin/korunix-pywalfox-native-host";
+    };
+  };
 }
