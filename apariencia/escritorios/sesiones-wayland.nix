@@ -1,8 +1,12 @@
 {
+  inputs,
   lib,
   pkgs,
   ...
 }: let
+  system = pkgs.stdenv.hostPlatform.system;
+  umbriel = inputs.umbriel.packages.${system}.default;
+
   sesionWayland = {
     nombre,
     paquete,
@@ -30,7 +34,7 @@
 in {
   # Decisión final de Korunix: solo Umbriel y GNOME como sesiones gráficas.
   services.displayManager.sessionPackages = lib.mkForce [
-    pkgs.umbriel
+    umbriel
     gnome
   ];
 }
