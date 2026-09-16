@@ -2,17 +2,19 @@
   canal = "unstable";
   arquitectura = "x86_64-linux";
 
-  # Cuenta y nombre visible de la persona principal de este equipo.
-  persona = "koru";
-  nombre = "André";
-  foto = ./perfil.jpg;
+  # Ficha de la persona principal. Esta es la parte humana: cuenta, nombre y foto.
+  persona = {
+    usuario = "koru";
+    nombre = "André";
+    foto = ./perfil.jpg;
+  };
 
   # Navegador predeterminado de este equipo. Chrome puede seguir instalado,
   # pero Korunix no lo selecciona automáticamente como predeterminado.
   navegadorPredeterminado = "firefox";
 
   # Servicio de contraseñas del escritorio. Mailspring usa este dato y ya no
-  # depende de que la persona se llame "koru".
+  # depende del nombre de la cuenta.
   secretService = "gnome-keyring";
 
   # Pantalla principal de este equipo. Los compositores pueden reutilizar estos
