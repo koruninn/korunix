@@ -11,6 +11,7 @@
   python = pkgs.python3.withPackages (ps: [ps.tomli-w]);
   ajustes = import ./ajustes.nix {inherit equipo lib plugins;};
   noctaliaConfig = toml.generate "noctalia-config.toml" ajustes;
+  widgetsAdministrados = builtins.toJSON (builtins.attrNames ajustes.widget);
 
   noctaliaConfigSync = pkgs.writeShellApplication {
     name = "korunix-noctalia-config-sync";
@@ -19,15 +20,18 @@
       home=${lib.escapeShellArg usuario.home}
       owner=${lib.escapeShellArg usuario.name}
       group=${lib.escapeShellArg usuario.group}
-      config_dir="$home/.config/noctalia"
-      settings_file="$home/.local/state/noctalia/settings.toml"
+      config_home="$home/.config"
+      state_home="$home/.local/state"
+      config_dir="$config_home/noctalia"
+      settings_file="$state_home/noctalia/settings.toml"
 
       install -d -m 0755 -o "$owner" -g "$group" "$config_dir"
 
-      # Limpia únicamente las secciones que Korunix administra. El parser TOML
-      # evita depender de la posición de las líneas y wallpaper queda intacto.
+      # Korunix elimina únicamente lo que administra. La lista de widgets sale
+      # directamente de ajustes.nix y wallpaper queda deliberadamente fuera.
       if [ -f "$settings_file" ]; then
-        ${python}/bin/python - "$settings_file" <<'PY'
+        ${python}/bin/python - "$settings_file" ${lib.escapeShellArg widgetsAdministrados} <<'PY'
+import json
 import os
 from pathlib import Path
 import shutil
@@ -36,6 +40,7 @@ import tomllib
 import tomli_w
 
 settings = Path(sys.argv[1])
+managed_widgets = set(json.loads(sys.argv[2]))
 with settings.open("rb") as handle:
     data = tomllib.load(handle)
 
@@ -51,32 +56,6 @@ managed_top = {
     "calendar",
     "plugins",
     "theme",
-}
-managed_widgets = {
-    "fecha",
-    "weather",
-    "media",
-    "cat",
-    "bongo_cat",
-    "calculator",
-    "pomodoro_timer",
-    "notes",
-    "udiskie_manager",
-    "tray",
-    "network",
-    "bluetooth",
-    "lock_keys",
-    "volume_input",
-    "temperatura",
-    "umbriel_displays",
-    "umbriel_companion",
-    "speedtest_meter",
-    "phone_connect",
-    "printers",
-    "red_rx",
-    "red_tx",
-    "privacy",
-    "screen_recorder",
 }
 
 changed = False
@@ -117,8 +96,8 @@ PY
 
       install -m 0644 -o "$owner" -g "$group" ${noctaliaConfig} "$config_dir/config.toml"
 
-      # Las rutas personales se resuelven desde XDG, así funcionan aunque la
-      # carpeta se llame Imágenes, Pictures u otra traducción.
+      # Las carpetas personales se preguntan a XDG; no dependen del idioma ni
+      # de un nombre como Imágenes/Pictures o Documentos/Documents.
       documents_dir="$(HOME="$home" xdg-user-dir DOCUMENTS)"
       pictures_dir="$(HOME="$home" xdg-user-dir PICTURES)"
       [ -n "$documents_dir" ] || documents_dir="$home/Documents"
@@ -138,16 +117,8 @@ output = Path(sys.argv[1])
 notes = sys.argv[2]
 screenshots = sys.argv[3]
 data = {
-    "plugin_settings": {
-        "noctalia/notes": {
-            "notes_dir": notes,
-        },
-    },
-    "shell": {
-        "screenshot": {
-            "directory": screenshots,
-        },
-    },
+    "plugin_settings": {"noctalia/notes": {"notes_dir": notes}},
+    "shell": {"screenshot": {"directory": screenshots}},
 }
 with output.open("wb") as handle:
     tomli_w.dump(data, handle)
@@ -160,8 +131,6 @@ in {
   programs.noctalia.enable = true;
   environment.etc."noctalia/config.toml".source = noctaliaConfig;
 
-  # La lógica se construye como programa antes de activar el sistema. Un error
-  # de shell falla durante el build, no a mitad de nixos-rebuild switch.
   system.activationScripts.noctaliaConfig.text = ''
     ${noctaliaConfigSync}/bin/korunix-noctalia-config-sync
   '';
