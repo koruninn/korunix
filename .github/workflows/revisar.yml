@@ -14,6 +14,16 @@ jobs:
       - name: Instalar Nix
         uses: cachix/install-nix-action@v31
 
+      - name: Actualizar el lock para esta revisión
+        run: nix flake lock
+
+      - name: Guardar el lock generado
+        uses: actions/upload-artifact@v4
+        with:
+          name: flake-lock
+          path: flake.lock
+          if-no-files-found: error
+
       - name: Revisar que el flake evalúe
         run: nix flake check --no-build
 
