@@ -8,17 +8,38 @@
   usuario = config.users.users.${equipo.persona};
   toml = pkgs.formats.toml {};
 
-  # La versión de nixpkgs fijada por Korunix aún no entiende `outputs --json`,
-  # que usan los plugins actuales de Noctalia para leer los monitores.
-  umbrielActualizado = pkgs.umbriel.overrideAttrs (_: {
-    version = "0-unstable-2026-09-13";
-    src = pkgs.fetchFromGitHub {
-      owner = "noctalia-dev";
-      repo = "umbriel";
-      rev = "11c0c99b85c5aa579224cf0d2302f4f7356ac5c4";
-      hash = "sha256-Ot18ZKFwRSPzyXhSkDhLOI8nAXfeoFPuB04Jk5DkzV4=";
-    };
-  });
+  # xwayland-satellite 0.8.1 es la versión fijada por Korunix.
+  xwaylandSatellite081 =
+    pkgs.xwayland-satellite.overrideAttrs (old: rec {
+      version = "0.8.1";
+
+      src = pkgs.fetchFromGitHub {
+        owner = "Supreeeme";
+        repo = "xwayland-satellite";
+        rev = "536bd32";
+        hash = "sha256-BUE41HjLIGPjq3U8VXPjf8asH8GaMI7FYdgrIHKFMXA=";
+      };
+
+      cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+        pname = "xwayland-satellite";
+        inherit version src;
+        hash = "sha256-16L6gsvze+m7XCJlOA1lsPNELE3D364ef2FTdkh0rVY=";
+      };
+    });
+
+  umbrielActualizado =
+    (pkgs.umbriel.override {
+      xwayland-satellite = xwaylandSatellite081;
+    }).overrideAttrs (_: {
+      version = "0-unstable-2026-09-13";
+
+      src = pkgs.fetchFromGitHub {
+        owner = "noctalia-dev";
+        repo = "umbriel";
+        rev = "11c0c99b85c5aa579224cf0d2302f4f7356ac5c4";
+        hash = "sha256-Ot18ZKFwRSPzyXhSkDhLOI8nAXfeoFPuB04Jk5DkzV4=";
+      };
+    });
 
   umbrielConfig = toml.generate "umbriel-config.toml" {
     include.files = [
@@ -358,7 +379,7 @@ in {
   # xwayland-satellite habilita aplicaciones X11; Bibata queda disponible para
   # el cursor de Umbriel sin imponer el tema al resto de escritorios.
   environment.systemPackages = [
-    pkgs.xwayland-satellite
+    xwaylandSatellite081
     pkgs.bibata-cursors
   ];
 

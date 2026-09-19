@@ -8,7 +8,7 @@ let
     src = pkgs.fetchFromGitHub {
       owner = "Mibea";
       repo = "Hatter";
-      rev = "2d7c78276adf11611733563b008fe021e3ecf";
+      rev = "2d7c78276adf11613611733563b008fe021e3ecf";
       hash = "sha256-axFx8DEdzY3XVCQcOWmr5tocNUhIAJqcARgxBWwg0aY=";
     };
 
