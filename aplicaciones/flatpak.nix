@@ -1,7 +1,4 @@
-{
-  inputs,
-  ...
-}: {
+{inputs, ...}: {
   # Importamos el módulo de nix-flatpak directamente aquí
   imports = [
     inputs.nix-flatpak.nixosModules.nix-flatpak

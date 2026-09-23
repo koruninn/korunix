@@ -16,7 +16,7 @@
     }
   );
 in {
-  # Firefox es el navegador principal de Korunix. La extensión Pywalfox se
+  # Firefox es el navegador parincipal de Korunix. La extensión Pywalfox se
   # instala por política y el host nativo se registra declarativamente para
   # que la plantilla comunitaria `pywalfox` de Noctalia pueda actualizarlo.
   programs.firefox = {
