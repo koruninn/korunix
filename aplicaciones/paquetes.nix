@@ -1,5 +1,6 @@
 {
   equipo,
+  inputs,
   lib,
   pkgs,
   ...
@@ -60,6 +61,7 @@ in {
     loupe
     lutris
     nautilus
+    nuclear
     obsidian
     onlyoffice-desktopeditors
     papers
