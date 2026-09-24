@@ -44,6 +44,7 @@ in {
   environment.systemPackages = with pkgs; [
     (lib.hiPrio lanzadoresOcultos)
     alacritty
+    addwater
     android-tools
     birdfont
     blender
@@ -75,9 +76,12 @@ in {
     mailspringEquipo
     vesktop
     vlc
-    (vscode.overrideAttrs (old: { nativeBuildInputs = (old.nativeBuildInputs or []) ++ [pkgs.makeWrapper]; postInstall = (old.postInstall or "") + "
+    (vscode.overrideAttrs (old: {
+          nativeBuildInputs = (old.nativeBuildInputs or []) ++ [pkgs.makeWrapper];
+          postInstall = (old.postInstall or "") + "
 wrapProgram $out/bin/code --add-flags --password-store=gnome-libsecret
-"; }))
+";
+        }))
     zoom-us
   ];
 }

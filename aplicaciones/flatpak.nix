@@ -10,6 +10,7 @@
   # Aplicaciones instaladas declarativamente desde Flathub.
   services.flatpak.packages = [
     "io.github.brunofin.Cohesion"
+    "dev.diegovsky.Riff"
   ];
 
   services.flatpak.update.auto = {
