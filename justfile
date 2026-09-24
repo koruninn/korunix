@@ -3,8 +3,8 @@ switch equipo:
 	sudo nixos-rebuild switch --flake ".#{{equipo}}"
 
 # Atajos fáciles para los dos equipos actuales.
-korunix:
-	just switch korunix
+veskalia:
+	just switch veskalia
 
 optiplex:
 	just switch optiplex
