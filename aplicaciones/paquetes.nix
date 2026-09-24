@@ -44,7 +44,6 @@ in {
   environment.systemPackages = with pkgs; [
     (lib.hiPrio lanzadoresOcultos)
     alacritty
-    addwater
     android-tools
     birdfont
     blender
