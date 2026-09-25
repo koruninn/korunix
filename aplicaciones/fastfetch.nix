@@ -52,8 +52,7 @@
       {
         type = "disk";
         key = "Disco (/)";
-        folders = "/";
-        format = "{size-used} / {size-total}";
+        format = "{size-free} / {size-total}";
       }
       "break"
       "colors"
