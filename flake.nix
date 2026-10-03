@@ -32,6 +32,12 @@
       url = "github:noctalia-dev/noctalia/";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # Código fuente de Umbriel. `nix flake update` lo sube al último commit.
+    umbriel-src = {
+      url = "github:noctalia-dev/umbriel";
+      flake = false;
+    };
   };
 
   outputs = {

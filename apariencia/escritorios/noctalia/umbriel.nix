@@ -1,6 +1,7 @@
 {
   config,
   equipo,
+  inputs,
   lib,
   pkgs,
   ...
@@ -9,36 +10,31 @@
   toml = pkgs.formats.toml {};
 
   # xwayland-satellite 0.8.1 es la versión que Korunix deja fijada.
-  xwaylandSatellite081 =
-    pkgs.xwayland-satellite.overrideAttrs (old: rec {
-      version = "0.8.1";
+  xwaylandSatellite081 = pkgs.xwayland-satellite.overrideAttrs (old: rec {
+    version = "0.8.1";
 
-      src = pkgs.fetchFromGitHub {
-        owner = "Supreeeme";
-        repo = "xwayland-satellite";
-        rev = "536bd32";
-        hash = "sha256-BUE41HjLIGPjq3U8VXPjf8asH8GaMI7FYdgrIHKFMXA=";
-      };
+    src = pkgs.fetchFromGitHub {
+      owner = "Supreeeme";
+      repo = "xwayland-satellite";
+      rev = "536bd32";
+      hash = "sha256-BUE41HjLIGPjq3U8VXPjf8asH8GaMI7FYdgrIHKFMXA=";
+    };
 
-      cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
-        pname = "xwayland-satellite";
-        inherit version src;
-        hash = "sha256-16L6gsvze+m7XCJlOA1lsPNELE3D364ef2FTdkh0rVY=";
-      };
-    });
+    cargoDeps = pkgs.rustPlatform.fetchCargoVendor {
+      pname = "xwayland-satellite";
+      inherit version src;
+      hash = "sha256-16L6gsvze+m7XCJlOA1lsPNELE3D364ef2FTdkh0rVY=";
+    };
+  });
 
+  # El código viene del input `umbriel-src` del flake: `nix flake update`
+  # lo sube siempre al último commit y flake.lock guarda cuál fue.
   umbrielActualizado =
     (pkgs.umbriel.override {
       xwayland-satellite = xwaylandSatellite081;
     }).overrideAttrs (_: {
-      version = "0-unstable-2026-09-13";
-
-      src = pkgs.fetchFromGitHub {
-        owner = "noctalia-dev";
-        repo = "umbriel";
-        rev = "11c0c99b85c5aa579224cf0d2302f4f7356ac5c4";
-        hash = "sha256-Ot18ZKFwRSPzyXhSkDhLOI8nAXfeoFPuB04Jk5DkzV4=";
-      };
+      version = "0-unstable-${inputs.umbriel-src.shortRev or "latest"}";
+      src = inputs.umbriel-src;
     });
 
   umbrielConfig = toml.generate "umbriel-config.toml" {
@@ -116,9 +112,9 @@
     layout = {
       mode = "scrolling";
       gap = 8;
-      width_presets = [0.333 0.5 0.667];
+      extent_presets = [0.333 0.5 0.667];
       scrolling = {
-        default_width_fraction = 0.5;
+        default_extent_fraction = 0.5;
         center_underfull_strip = true;
         center_focused = "on_overflow";
       };
@@ -183,13 +179,13 @@
       "Mod+Shift+F" = "window-toggle-fullscreen";
       "Mod+M" = "window-toggle-maximize-to-edges";
       "Mod+C" = "column-center";
-      "Mod+R" = "window-cycle-width";
-      "Mod+Shift+R" = "window-cycle-width-back";
-      "Mod+Ctrl+Shift+R" = "window-cycle-height";
-      "Mod+Minus" = "window-modify-width:-0.1";
-      "Mod+Equal" = "window-modify-width:0.1";
-      "Mod+Shift+Minus" = "window-modify-height:-0.1";
-      "Mod+Shift+Equal" = "window-modify-height:0.1";
+      "Mod+R" = "window-cycle-primary-extent";
+      "Mod+Shift+R" = "window-cycle-primary-extent-back";
+      "Mod+Ctrl+Shift+R" = "window-cycle-secondary-extent";
+      "Mod+Minus" = "window-modify-width-right:-0.1";
+      "Mod+Equal" = "window-modify-width-right:0.1";
+      "Mod+Shift+Minus" = "window-modify-height-down:-0.1";
+      "Mod+Shift+Equal" = "window-modify-height-down:0.1";
       "Mod+BracketLeft" = "window-consume-or-expel-left";
       "Mod+BracketRight" = "window-consume-or-expel-right";
 
@@ -286,12 +282,18 @@
       {
         match.app_id = "^dev.noctalia.Noctalia$";
         default_floating = true;
-        default_size = [1020 900];
+        default_floating_size_px = {
+          width = 1020;
+          height = 900;
+        };
       }
       {
         match.app_id = "^dev.noctalia.UmbrielSharePicker$";
         default_floating = true;
-        default_size = [800 600];
+        default_floating_size_px = {
+          width = 800;
+          height = 600;
+        };
       }
       {
         match.title = "^(Picture-in-Picture|Picture in picture)$";
@@ -312,6 +314,13 @@
         blur_optimized = false;
       }
     ];
+
+    # Los shaders ya no van dentro de animation.*: se declaran como un preset
+    # de efectos y la animación lo elige por nombre.
+    effects.preset.squash = {
+      kind = "animation";
+      shader = "${umbrielActualizado}/share/umbriel/effects/animation/squash/shader.glsl";
+    };
 
     animation = {
       enabled = true;
@@ -337,7 +346,7 @@
         enabled = true;
         duration_ms = 220;
         curve = "snappy";
-        shader = "${umbrielActualizado}/share/umbriel/shaders/squash.glsl";
+        effect = "squash";
       };
 
       workspaces = {
