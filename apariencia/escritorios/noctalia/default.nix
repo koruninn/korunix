@@ -1,0 +1,84 @@
+{
+  config,
+  equipo,
+  inputs,
+  pkgs,
+  ...
+}: let
+  usuario = config.users.users.${equipo.persona};
+in {
+  imports = [
+    inputs.noctalia.nixosModules.default
+    ./noctalia.nix
+    ./fondos-dia-noche.nix
+    ./portales.nix
+    ./umbriel.nix
+    ./qt.nix
+  ];
+
+  # Algunas apps de KDE pueden seguir instaladas, porque varias aplicaciones las necesitan,
+  # pero no se muestran como opciones en Umbriel. Kdenlive es la excepción que sí queremos ver.
+  system.activationScripts.noctaliaDesktopEntries.text = ''
+    applications_dir=${usuario.home}/.local/share/applications
+
+    install -d -m 0755 \
+      -o ${usuario.name} \
+      -g ${usuario.group} \
+      "$applications_dir"
+
+    # Este bloque elimina solamente los cambios que Korunix creó por su cuenta, sin borrar
+    # configuraciones que la persona haya hecho a mano.
+    for desktop in \
+      "$applications_dir"/org.kde.*.desktop \
+      "$applications_dir"/systemsettings.desktop
+    do
+      [ -e "$desktop" ] || continue
+      if grep -q '^X-Korunix-Noctalia-Hidden=true$' "$desktop"; then
+        rm -f "$desktop"
+      fi
+    done
+
+    for desktop in \
+      ${config.system.path}/share/applications/org.kde.*.desktop \
+      ${config.system.path}/share/applications/systemsettings.desktop
+    do
+      [ -e "$desktop" ] || continue
+
+      name=$(basename "$desktop")
+      [ "$name" = "org.kde.kdenlive.desktop" ] && continue
+
+      tmp=$(mktemp)
+      ${pkgs.gawk}/bin/awk '
+        {
+          lines[NR] = $0
+          if ($0 ~ /^NotShowIn=/) {
+            value = substr($0, 11)
+            sub(/;*$/, "", value)
+            if (value !~ /(^|;)umbriel(;|$)/)
+              value = value ";umbriel"
+            lines[NR] = "NotShowIn=" value ";"
+            has_not_show_in = 1
+          }
+        }
+        END {
+          for (i = 1; i <= NR; ++i) {
+            print lines[i]
+            if (lines[i] == "[Desktop Entry]") {
+              print "X-Korunix-Noctalia-Hidden=true"
+              if (!has_not_show_in)
+                print "NotShowIn=umbriel;"
+            }
+          }
+        }
+      ' "$desktop" > "$tmp"
+
+      install -m 0644 \
+        -o ${usuario.name} \
+        -g ${usuario.group} \
+        "$tmp" \
+        "$applications_dir/$name"
+
+      rm -f "$tmp"
+    done
+  '';
+}
