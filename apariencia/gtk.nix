@@ -61,8 +61,8 @@
         local scheme
         scheme=$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || true)
         case "$scheme" in
-          * dark*) printf '%s\n' dark ;;
-          * ) printf '%s\n' light ;;
+          *dark*) printf '%s\n' dark ;;
+          *) printf '%s\n' light ;;
         esac
       }
 
@@ -136,7 +136,7 @@
 
         noctalia)
           case "''${XDG_CURRENT_DESKTOP:-}" in
-            * KDE*) exit 0 ;;
+            *KDE*) exit 0 ;;
           esac
           restore_noctalia
           ;;
