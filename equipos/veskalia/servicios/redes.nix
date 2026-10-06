@@ -31,12 +31,21 @@
   };
 
   networking.firewall = rec {
+    allowedTCPPorts = [
+      26761
+    ];
+
+    allowedUDPPorts = [
+      26761
+    ];
+
     allowedTCPPortRanges = [
       {
         from = 1714;
         to = 1764;
       }
     ];
+
     allowedUDPPortRanges = allowedTCPPortRanges;
   };
 
