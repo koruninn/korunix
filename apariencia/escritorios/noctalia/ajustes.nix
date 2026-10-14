@@ -246,7 +246,8 @@
     enabled = true;
     position = "bottom";
     active_monitor_only = false;
-    monitors = lib.optional (equipo ? pantalla) equipo.pantalla.nombre;
+    # Noctalia no admite `dock.monitors`; la selección por pantalla se gestiona
+    # desde el plugin de monitores de Umbriel, no desde esta opción del dock.
     icon_size = 40;
     main_axis_padding = 16;
     cross_axis_padding = 8;
