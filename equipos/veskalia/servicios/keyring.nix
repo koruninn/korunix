@@ -1,5 +1,4 @@
-{ ... }:
-{
+{...}: {
   # GNOME Keyring guarda en forma segura las contraseñas y secretos que usan apps como Mailspring.
   # Se activa solo en este equipo para no cambiar lo que hace el Optiplex.
   services.gnome.gnome-keyring.enable = true;

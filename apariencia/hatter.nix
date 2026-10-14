@@ -1,6 +1,8 @@
-{ pkgs, lib, ... }:
-
-let
+{
+  pkgs,
+  lib,
+  ...
+}: let
   hatter = pkgs.stdenvNoCC.mkDerivation {
     pname = "hatter-icon-theme";
     version = "3";
@@ -27,7 +29,6 @@ let
       platforms = lib.platforms.linux;
     };
   };
-in
-{
-  environment.systemPackages = [ hatter ];
+in {
+  environment.systemPackages = [hatter];
 }

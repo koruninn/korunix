@@ -4,19 +4,20 @@
   pkgs,
   ...
 }: let
-  cinnamonWayland = pkgs.runCommand "optiplex-cinnamon-wayland-session" {
-    passthru.providedSessions = ["cinnamon-wayland"];
-  } ''
-    origen=${pkgs.cinnamon}/share/wayland-sessions/cinnamon-wayland.desktop
+  cinnamonWayland =
+    pkgs.runCommand "optiplex-cinnamon-wayland-session" {
+      passthru.providedSessions = ["cinnamon-wayland"];
+    } ''
+      origen=${pkgs.cinnamon}/share/wayland-sessions/cinnamon-wayland.desktop
 
-    if [ ! -f "$origen" ]; then
-      echo "No existe cinnamon-wayland.desktop en ${pkgs.cinnamon}" >&2
-      exit 1
-    fi
+      if [ ! -f "$origen" ]; then
+        echo "No existe cinnamon-wayland.desktop en ${pkgs.cinnamon}" >&2
+        exit 1
+      fi
 
-    mkdir -p "$out/share/wayland-sessions"
-    cp "$origen" "$out/share/wayland-sessions/cinnamon-wayland.desktop"
-  '';
+      mkdir -p "$out/share/wayland-sessions"
+      cp "$origen" "$out/share/wayland-sessions/cinnamon-wayland.desktop"
+    '';
 in {
   time.timeZone = "America/Lima";
   i18n.defaultLocale = "es_PE.UTF-8";

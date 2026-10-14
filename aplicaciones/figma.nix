@@ -3,8 +3,7 @@
   pkgs,
   inputs,
   ...
-}:
-{
+}: {
   imports = [
     inputs.figma-linux-next.nixosModules.default
   ];

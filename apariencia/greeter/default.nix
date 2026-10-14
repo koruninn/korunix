@@ -18,9 +18,11 @@
       hash = "sha256-JgPgbmlUOKlgCX/KDfRF+z9ID80+Q7CcdaJFh5eaFjU=";
     };
 
-    buildInputs = (old.buildInputs or []) ++ [
-      pkgs.libxml2
-    ];
+    buildInputs =
+      (old.buildInputs or [])
+      ++ [
+        pkgs.libxml2
+      ];
   });
 in {
   # Korunix usa Noctalia Greeter con greetd como pantalla de inicio de sesión.

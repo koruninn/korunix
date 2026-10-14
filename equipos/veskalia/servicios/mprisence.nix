@@ -1,7 +1,4 @@
-{
-  pkgs,
-  ...
-}: {
+{pkgs, ...}: {
   systemd.user.services.mprisence = {
     description = "Discord Rich Presence para reproductores MPRIS";
     wantedBy = ["default.target"];

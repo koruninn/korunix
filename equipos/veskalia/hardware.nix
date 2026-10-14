@@ -1,7 +1,6 @@
 # Hardware de la ROG Ally usada como equipo principal de Korunix.
 # Basado en hardware-configuration.nix generado por NixOS en la Ally.
 # Se conservan los ajustes declarativos específicos que ya tenía Veskalia.
-
 {
   config,
   lib,
