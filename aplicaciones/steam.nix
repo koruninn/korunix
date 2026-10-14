@@ -51,10 +51,8 @@ in {
       if [ -d "$steam_data" ] && [ ! -L "$steam_data" ]; then
         backup="$steam_dir/steam.korunix-backup-$(date +%Y%m%d-%H%M%S)-$$"
         mv -- "$steam_link" "$backup"
-        chown -R "$owner:$group" "$backup"
       elif [ ! -e "$steam_data" ] && [ ! -L "$steam_data" ]; then
         mv -- "$steam_link" "$steam_data"
-        chown -R "$owner:$group" "$steam_data"
       else
         echo "Korunix: no se reparó la ruta de Steam; el destino existe o es un enlace."
       fi
