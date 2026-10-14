@@ -58,9 +58,20 @@ in {
       else
         echo "Korunix: no se reparó la ruta de Steam; el destino existe o es un enlace."
       fi
-    elif [ ! -e "$steam_link" ]; then
-      ln -s "$steam_data" "$steam_link"
-      chown -h "$owner:$group" "$steam_link"
+    fi
+
+    # Después de apartar la carpeta conflictiva, crea el enlace en esta misma activación.
+    if [ ! -e "$steam_link" ] && [ ! -L "$steam_link" ]; then
+      if [ -d "$steam_data" ] && [ ! -L "$steam_data" ]; then
+        ln -s "$steam_data" "$steam_link"
+        chown -h "$owner:$group" "$steam_link"
+      elif [ ! -e "$steam_data" ] && [ ! -L "$steam_data" ]; then
+        # Steam aún no ha creado su directorio de datos; el enlace puede apuntar a la ruta futura.
+        ln -s "$steam_data" "$steam_link"
+        chown -h "$owner:$group" "$steam_link"
+      else
+        echo "Korunix: no se creó el enlace de Steam porque el destino no es seguro."
+      fi
     fi
   '';
 }
