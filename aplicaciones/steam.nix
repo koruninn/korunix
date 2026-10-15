@@ -15,23 +15,35 @@ in {
   programs.steam = {
     enable = true;
     package = pkgs.steam;
+    gamescopeSession.enable = true;
     remotePlay.openFirewall = true;
     dedicatedServer.openFirewall = true;
   };
 
-  # Soporte general para mandos: Xbox por Bluetooth, PlayStation, Nintendo,
-  # 8BitDo, PowerA y otros dispositivos cubiertos por reglas udev comunes.
+  programs.gamescope.enable = true;
+
   hardware.steam-hardware.enable = true;
   hardware.uinput.enable = true;
   hardware.xpadneo.enable = true;
-  services.udev.packages = [ pkgs.game-devices-udev-rules ];
+  services.udev.packages = [pkgs.game-devices-udev-rules];
 
   programs.gamemode.enable = true;
 
-  # Steam espera que ~/.steam/steam sea un enlace a ~/.local/share/Steam.
-  # Algunas instalaciones antiguas dejan allí una carpeta real, que bloquea
-  # el arranque. La movemos a un respaldo; nunca la borramos ni sobrescribimos
-  # la instalación principal. Si la ruta no es inequívocamente segura, no tocamos nada.
+  # ROG Ally: soporte para controles y botones especiales.
+  services.handheld-daemon = {
+    enable = true;
+    user = equipo.persona;
+    ui.enable = true;
+  };
+
+  # SteamOS no está instalado: cerrar Steam devuelve el control a GDM.
+  environment.systemPackages = [
+    (pkgs.writeShellScriptBin "steamos-session-select" ''
+      steam -shutdown || true
+    '')
+  ];
+
+
   system.activationScripts.korunixSteamPath.text = ''
     home=${lib.escapeShellArg usuario.home}
     owner=${lib.escapeShellArg usuario.name}
@@ -45,7 +57,6 @@ in {
       "$steam_dir" "$home/.local/share"
 
     if [ -L "$steam_link" ]; then
-      # Un enlace existente se deja intacto; no se cambia una ruta elegida por el usuario.
       :
     elif [ -d "$steam_link" ]; then
       if [ -d "$steam_data" ] && [ ! -L "$steam_data" ]; then
@@ -58,13 +69,11 @@ in {
       fi
     fi
 
-    # Después de apartar la carpeta conflictiva, crea el enlace en esta misma activación.
     if [ ! -e "$steam_link" ] && [ ! -L "$steam_link" ]; then
       if [ -d "$steam_data" ] && [ ! -L "$steam_data" ]; then
         ln -s "$steam_data" "$steam_link"
         chown -h "$owner:$group" "$steam_link"
       elif [ ! -e "$steam_data" ] && [ ! -L "$steam_data" ]; then
-        # Steam aún no ha creado su directorio de datos; el enlace puede apuntar a la ruta futura.
         ln -s "$steam_data" "$steam_link"
         chown -h "$owner:$group" "$steam_link"
       else

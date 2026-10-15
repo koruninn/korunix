@@ -28,8 +28,7 @@
     sesion = "gnome";
   };
 in {
-  # La decisión final de Korunix es dejar solo Umbriel y GNOME como sesiones gráficas.
-  services.displayManager.sessionPackages = lib.mkForce [
+  services.displayManager.sessionPackages = lib.mkAfter [
     pkgs.umbriel
     gnome
   ];
