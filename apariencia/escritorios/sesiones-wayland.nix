@@ -28,8 +28,9 @@
     sesion = "gnome";
   };
 in {
+  # El módulo programs.umbriel registra la versión fijada por Korunix.
+  # Aquí solo conservamos GNOME como sesión de recuperación.
   services.displayManager.sessionPackages = lib.mkAfter [
-    pkgs.umbriel
     gnome
   ];
 }

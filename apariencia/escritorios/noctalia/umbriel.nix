@@ -44,7 +44,7 @@
     ];
 
     general = {
-      autostart = ["korunix-noctalia-session"];
+      autostart = ["korunix-noctalia-session" "sysboard"];
       mod_key = "Super";
       xwayland = true;
       show_cheatsheet = false;
@@ -97,6 +97,9 @@
         options = "";
         numlock_toggle = true;
       };
+      touch = {
+        enabled = true;
+      };
       touchpad = {
         tap = true;
         natural_scroll = true;
@@ -123,6 +126,7 @@
     keybinds = {
       # Noctalia y las aplicaciones principales.
       "Mod+Space" = "spawn:noctalia msg panel-toggle launcher";
+      "Mod+K" = "spawn:korunix-sysboard-toggle";
       "Mod+S" = "spawn:noctalia msg panel-toggle control-center";
       "Mod+Comma" = "spawn:noctalia msg settings-toggle";
       "Mod+L" = "spawn:noctalia msg session lock";

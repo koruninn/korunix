@@ -38,6 +38,18 @@
       url = "github:noctalia-dev/umbriel";
       flake = false;
     };
+
+    # Jovian gestiona la transición entre Gaming Mode y escritorio.
+    jovian = {
+      url = "github:Jovian-Experiments/Jovian-NixOS";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Teclado virtual GTK4 para Wayland; su revisión se fija en flake.lock.
+    sysboard-src = {
+      url = "github:System64fumo/sysboard";
+      flake = false;
+    };
   };
 
   outputs = {
