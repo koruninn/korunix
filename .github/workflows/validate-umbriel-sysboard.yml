@@ -1,0 +1,69 @@
+name: Validate Umbriel and Sysboard
+
+on:
+  push:
+    branches:
+      - work/umbriel-sysboard-20261016
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  nix-evaluation-and-sysboard-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v5
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Resolve and lock new flake inputs
+        run: nix flake lock
+
+      - name: Verify that Jovian's desktop session is Umbriel
+        shell: bash
+        run: |
+          set -euo pipefail
+          session_names="$(nix eval --json .#nixosConfigurations.veskalia.config.services.displayManager.sessionData.sessionNames)"
+          printf 'Available sessions: %s\n' "$session_names"
+          grep -q '"umbriel"' <<< "$session_names"
+          selected="$(nix eval --raw .#nixosConfigurations.veskalia.config.jovian.steam.desktopSession)"
+          test "$selected" = "umbriel"
+          printf 'Jovian desktopSession: %s\n' "$selected"
+
+      - name: Build Sysboard only
+        shell: bash
+        run: |
+          set -euo pipefail
+          drv="$(nix eval --impure --raw --expr '
+            let
+              flake = builtins.getFlake (toString ./.);
+              packages = flake.nixosConfigurations.veskalia.config.environment.systemPackages;
+              matches = builtins.filter (p: (p.pname or "") == "sysboard") packages;
+            in
+              if builtins.length matches == 1
+              then (builtins.head matches).drvPath
+              else throw "Expected exactly one sysboard derivation"
+          ')"
+          echo "Building $drv"
+          nix build --no-link "$drv"
+
+      - name: Commit the resolved lockfile to this work branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- flake.lock; then
+            echo "flake.lock already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add flake.lock
+          git commit -m "Lock Jovian and Sysboard inputs"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
