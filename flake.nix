@@ -8,6 +8,49 @@
     # Este canal se usa para los equipos que prefieren una base más tranquila y estable.
     nixpkgs-stable.url = "nixpkgs/nixos-26.05";
 
+    # Perfiles de hardware mantenidos por la comunidad de NixOS, incluido el de la ROG Ally RC71L.
+    nixos-hardware = {
+      url = "github:NixOS/nixos-hardware";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Noctalia: panel, widgets, temas y ajustes de escritorio.
+    noctalia = {
+      url = "github:noctalia-dev/noctalia/";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Código fuente de Umbriel, fijado por flake.lock.
+    umbriel = { url = "github:noctalia-dev/umbriel/e65cc65ecec383528715d4bb50747b9f46199ab7"; };
+    umbriel-src = {
+      url = "github:noctalia-dev/umbriel";
+      flake = false;
+    };
+
+    # Proporciona Steam Deck UI, Gamescope Session y el gestor real de sesiones.
+    jovian = {
+      url = "github:Jovian-Experiments/Jovian-NixOS";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # Código fuente del teclado virtual Sysboard, fijado por flake.lock.
+    sysboard-src = {
+      url = "github:System64fumo/sysboard";
+      flake = false;
+    };
+
+    # libfprint con soporte SDCP para el lector LighTuning de la Ally.
+    libfprint-egismoc-sdcp = {
+      url = "github:TenSeventy7/libfprint-egismoc-sdcp/4d128d4f6f0b46182572126e84df88a73ac27859";
+      flake = false;
+    };
+
+    # Parches específicos para el sensor 1c7a:0588.
+    ally-fingerprint-patches = {
+      url = "github:podothecat/decky-fingerprint-unlock/d5b077c3cfad098909a2849529a27aff55e5354f";
+      flake = false;
+    };
+
     # Añade los lanzadores que Korunix usa para algunos juegos de HoYo.
     aagl.url = "github:ezKEa/aagl-gtk-on-nix";
     aagl.inputs.nixpkgs.follows = "nixpkgs";
@@ -25,18 +68,6 @@
     spicetify-nix = {
       url = "github:Gerg-L/spicetify-nix";
       inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    # Añade Noctalia, que Korunix usa para el panel, widgets, temas y otras partes de la interfaz.
-    noctalia = {
-      url = "github:noctalia-dev/noctalia/";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    # Código fuente de Umbriel. `nix flake update` lo sube al último commit.
-    umbriel-src = {
-      url = "github:noctalia-dev/umbriel";
-      flake = false;
     };
   };
 

@@ -14,8 +14,8 @@ in {
 
   programs.steam = {
     enable = true;
-    package = pkgs.steam;
-    gamescopeSession.enable = true;
+    package = pkgs.millennium-steam;
+    gamescopeSession.enable = lib.mkForce false;
     remotePlay.openFirewall = true;
     dedicatedServer.openFirewall = true;
   };
@@ -34,15 +34,11 @@ in {
     enable = true;
     user = equipo.persona;
     ui.enable = true;
+    adjustor = {
+      enable = true;
+      loadAcpiCallModule = true;
+    };
   };
-
-  # SteamOS no está instalado: cerrar Steam devuelve el control a GDM.
-  environment.systemPackages = [
-    (pkgs.writeShellScriptBin "steamos-session-select" ''
-      steam -shutdown || true
-    '')
-  ];
-
 
   system.activationScripts.korunixSteamPath.text = ''
     home=${lib.escapeShellArg usuario.home}

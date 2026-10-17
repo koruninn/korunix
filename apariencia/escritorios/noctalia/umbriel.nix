@@ -44,7 +44,6 @@
     ];
 
     general = {
-      autostart = ["korunix-noctalia-session"];
       mod_key = "Super";
       xwayland = true;
       show_cheatsheet = false;
@@ -96,6 +95,10 @@
         variant = "deadtilde";
         options = "";
         numlock_toggle = true;
+      };
+      touch = {
+        enabled = true;
+        map_to_output = "eDP-1";
       };
       touchpad = {
         tap = true;

@@ -1,7 +1,6 @@
 {...}: {
   imports = [
     ./aagl.nix
-    ./alacritty.nix
     ./fastfetch.nix
     ./figma.nix
     ./firefox.nix
@@ -14,5 +13,6 @@
     ./predeterminadas.nix
     ./spicetify.nix
     ./steam.nix
+    ./terminal.nix
   ];
 }

@@ -1,10 +1,12 @@
 {...}: {
   imports = [
     ./arranque.nix
-    ./cachix.nix
+    ./steam-deck.nix
+    ./gamescope.nix
     ./keyring.nix
+    ./microfono.nix
     ./mprisence.nix
-    ./plugins-noctalia.nix
     ./redes.nix
+    ./huella.nix
   ];
 }

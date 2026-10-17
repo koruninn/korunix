@@ -23,6 +23,7 @@ in {
   programs.spicetify = {
     enable = true;
 
+    spotifyLaunchFlags = "--password-store=basic";
     enabledExtensions =
       (with spicePkgs.extensions; [
         adblock

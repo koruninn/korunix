@@ -1,6 +1,7 @@
 # Hardware de la ROG Ally usada como equipo principal de Korunix.
 # Basado en hardware-configuration.nix generado por NixOS en la Ally.
 # Se conservan los ajustes declarativos específicos que ya tenía Veskalia.
+
 {
   config,
   lib,
@@ -27,18 +28,18 @@
 
   # Particiones de la ROG Ally: raíz, arranque y swap.
   fileSystems."/" = {
-    device = "/dev/disk/by-uuid/4472e6df-6d0e-433a-bab2-6282ede221de";
+    device = "/dev/disk/by-uuid/52c21821-6e98-4b20-8fb3-b12bf9ccf3d4";
     fsType = "ext4";
   };
 
   fileSystems."/boot" = {
-    device = "/dev/disk/by-uuid/87D4-BC01";
+    device = "/dev/disk/by-uuid/D8FA-E23C";
     fsType = "vfat";
     options = ["fmask=0077" "dmask=0077"];
   };
 
   swapDevices = [
-    {device = "/dev/disk/by-uuid/968c833a-c1e4-44cb-8aa5-66c0802bd60f";}
+    {device = "/dev/disk/by-uuid/dbe7a991-c4bc-40b4-9a48-ddf04a084ac9";}
   ];
 
   # Se mantienen los valores por defecto y la actualización de microcódigo AMD.

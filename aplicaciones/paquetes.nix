@@ -47,7 +47,6 @@ in {
     file-roller
     fontforge
     gimp
-    google-chrome
     heroic
     inkscape
     kdePackages.kdenlive
@@ -63,7 +62,6 @@ in {
     polyglot
     prismlauncher
     protonplus
-    pywalfox-native
     rar
     resources
     scrcpy
@@ -73,7 +71,7 @@ in {
     (vscode.overrideAttrs (old: {
           nativeBuildInputs = (old.nativeBuildInputs or []) ++ [pkgs.makeWrapper];
           postInstall = (old.postInstall or "") + "
-wrapProgram $out/bin/code --add-flags --password-store=gnome-libsecret
+wrapProgram $out/bin/code --add-flags --password-store=basic
 ";
         }))
     zoom-us

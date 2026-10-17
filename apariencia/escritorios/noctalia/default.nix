@@ -9,8 +9,8 @@
 in {
   imports = [
     inputs.noctalia.nixosModules.default
+    inputs.umbriel.nixosModules.default
     ./noctalia.nix
-    ./fondos-dia-noche.nix
     ./portales.nix
     ./umbriel.nix
     ./qt.nix

@@ -1,0 +1,9 @@
+
+# Artefactos locales de Nix
+/result
+
+# Repositorios Git anidados
+/korunix/
+
+# Respaldos locales de configuraciones
+/.local-backups/

@@ -1,9 +1,10 @@
 {...}: {
-  # GNOME Keyring guarda en forma segura las contraseñas y secretos que usan apps como Mailspring.
-  # Se activa solo en este equipo para no cambiar lo que hace el Optiplex.
+  # Conserva el almacenamiento cifrado de contraseñas y secretos.
   services.gnome.gnome-keyring.enable = true;
 
-  # Al iniciar sesión con Noctalia Greeter, el equipo intenta desbloquear automáticamente
-  # el almacén de contraseñas usando la misma contraseña del inicio de sesión.
+  # Integración PAM para las sesiones de Jovian y SDDM.
+  security.pam.services.sddm.enableGnomeKeyring = true;
+
+  # Se conserva el soporte anterior por si greetd vuelve a utilizarse.
   security.pam.services.greetd.enableGnomeKeyring = true;
 }

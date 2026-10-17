@@ -13,7 +13,7 @@
   # Pantalla principal de este equipo. Los compositores pueden reutilizar estos
   # datos sin incrustar detalles de hardware dentro de sus bloques.
   pantalla = {
-    nombre = "DP-1";
+    nombre = "eDP-1";
     modo = "1920x1080@120";
     escala = 1.0;
   };

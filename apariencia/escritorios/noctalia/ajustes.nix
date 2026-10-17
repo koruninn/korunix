@@ -140,7 +140,7 @@
       capsule_thickness = 0.76;
       capsule_radius = 8.0;
       capsule_opacity = 1.0;
-      start = ["workspaces" "fecha" "clock" "cat" "temperatura" "wallpaper"];
+      start = ["overview_button" "workspaces" "fecha" "clock" "cat" "temperatura" "wallpaper"];
       center = ["bongo_cat" "media" "audio_visualizer"];
       end = [
         "tray"
@@ -149,7 +149,6 @@
         "calculator"
         "pomodoro_timer"
         "notes"
-        "umbriel_companion"
         "udiskie_manager"
         "network"
         "bluetooth"
@@ -161,6 +160,13 @@
   };
 
   widget = {
+    overview_button = {
+      type = "custom_button";
+      glyph = "layout-grid";
+      tooltip = "Vista general";
+      actions.left = "exec umbriel msg overview-toggle";
+    };
+
     fecha = {
       type = "clock";
       format = "{:%A, %d de %B}";
@@ -215,8 +221,6 @@
       type = "sysmon";
       stat = "cpu_temp";
     };
-    umbriel_displays.type = "prponkshe/umbriel-displays:bar";
-    umbriel_companion.type = "noctalia/umbriel-companion:bar";
     speedtest_meter.type = "nilsonlinux/speedtest-meter:speedtest-widget";
     phone_connect.type = "icefish/phone-connect:bar";
     printers.type = "andrewdems/printers:printer";
@@ -350,7 +354,7 @@
       enable_builtin_templates = true;
       builtin_ids = ["alacritty" "gtk3" "gtk4" "qt" "umbriel"];
       enable_community_templates = true;
-      community_ids = ["blender" "darktable" "discord" "gimp" "heroiclauncher" "inkscape" "libreoffice" "obs" "obsidian" "prismlauncher" "pywalfox" "steam" "vscode"];
+      community_ids = ["blender" "darktable" "discord" "gimp" "heroiclauncher" "inkscape" "libreoffice" "obs" "obsidian" "prismlauncher" "steam" "vscode"];
     };
   };
 }
