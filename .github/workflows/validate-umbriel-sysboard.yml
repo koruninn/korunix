@@ -33,6 +33,10 @@ jobs:
           session_names="$(nix eval --json .#nixosConfigurations.veskalia.config.services.displayManager.sessionData.sessionNames)"
           printf 'Available sessions: %s\n' "$session_names"
           grep -q '"umbriel"' <<< "$session_names"
+          if grep -q '"gnome"' <<< "$session_names"; then
+            echo "ERROR: GNOME must not be registered in Veskalia." >&2
+            exit 1
+          fi
           selected="$(nix eval --raw .#nixosConfigurations.veskalia.config.jovian.steam.desktopSession)"
           test "$selected" = "umbriel"
           printf 'Jovian desktopSession: %s\n' "$selected"
