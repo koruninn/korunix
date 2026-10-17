@@ -1,6 +1,7 @@
 {...}: {
   imports = [
     ./arranque.nix
+    ../../../apariencia/escritorios/noctalia
     ./sysboard.nix
     ./steam-deck.nix
     ./cachix.nix

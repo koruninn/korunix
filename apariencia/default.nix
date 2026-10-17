@@ -1,14 +1,7 @@
-{
-  config,
-  pkgs,
-  ...
-}: {
+{...}: {
+  # Veskalia usa Gaming Mode y Umbriel; GNOME no forma parte de la configuración.
   imports = [
     ./hatter.nix
     ./cursor.nix
-    ./gtk.nix
-    ./fondos.nix
-    ./escritorios
-    ./greeter
   ];
 }
