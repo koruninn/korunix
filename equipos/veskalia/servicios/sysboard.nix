@@ -62,17 +62,21 @@ HEADER
     };
   };
 
+  # Teclado compacto pensado para la pantalla pequeña de la Ally.
+  sysboardMobile = pkgs.writeShellScriptBin "korunix-sysboard" ''
+    exec ${sysboard}/bin/sysboard -l mobile -H 340 "$@"
+  '';
+
   sysboardToggle = pkgs.writeShellApplication {
     name = "korunix-sysboard-toggle";
-    runtimeInputs = [ pkgs.coreutils pkgs.procps sysboard ];
+    runtimeInputs = [ pkgs.coreutils pkgs.procps sysboardMobile ];
     text = ''
       if pgrep -x sysboard >/dev/null 2>&1; then
         exec pkill -RTMIN -x sysboard
       fi
 
-      # Normalmente ya está iniciado por Umbriel. Si se cerró, lo arrancamos
-      # y esperamos a que registre el protocolo de teclado antes de alternarlo.
-      sysboard &
+      # Si el teclado se cerró, arrancarlo con el diseño móvil antes de alternarlo.
+      korunix-sysboard &
       for attempt in 1 2 3 4 5 6 7 8 9 10; do
         if pgrep -x sysboard >/dev/null 2>&1; then
           sleep 0.3
@@ -85,5 +89,5 @@ HEADER
     '';
   };
 in {
-  environment.systemPackages = [ sysboard sysboardToggle ];
+  environment.systemPackages = [ sysboard sysboardMobile sysboardToggle ];
 }

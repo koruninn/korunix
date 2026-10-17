@@ -44,7 +44,7 @@
     ];
 
     general = {
-      autostart = ["korunix-noctalia-session" "sysboard"];
+      autostart = ["korunix-noctalia-session" "korunix-sysboard"];
       mod_key = "Super";
       xwayland = true;
       show_cheatsheet = false;
