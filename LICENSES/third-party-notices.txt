@@ -90,7 +90,7 @@ SOFTWARE.
 ----------------------------------------
 
 Fondos de pantalla
-Ubicación: apariencia/escritorios/noctalia/fondos/
+Ubicación: apariencia/fondos/
 
 Obras y referencias de Wikimedia Commons:
 

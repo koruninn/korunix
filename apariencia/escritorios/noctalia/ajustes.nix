@@ -320,7 +320,7 @@
     blurred_desktop = true;
     blur_intensity = 0.5;
     tint_intensity = 0.6;
-    wallpaper = "${./fondos/oscuro}/capriccio-arco-rovinato-e-una-villa-nello-sfondo.jpg";
+    wallpaper = "${../../fondos/oscuro}/capriccio-arco-rovinato-e-una-villa-nello-sfondo.jpg";
     monitors = [];
   };
 
@@ -337,11 +337,11 @@
     transition_duration = 1500;
     edge_smoothness = 0.3;
     transition_on_startup = false;
-    directory = "${./fondos}";
-    directory_light = "${./fondos/claro}";
-    directory_dark = "${./fondos/oscuro}";
+    directory = "${../../fondos}";
+    directory_light = "${../../fondos/claro}";
+    directory_dark = "${../../fondos/oscuro}";
     per_monitor_directories = false;
-    default.path = "${./fondos/oscuro}/capriccio-arco-rovinato-e-una-villa-nello-sfondo.jpg";
+    default.path = "${../../fondos/oscuro}/capriccio-arco-rovinato-e-una-villa-nello-sfondo.jpg";
     automation = {
       enabled = false;
       interval_seconds = 1800;

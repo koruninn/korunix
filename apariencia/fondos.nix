@@ -7,8 +7,8 @@
 }: let
   noctaliaPackage = config.programs.noctalia.package;
   catalogo = import ./escritorios/noctalia/catalogo-plantillas.nix;
-  fondosClaros = ./escritorios/noctalia/fondos/claro;
-  fondosOscuros = ./escritorios/noctalia/fondos/oscuro;
+  fondosClaros = ./fondos/claro;
+  fondosOscuros = ./fondos/oscuro;
 
   wallpaperSync = pkgs.writeShellApplication {
     name = "korunix-wallpaper-sync";

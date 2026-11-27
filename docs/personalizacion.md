@@ -256,12 +256,12 @@ Si cambias algo desde los ajustes del escritorio y vuelve a su valor anterior al
 
 ### Fondos, colores e iconos
 
-Los fondos del modo claro están en [fondos/claro](../apariencia/escritorios/noctalia/fondos/claro) y los del modo oscuro en [fondos/oscuro](../apariencia/escritorios/noctalia/fondos/oscuro).
+Los fondos del modo claro están en [fondos/claro](../apariencia/fondos/claro) y los del modo oscuro en [fondos/oscuro](../apariencia/fondos/oscuro).
 
 Para añadir una imagen, cópiala a la carpeta correspondiente y añade ese archivo a Git antes de reconstruir. Por ejemplo, si la imagen se llama `paisaje.jpg`:
 
 ```sh
-git add apariencia/escritorios/noctalia/fondos/claro/paisaje.jpg
+git add apariencia/fondos/claro/paisaje.jpg
 just switch
 ```
 
