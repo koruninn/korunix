@@ -1,4 +1,4 @@
-{config, equipo, lib, pkgs, ...}: let
+{config, lib, pkgs, ...}: let
   usuario = config.users.users.koru;
   decky = pkgs.callPackage ./decky-paquete.nix {};
   estado = "/var/lib/decky-loader";
@@ -27,22 +27,25 @@
     ln -sfnT "$destino" "$enlace"
   '';
 in {
-  # Mantener el servicio que esperan los complementos de Decky.
   environment.systemPackages = [decky];
   systemd.tmpfiles.rules = [
-    "d ${estado} 0755 ${usuario.name} ${usuario.group} -"
+    "d ${estado} 0755 root root -"
+    "d ${estado}/plugins 0755 root root -"
+    "d ${estado}/settings 0755 ${usuario.name} ${usuario.group} -"
+    "d ${estado}/data 0755 ${usuario.name} ${usuario.group} -"
+    "d ${estado}/logs 0755 ${usuario.name} ${usuario.group} -"
     "d ${estado}/themes 0755 ${usuario.name} ${usuario.group} -"
     "d ${temasSteam} 0755 ${usuario.name} ${usuario.group} -"
   ];
 
-  # Compartir los temas con Steam sin mover ni duplicar archivos.
+  # Compartir los temas con Steam.
   systemd.mounts = [{
     what = "${estado}/themes";
     where = temasSteam;
     type = "none";
     options = "bind";
     wantedBy = ["multi-user.target"];
-    # Crear los directorios antes de montar los temas para evitar un ciclo al arrancar.
+    # Los directorios deben existir antes del montaje.
     unitConfig.DefaultDependencies = false;
     requires = ["systemd-tmpfiles-setup.service"];
     after = ["local-fs.target" "systemd-tmpfiles-setup.service"];
@@ -50,7 +53,7 @@ in {
     conflicts = ["umount.target"];
   }];
 
-  # Habilitar la depuración de la interfaz de Steam que necesita Decky.
+  # Decky necesita acceso a la interfaz de Steam.
   system.activationScripts.korunixDeckyCEF = {
     deps = ["korunixSteamPath"];
     text = ''
@@ -63,14 +66,31 @@ in {
   };
 
   systemd.services.korunix-decky-complementos = {
-    description = "Recuperar los complementos y temas de Decky";
+    description = "Recuperar los complementos de Decky";
     before = ["plugin_loader.service"];
     after = ["network-online.target" "systemd-tmpfiles-setup.service"];
     wants = ["network-online.target"];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = "${pkgs.python3}/bin/python3 ${./decky-complementos.py} ${catalogo} ${estado} ${usuario.name}";
+      ExecStart = "${pkgs.python3}/bin/python3 ${./decky-complementos.py} ${catalogo} ${estado} ${usuario.name} plugins";
+      TimeoutStartSec = "10min";
+      Environment = "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+    };
+  };
+
+  systemd.services.korunix-decky-temas = {
+    description = "Recuperar los temas de Steam";
+    before = ["plugin_loader.service"];
+    after = ["network-online.target" "systemd-tmpfiles-setup.service"];
+    wants = ["network-online.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      User = usuario.name;
+      Group = usuario.group;
+      NoNewPrivileges = true;
+      RemainAfterExit = true;
+      ExecStart = "${pkgs.python3}/bin/python3 ${./decky-complementos.py} ${catalogo} ${estado} ${usuario.name} temas";
       TimeoutStartSec = "10min";
       Environment = "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
     };
@@ -79,8 +99,8 @@ in {
   systemd.services.plugin_loader = {
     description = "Decky Loader";
     wantedBy = ["multi-user.target"];
-    after = ["network.target" "systemd-tmpfiles-setup.service" "korunix-decky-complementos.service"];
-    wants = ["korunix-decky-complementos.service"];
+    after = ["network.target" "systemd-tmpfiles-setup.service" "korunix-decky-complementos.service" "korunix-decky-temas.service"];
+    wants = ["korunix-decky-complementos.service" "korunix-decky-temas.service"];
     unitConfig.RequiresMountsFor = temasSteam;
     preStart = ''
       ${pkgs.util-linux}/bin/runuser -u ${lib.escapeShellArg usuario.name} -- ${prepararTemas}

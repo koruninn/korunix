@@ -4,7 +4,6 @@ import json
 import os
 import pwd
 import re
-import shutil
 import stat
 import sys
 import tempfile
@@ -16,6 +15,7 @@ from urllib.parse import quote, urlsplit
 catalogo = json.loads(Path(sys.argv[1]).read_text())
 base = Path(sys.argv[2])
 usuario = pwd.getpwnam(sys.argv[3])
+modo = sys.argv[4]
 almacen = base / "plugins"
 temas = base / "themes"
 tienda = "https://plugins.deckbrew.xyz/plugins"
@@ -58,10 +58,13 @@ def descargar(url, destino, suma=None):
     if suma and hash_archivo.hexdigest() != suma.lower():
         raise ValueError("La descarga no coincide con la suma de la tienda")
 
-def carpeta_segura(ruta):
-    ruta.mkdir(exist_ok=True)
+def carpeta_segura(ruta, propietario=None):
     if ruta.is_symlink() or not ruta.is_dir():
         raise ValueError(f"Ruta no válida: {ruta}")
+    if propietario is not None:
+        estado = ruta.stat()
+        if estado.st_uid != propietario or estado.st_mode & 0o022:
+            raise ValueError(f"Permisos no válidos: {ruta}")
 
 def extraer(archivo, destino):
     with zipfile.ZipFile(archivo) as zip_file:
@@ -86,8 +89,9 @@ def permisos(ruta, root=False):
     for elemento in [ruta, *ruta.rglob("*")]:
         if elemento.is_symlink():
             raise ValueError("No se admiten enlaces en los paquetes")
-        os.chown(elemento, uid, gid)
         os.chmod(elemento, 0o755 if elemento.is_dir() else 0o644)
+        if os.geteuid() == 0:
+            os.chown(elemento, uid, gid)
 
 def instalado(raiz, manifiesto, verificar):
     for ruta in raiz.iterdir():
@@ -107,7 +111,6 @@ def guardar_ajustes(ruta, ajustes):
     if not archivo.exists() and not archivo.is_symlink():
         with archivo.open("x", encoding="utf-8") as salida:
             json.dump(ajustes, salida, ensure_ascii=False, indent=2)
-        os.chown(archivo, usuario.pw_uid, usuario.pw_gid)
 
 def instalar_plugin(item, version):
     destino = almacen / item["carpeta"]
@@ -130,7 +133,7 @@ def instalar_plugin(item, version):
             (origen / "bin").mkdir(exist_ok=True)
             descargar(binario["url"], origen / "bin" / nombre, binario["sha256hash"])
         permisos(origen, root="root" in leer(origen / "plugin.json").get("flags", []))
-        # Decky necesita ejecutar los binarios que vienen con algunos complementos.
+        # Algunos complementos incluyen programas ejecutables.
         for archivo in origen.rglob("*"):
             if archivo.is_file():
                 archivo.chmod(0o755)
@@ -167,18 +170,28 @@ def instalar_tema(item, vistos):
             guardar_ajustes(origen, item["ajustes"])
         origen.rename(destino)
 
-def main():
-    carpeta_segura(almacen)
-    carpeta_segura(temas)
+def recuperar_plugins():
+    if os.geteuid() != 0:
+        raise ValueError("Los complementos necesitan permisos de administrador")
+    carpeta_segura(base, 0)
+    carpeta_segura(almacen, 0)
     errores = []
-    faltantes = [p for p in catalogo["plugins"] if not instalado(almacen, "plugin.json", lambda d: d.get("name") == p["nombre"])]
+    faltantes = [
+        p for p in catalogo["plugins"]
+        if not (almacen / p["carpeta"]).exists()
+        and not (almacen / p["carpeta"]).is_symlink()
+    ]
     listas = {}
     for item in faltantes:
         try:
             elegida = None
             for url in (tienda, tienda_pruebas):
                 if url not in listas:
-                    listas[url] = datos(url)
+                    try:
+                        listas[url] = datos(url)
+                    except (OSError, ValueError) as error:
+                        print(f"{url}: {error}", file=sys.stderr)
+                        listas[url] = []
                 for plugin in listas[url]:
                     if plugin["name"] == item["nombre"] and plugin["author"] == item["autor"]:
                         elegida = next((v for v in plugin["versions"] if v["name"] == item["version"]), None)
@@ -192,11 +205,28 @@ def main():
             print(f"Instalado: {item['nombre']}", flush=True)
         except Exception as error:
             errores.append(f"{item['nombre']}: {error}")
+    return errores
+
+def recuperar_temas():
+    if os.geteuid() != usuario.pw_uid:
+        raise ValueError("Los temas se instalan desde la cuenta del usuario")
+    carpeta_segura(base, 0)
+    carpeta_segura(temas, usuario.pw_uid)
+    errores = []
     for item in catalogo["temas"]:
         try:
             instalar_tema(item, set())
         except Exception as error:
             errores.append(f"{item['carpeta']}: {error}")
+    return errores
+
+def main():
+    if modo == "plugins":
+        errores = recuperar_plugins()
+    elif modo == "temas":
+        errores = recuperar_temas()
+    else:
+        raise ValueError("Acción no válida")
     for error in errores:
         print(error, file=sys.stderr)
     return 1 if errores else 0
