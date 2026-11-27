@@ -54,6 +54,10 @@ Handheld Daemon se encarga de los mandos integrados, los botones especiales y el
 
 También están disponibles Heroic, Lutris y Prism Launcher.
 
+| Inicio | Menú | Ajustes |
+| --- | --- | --- |
+| ![Inicio del modo consola](capturas/modo-consola/modo-consola-inicio.png) | ![Menú del modo consola](capturas/modo-consola/modo-consola-menu.png) | ![Ajustes del modo consola](capturas/modo-consola/modo-consola-ajustes.png) |
+
 ## NixDeck
 
 NixDeck se encarga de la emulación dentro de Korunix. Utiliza Steam ROM Manager para integrar los juegos de otras consolas en la biblioteca de Steam.
