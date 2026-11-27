@@ -13,7 +13,6 @@
         bash "${noctalia}/share/noctalia/assets/templates/gtk/apply.sh" "$mode" || echo "No se pudo aplicar la importación GTK" >&2
       fi
 
-      # Dejar que libadwaita siga el modo del escritorio.
       python3 - "$config_home" "$mode" <<'PY'
       import pathlib, re, sys
       root = pathlib.Path(sys.argv[1])
@@ -22,7 +21,7 @@
           path = root / f"gtk-{v}.0" / "settings.ini"
           path.parent.mkdir(parents=True, exist_ok=True)
           old = path.read_text() if path.exists() else "[Settings]\n"
-          # Conservar las preferencias personales que no tienen que ver con el tema.
+          # Conservar los demás ajustes de GTK.
           keys = ["gtk-icon-theme-name", "gtk-application-prefer-dark-theme",
                   "gtk-cursor-theme-name", "gtk-cursor-theme-size"]
           if v == 3:
@@ -44,7 +43,6 @@
       gsettings set org.gnome.desktop.interface icon-theme Hatter-Slate
       gsettings set org.gnome.desktop.interface cursor-theme Bibata-Modern-Classic
       gsettings set org.gnome.desktop.interface cursor-size 24
-      # Cambiar el modo después de aplicar los colores.
       gsettings set org.gnome.desktop.interface color-scheme "prefer-$mode"
     '';
   };

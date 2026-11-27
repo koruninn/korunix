@@ -260,7 +260,7 @@
     enabled = true;
     position = "bottom";
     active_monitor_only = false;
-    # El plugin de monitores de Umbriel decide en qué pantalla aparece el dock.
+    # Umbriel decide en qué pantalla aparece el dock.
     icon_size = 40;
     main_axis_padding = 16;
     cross_axis_padding = 8;
@@ -380,7 +380,7 @@
         hook_async = false;
         index = 1;
       };
-      # Plantilla oficial de Luciole, copiada para la versión actual de Noctalia.
+      # Plantilla de Luciole (Noctalia, MIT).
       user.korunix-luciole = {
         input_path = "${./plantillas/luciole/colors.toml}";
         output_path = "$XDG_CONFIG_HOME/luciole/colors.toml";

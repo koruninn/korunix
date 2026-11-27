@@ -21,7 +21,7 @@
       cp -r Hatter $out/share/icons/
       cp -r Hatter-Slate $out/share/icons/
 
-      # Vincular los iconos con los nombres que usan los lanzadores y PolyGlot.
+      # Asignar a cada lanzador su icono de Hatter.
       for theme in Hatter Hatter-Slate; do
         apps="$out/share/icons/$theme/scalable/apps"
         mkdir -p "$apps"
@@ -34,7 +34,6 @@
           polyglot:PolyGlot; do
           alias="''${pair%%:*}"
           original="''${pair#*:}"
-          # Slate hereda estos iconos de Hatter.
           if [ "$theme" = Hatter-Slate ]; then
             ln -sfn "../../../Hatter/scalable/apps/$original.svg" "$apps/$original.svg"
           fi
@@ -51,7 +50,6 @@
       platforms = lib.platforms.linux;
     };
   };
-  # Usar los SVG de Hatter sin cambiar los identificadores de las aplicaciones.
   launchers = [
     { id = "anime-game-launcher"; icon = "an-anime-game-launcher"; }
     { id = "honkers-railway-launcher"; icon = "the-honkers-railway-launcher"; }

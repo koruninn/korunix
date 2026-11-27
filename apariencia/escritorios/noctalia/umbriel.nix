@@ -33,7 +33,6 @@
       corner_radius = 20;
       drag_opacity = 0.75;
 
-      # Ajustar el desenfoque para que se parezca al de Niri.
       blur = {
         enabled = true;
         optimized = false;
@@ -142,7 +141,7 @@
       "Mod+Shift+Ctrl+K" = "window-move-up";
       "Mod+Shift+Ctrl+L" = "column-move-to-output-right";
 
-      # Estados, tamaños y cómo se ordenan las ventanas.
+      # Organización de ventanas.
       "Mod+V" = "window-toggle-floating";
       "Mod+Shift+V" = "window-focus-switch-floating";
       "Mod+F" = "window-toggle-maximize";
@@ -159,7 +158,7 @@
       "Mod+BracketLeft" = "window-consume-or-expel-left";
       "Mod+BracketRight" = "window-consume-or-expel-right";
 
-      # Escritorios: moverse, llevar ventanas y volver al anterior.
+      # Cambiar de espacio de trabajo.
       "Mod+Page_Up" = "workspace-previous";
       "Mod+Page_Down" = "workspace-next";
       "Mod+U" = "workspace-next";
@@ -188,7 +187,7 @@
       "Mod+Ctrl+Shift+WheelDown" = "column-move-right";
       "Mod+Ctrl+Shift+WheelUp" = "column-move-left";
 
-      # Usar las mismas combinaciones en ambos teclados.
+      # Atajos del teclado integrado y externo.
       "Mod+1" = "workspace-switch:1";
       "Mod+2" = "workspace-switch:2";
       "Mod+3" = "workspace-switch:3";
@@ -278,7 +277,6 @@
       {
         match.namespace = ''^noctalia-(bar-[^\"]+|notification|dock|panel|attached-panel|osd|desktop-widget-[^\"]*)$'';
         blur = true;
-        # Mantener el desenfoque dentro del panel y los bordes transparentes.
         blur_ignore_alpha = 0.10;
         blur_popups = true;
         blur_optimized = false;
@@ -350,10 +348,8 @@ in lib.mkIf (equipo.habilitarUmbriel or false) {
     });
   };
 
-  # Usar el XWayland que trae Umbriel.
   environment.systemPackages = [pkgs.bibata-cursors];
 
-  # Respetar la paleta y los monitores que configura Noctalia.
   system.activationScripts.umbrielConfig.text = ''
     config_dir=${usuario.home}/.config/umbriel
 
@@ -362,7 +358,7 @@ in lib.mkIf (equipo.habilitarUmbriel or false) {
       -g ${usuario.group} \
       "$config_dir"
 
-    # Guardar la configuración anterior sin tocar outputs.toml.
+    # Conservar los ajustes de pantalla.
     if [ -f "$config_dir/config.toml" ] && [ ! -e "$config_dir/config.toml.pre-korunix-umbriel" ]; then
       cp -p "$config_dir/config.toml" "$config_dir/config.toml.pre-korunix-umbriel"
     fi

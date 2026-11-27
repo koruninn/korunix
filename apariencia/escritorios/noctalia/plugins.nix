@@ -18,7 +18,7 @@
     "dotnetrob/cat"
   ];
 
-  # Quitar del estado local los complementos que ya no se usan.
+  # Complementos deshabilitados.
   descartados = [
     "icefish/phone-connect"
     "community/nix-monitor"

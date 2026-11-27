@@ -293,7 +293,7 @@
               korunix-gtk-session noctalia-session "$mode" >> "$log_file" 2>&1 || true
 
               korunix-noctalia-templates >> "$log_file" 2>&1 || log "ERROR preparando plantillas comunitarias"
-              # Permitir que Firefox tome los colores aunque Umbriel no se haya iniciado.
+              # Compartir los colores con Firefox también en GNOME.
               if [ -d "$community_root" ] || [ -f "${catalogo}/pywalfox/template.toml" ]; then
                 while IFS= read -r id; do
                   [ -n "$id" ] || continue
@@ -343,7 +343,6 @@
 
               if noctalia_running; then
                 mode="$(current_mode)"
-                # Publicar el modo después de aplicar los colores de GTK.
                 if [ "$origin" != noctalia ]; then
                   ${noctaliaPackage}/bin/noctalia msg wallpaper-set "$path" >/dev/null 2>&1 || true
                 fi
@@ -359,7 +358,6 @@
               mode="$(current_mode)"
               printf '%s\n' "$path" > "$current_file"
               set_gnome_wallpaper "$path"
-              # Esperar a que Noctalia termine de aplicar los colores antes de cambiar GTK.
               if command -v korunix-gnome-shell-palette >/dev/null 2>&1; then
                 if ${noctaliaPackage}/bin/noctalia theme "$path" --scheme m3-tonal-spot --both -o "$palette_file" >> "$log_file" 2>&1; then
                   korunix-gnome-shell-palette "$palette_file" "$mode" >> "$log_file" 2>&1 || true

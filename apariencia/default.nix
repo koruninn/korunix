@@ -40,7 +40,7 @@
   programs.dconf.enable = true;
   programs.dconf.profiles.user.databases = [
     {
-      # Mantener los favoritos del repositorio por encima de los guardados en GNOME.
+      # El dock conserva las aplicaciones de Korunix.
       locks = ["/org/gnome/shell/favorite-apps"];
       settings = {
         "org/gnome/desktop/interface" = {
@@ -51,7 +51,6 @@
 
         "org/gnome/shell" = {
           favorite-apps = (import ./escritorios/dock.nix).gnome;
-          # Activar las extensiones sin impedir que se desactiven a mano.
           disable-user-extensions = false;
           enabled-extensions = [
             "dash-to-dock@micxgx.gmail.com"
