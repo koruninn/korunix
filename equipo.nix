@@ -10,8 +10,7 @@
 
   habilitarUmbriel = true;
 
-  # Prueba adicional de luz nocturna en Gamescope.
-  gamescopeForzarComposicion = false;
+  gamescopeForzarComposicion = true;
 
   navegadorPredeterminado = "firefox";
 

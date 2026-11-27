@@ -25,19 +25,18 @@
       exit 1
     fi
 
-    # Guardar la sesión antes de cerrar Steam.
     sesion="$(${pkgs.systemd}/bin/loginctl show-session "$sesion" -p Id --value)"
     [ -n "$sesion" ] || exit 1
     echo "Korunix: solicitando fin de la sesión $sesion para regresar a GDM."
-    # Cerrar solo la sesión gráfica para volver a GDM, sin cerrar las demás.
+    # Volver a la pantalla de inicio de sesión.
     exec ${pkgs.systemd}/bin/loginctl --no-ask-password terminate-session "$sesion"
   '';
 in {
   programs.steam = {
     gamescopeSession = {
       enable = true;
-      # Forzar la composición solo en la sesión Steam para que funcione la luz nocturna.
-      args = ["--xwayland-count" "2" "--force-composition"];
+      # Permitir la luz nocturna en el modo consola.
+      args = ["--xwayland-count" "2"] ++ lib.optional (equipo.gamescopeForzarComposicion or true) "--force-composition";
       steamArgs = ["-gamepadui" "-steamos3" "-steampal" "-steamdeck" "-pipewire-dmabuf"];
       env = {
         KORUNIX_STEAM_SESSION = "1";
@@ -48,7 +47,6 @@ in {
         STEAM_DISPLAY_REFRESH_LIMITS = "40,120";
       };
     };
-    # Hacer que Steam encuentre el selector en su entorno.
     extraPackages = [salirDeSteam];
   };
   environment.systemPackages = [salirDeSteam];

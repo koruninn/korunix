@@ -67,7 +67,7 @@ En `hardware.nix`, `fileSystems."/"` corresponde a la partición donde está ins
 
 Si tienes la misma Ally, conserva el perfil `asus-ally-rc71l` de NixOS Hardware. Si tienes otro equipo, revisa también ese perfil y los servicios específicos de la Ally.
 
-El archivo `hardware-local.nix` solo sirve como referencia. No necesitas añadirlo al repositorio.
+El archivo `hardware-local.nix` solo sirve como referencia. No lo añadas al repositorio.
 
 ### usuario.nix
 
@@ -95,7 +95,7 @@ No basta con cambiar el nombre en un solo archivo. Hay servicios y rutas que uti
 | `steamConMillennium` | Activa la integración de Millennium con Steam. |
 | `navegadorPredeterminado` | El navegador que se abre por defecto. |
 | `pantalla` | Nombre de la pantalla, resolución, frecuencia y escala. |
-| `gamescopeForzarComposicion` | Una opción de Gamescope relacionada con la composición y las pruebas de luz nocturna. |
+| `gamescopeForzarComposicion` | Permite usar la luz nocturna en el modo consola. |
 
 ### configuracion.nix
 
