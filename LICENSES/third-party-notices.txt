@@ -1,0 +1,156 @@
+Jovian-NixOS y Nixpkgs/NixOS
+Archivo: servicios/decky-paquete.nix (adaptado)
+Código original: https://github.com/Jovian-Experiments/Jovian-NixOS/blob/6ec148e9963a8f870c25e2b0057aafed1f662886/pkgs/decky-loader/generic.nix
+Fuente: https://raw.githubusercontent.com/Jovian-Experiments/Jovian-NixOS/6ec148e9963a8f870c25e2b0057aafed1f662886/COPYING
+
+Copyright (c) 2022 Samuel Dionne-Riel and the Jovian Experiments contributors
+Copyright (c) 2003-2022 Eelco Dolstra and the Nixpkgs/NixOS contributors
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+----------------------------------------
+
+Umbriel
+Archivo: apariencia/escritorios/noctalia/umbriel-touch-output.patch
+Fuente: https://raw.githubusercontent.com/noctalia-dev/umbriel/e65cc65ecec383528715d4bb50747b9f46199ab7/LICENSE
+
+MIT License
+
+Copyright (c) 2026 Noctalia
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------
+
+Noctalia
+Archivos y fuentes:
+- apariencia/escritorios/noctalia/plantillas/luciole/colors.toml
+  https://github.com/noctalia-dev/noctalia/blob/f22c8f4ba420da9c026bf0fb1744e3212e0ed7ae/assets/templates/luciole/colors.toml
+- apariencia/escritorios/noctalia/gtk4-adaptativo.css (adaptado)
+  https://github.com/noctalia-dev/noctalia/blob/ea968f9fcfe498c559a04e193cc6161382fbc276/assets/templates/gtk/gtk4.css
+- apariencia/modo-solar.py (adaptado)
+  https://github.com/noctalia-dev/noctalia/blob/ea968f9fcfe498c559a04e193cc6161382fbc276/src/system/day_night_schedule.cpp
+Fuente: https://raw.githubusercontent.com/noctalia-dev/noctalia/ea968f9fcfe498c559a04e193cc6161382fbc276/LICENSE
+
+MIT License
+
+Copyright (c) 2026 noctalia-dev
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------
+
+Fondos de pantalla
+Ubicación: apariencia/escritorios/noctalia/fondos/
+
+Pinturas de Wikimedia Commons. Las siguientes fichas indican dominio público
+(PD-Art o Public Domain Mark). Coinciden el nombre y tamaño de los archivos;
+falta verificar su contenido exacto.
+
+claro/ackerfluren-im-vorfrühling.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Ackerfluren_im_Vorfr%C3%BChling_(1884).jpg
+claro/bergschloss-mit-kriegerzug.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Bergschloss_mit_Kriegerzug.jpg
+claro/das-hünengrab.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Das_H%C3%BCnengrab_(1847).jpg
+claro/die-lebensinsel.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:B%C3%B6cklin_-_Die_Lebensinsel_-1888.jpeg
+claro/die-toteninsel.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Die_Toteninsel_-_Google_Art_Project.jpg
+claro/gebirgslandschaft-mit-wasserfall.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Gebirgslandschaft_mit_Wasserfall_(ca._1849).jpg
+claro/gebirgssee.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Gebirgssee_(1846).jpg
+claro/hochgebirge-mit-gemsen.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:B%C3%B6cklin_Hochgebirge_mit_Gemsen_1850.jpg
+claro/im-albanergebirge.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:B%C3%B6cklin_Im_Albanergebirge_1851.jpg
+claro/landschaft.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:B%C3%B6cklin_Arnold_Landschaft%40Nieders._Landesmuseum20170622.jpg
+claro/sacred-grove.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:Sacred_Grove_(1882)_-_Arnold_B%C3%B6cklin_(Kunstmuseum_Basel).jpg
+claro/zerstörtes-haus-bei-kehl.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:B%C3%B6cklin_Zerst%C3%B6rtes_Haus_bei_Kehl_1870.jpg
+oscuro/am-waldrand.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_Am_Waldrand.jpg
+oscuro/capriccio-arco-rovinato-e-una-villa-nello-sfondo.jpg — Francesco Guardi
+  https://commons.wikimedia.org/wiki/File:Francesco_Guardi_-_Capriccio_arco_rovinato_e_una_villa_nello_sfondo_(1760s).jpg
+oscuro/die-heimkehr.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:B%C3%B6cklin_Die_Heimkehr_1887.jpg
+oscuro/landschaft-mit-burgruine.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Landschaft_mit_Burgruine_(1847).jpg
+oscuro/mondscheinlandschaft-mit-ruine.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Mondscheinlandschaft_mit_Ruine.jpg
+oscuro/römische-landschaft.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Roman_Landscape_(R%C3%B6mische_Landschaft)_-_Google_Art_Project.jpg
+oscuro/villa-by-the-sea.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Villa_by_the_Sea_-_Google_Art_Project.jpg
+
+Fotografía propia: claro/supe.jpg, de koruninn. Sin licencia elegida.
+
+Reproducciones pendientes de verificar:
+claro/de-muziekles.jpg — Johannes Vermeer (https://commons.wikimedia.org/wiki/File:Jan_Vermeer_van_Delft_014.jpg)
+  La ficha indica dominio público (PD-Art); falta comprobar los bytes exactos.
+claro/dudelsackpfeifer.jpg — Arnold Böcklin (https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Dudelsackpfeifer_-_9471_-_Bavarian_State_Painting_Collections.jpg)
+  Obra de dominio público; la reproducción se ofrece bajo CC BY-SA 4.0. Falta confirmar el archivo y su atribución.
+claro/het-straatje.jpg — Johannes Vermeer
+  Falta identificar la reproducción exacta en Commons.
+claro/il-palazzo-ducale-visto-dal-bacino-di-san-marco.jpg — Francesco Guardi (posible)
+  La ficha encontrada de Guardi no coincide en tamaño.
+claro/view-of-delft.jpg — Johannes Vermeer
+  Falta identificar la reproducción exacta en Commons.
+oscuro/rissa-in-galleria.jpg — Umberto Boccioni (https://commons.wikimedia.org/wiki/File:Umberto_boccioni%2C_rissa_in_galleria%2C_1910%2C_02.jpg)
+  Posible foto de Sailko, CC BY-SA 4.0; la ficha también advierte de restricciones italianas de patrimonio cultural. Falta confirmar el archivo.
+
+Las posibles reproducciones CC BY-SA 4.0 requieren confirmar la fuente,
+atribuir al autor de la reproducción e indicar cambios si los hubiera.
+Licencia: https://creativecommons.org/licenses/by-sa/4.0/

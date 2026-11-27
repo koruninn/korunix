@@ -1,0 +1,135 @@
+diff --git a/src/input/cursor.h b/src/input/cursor.h
+--- a/src/input/cursor.h
++++ b/src/input/cursor.h
+@@ -130,5 +130,6 @@
+     Cursor& operator=(const Cursor&) = delete;
+ 
+-    [[nodiscard]] wlr_cursor* wlr() const { return m_cursor; }
++    [[nodiscard]] wlr_cursor* wlr() const { return m_cursor; }
++    [[nodiscard]] const std::string& touchOutputName() const { return m_touchOutputName; }
+     [[nodiscard]] bool visible() const { return !m_cursorHidden; }
+     // Re-sends the pointer to the cursor effect after outputs were added, moved or removed. wlr_cursor must have
+@@ -271,5 +272,6 @@
+     void processMotion(uint32_t timeMsec, double oldX, double oldY, bool allowFocusChange = true);
+     void processButton(uint32_t timeMsec, uint32_t button, wl_pointer_button_state state);
+-    void updatePointerOutput(bool allowFocusChange = true);
++    void updatePointerOutput(bool allowFocusChange = true);
++    void resetTouchOutput();
+     View* hoverFocus(
+         View* view, wlr_surface** surface, double* sx, double* sy, LayerSurface** layer, double oldX, double oldY
+@@ -365,5 +367,6 @@
+     uint32_t m_grabButton = 0;
+     // Last layout output under the pointer; crossing heads updates seat focus like workspace switch.
+-    wlr_output* m_pointerOutput = nullptr;
++    wlr_output* m_pointerOutput = nullptr;
++    std::string m_touchOutputName;
+     double m_wheelAccum[2]{};
+     // Presses consumed by config binds or ignored during an interactive move;
+diff --git a/src/input/cursor.cpp b/src/input/cursor.cpp
+--- a/src/input/cursor.cpp
++++ b/src/input/cursor.cpp
+@@ -1187,5 +1187,6 @@
+   }
+ 
+-  void Cursor::warpTo(double lx, double ly, bool allowFocusChange) {
++  void Cursor::warpTo(double lx, double ly, bool allowFocusChange) {
++    resetTouchOutput();
+     noteActivity();
+     const double oldX = m_cursor->x;
+@@ -1282,5 +1283,6 @@
+   }
+ 
+-  void Cursor::handleMotion(void* data) {
++  void Cursor::handleMotion(void* data) {
++    resetTouchOutput();
+     auto* event = static_cast<wlr_pointer_motion_event*>(data);
+     noteActivity();
+@@ -1314,5 +1316,6 @@
+   }
+ 
+-  void Cursor::handleMotionAbsolute(void* data) {
++  void Cursor::handleMotionAbsolute(void* data) {
++    resetTouchOutput();
+     auto* event = static_cast<wlr_pointer_motion_absolute_event*>(data);
+     noteActivity();
+@@ -1344,6 +1347,9 @@
+ 
+   void Cursor::handleButton(void* data) {
+-    auto* event = static_cast<wlr_pointer_button_event*>(data);
+-    processButton(event->time_msec, event->button, event->state);
++    auto* event = static_cast<wlr_pointer_button_event*>(data);
++    if (event->state == WL_POINTER_BUTTON_STATE_PRESSED) {
++      resetTouchOutput();
++    }
++    processButton(event->time_msec, event->button, event->state);
+   }
+ 
+@@ -1611,6 +1617,9 @@
+ 
+   void Cursor::handleAxis(void* data) {
+-    auto* event = static_cast<wlr_pointer_axis_event*>(data);
+-    noteActivity();
++    auto* event = static_cast<wlr_pointer_axis_event*>(data);
++    if (event->delta != 0 || event->delta_discrete != 0) {
++      resetTouchOutput();
++    }
++    noteActivity();
+     if (event->delta == 0 && event->delta_discrete == 0) {
+       m_server->notifyIdleActivity();
+@@ -1796,9 +1805,18 @@
+     m_server->notifyInputActivity();
+     m_server->cancelModifierTap();
+-    m_server->remapTouches();
+-
+-    double lx = 0;
+-    double ly = 0;
+-    wlr_cursor_absolute_to_layout_coords(m_cursor, &event->touch->base, event->x, event->y, &lx, &ly);
++    m_server->remapTouches();
++
++    double lx = 0;
++    double ly = 0;
++    wlr_cursor_absolute_to_layout_coords(m_cursor, &event->touch->base, event->x, event->y, &lx, &ly);
++
++    // Keep the physical pointer where it is; touch selects the launch output.
++    if (wlr_output* output = wlr_output_layout_output_at(m_server->outputLayout(), lx, ly);
++        output != nullptr && output->enabled && output->name != nullptr) {
++      if (m_touchOutputName != output->name) {
++        m_touchOutputName = output->name;
++        m_server->scheduleIpcWorkspacesEvent();
++      }
++    }
+ 
+     double sx = 0;
+@@ -2040,5 +2058,15 @@
+   }
+ 
+-  void Cursor::updatePointerOutput(bool allowFocusChange) {
++  void Cursor::resetTouchOutput() {
++    if (m_touchOutputName.empty()) {
++      return;
++    }
++    m_touchOutputName.clear();
++    m_pointerOutput = nullptr;
++    m_hoverFocusInvalidated = true;
++    m_server->scheduleIpcWorkspacesEvent();
++  }
++
++  void Cursor::updatePointerOutput(bool allowFocusChange) {
+     // Crossing outputs updates keyboard / foreign-toplevel focus so clients that follow the
+     // focused screen match preferredOutput() / workspace-switch behavior.
+diff --git a/src/server/server_outputs.cpp b/src/server/server_outputs.cpp
+--- a/src/server/server_outputs.cpp
++++ b/src/server/server_outputs.cpp
+@@ -113,6 +113,12 @@
+   }
+ 
+   wlr_output* Server::preferredOutput() const {
++    // Respect the last touch output without moving the mouse.
++    if (!m_cursor->touchOutputName().empty()) {
++      if (Output* touched = outputFromName(m_cursor->touchOutputName())) {
++        return touched->wlr();
++      }
++    }
+     wlr_output* output = wlr_output_layout_output_at(m_outputLayout, m_cursor->wlr()->x, m_cursor->wlr()->y);
+     if (output != nullptr && output->enabled) {
+       return output;

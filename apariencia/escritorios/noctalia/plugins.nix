@@ -1,0 +1,47 @@
+{
+  activos = [
+    "noctalia/umbriel-companion"
+    "prponkshe/umbriel-displays"
+    "noctalia/screen_recorder"
+    "noctalia/bongocat"
+    "noctalia/timer"
+    "noctalia/kaomoji"
+    "noctalia/notes"
+    "noctalia/world_clock"
+    "aristides/udiskie"
+    "andrewdems/printers"
+    "nilsonlinux/speedtest-meter"
+    "thepunkoff/pomodoro"
+    "yuuto/calculator"
+    "liamwh/emoji-picker"
+    "notfinaldev/youtube-search"
+    "dotnetrob/cat"
+  ];
+
+  # Quitar del estado local los complementos que ya no se usan.
+  descartados = [
+    "icefish/phone-connect"
+    "community/nix-monitor"
+    "community/nix-status"
+    "community/drive-health"
+    "community/vm-manager"
+    "community/nextboot-selector"
+    "community/tailnet"
+    "community/taildrop"
+    "community/syncthing"
+    "community/file-search"
+    "community/web-search"
+    "community/webapp-maker"
+    "community/game-launcher"
+    "community/gamer-mode"
+    "community/lyrics"
+    "community/lrc"
+    "community/yt-music"
+    "community/media-lyrics"
+    "community/discord-voice"
+    "official/translator"
+    "community/thunderbird-companion"
+    "community/timezone-hub"
+    "community/prismlauncher-instances"
+  ];
+}

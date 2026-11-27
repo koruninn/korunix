@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd /home/koru/\\.korunix && python3 -c \"import os; \nfor dirpath, _, filenames in os\\.walk\\('\\.'\\):\n    for f in filenames:\n        if f\\.endswith\\('\\.nix'\\):\n            p=os\\.path\\.join\\(dirpath,f\\)\n            with open\\(p,'r',encoding='utf-8'\\) as fh:\n                lines=fh\\.read\\(\\)\\.splitlines\\(\\)\n            if any\\(\\(l\\.strip\\(\\)\\.startswith\\('#'\\) or l\\.strip\\(\\)\\.startswith\\('//'\\) or l\\.strip\\(\\)\\.startswith\\('/\\*'\\) or l\\.strip\\(\\)\\.startswith\\('\\*'\\)\\) for l in lines\\):\n                print\\(p\\)\n                for i,l in enumerate\\(lines,1\\):\n                    if l\\.strip\\(\\)\\.startswith\\('#'\\) or l\\.strip\\(\\)\\.startswith\\('//'\\) or l\\.strip\\(\\)\\.startswith\\('/\\*'\\) or l\\.strip\\(\\)\\.startswith\\('\\*'\\):\n                        print\\(f'\\{i\\}: \\{l\\}'\\)\n                print\\('---'\\)\n\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
