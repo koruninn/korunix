@@ -155,7 +155,7 @@ Guarda las claves en `bios/switch/keys` e instala el firmware desde la interfaz 
 
 NixDeck reconoce determinados nombres de archivos al preparar melonDS y mGBA. Para DS utiliza `bios7.bin`, `bios9.bin` y `firmware.bin` dentro de `bios/nds`. Para GBA reconoce `gba_bios.bin`, `gba.bin` o `bios.bin` dentro de `bios/gba`.
 
-Después de añadir los archivos con los emuladores cerrados, vuelve a abrir el emulador correspondiente. NixDeck actualiza sus rutas al abrirlo. Todavía no comprueba que todas las BIOS sean válidas.
+Después de añadir los archivos con los emuladores cerrados, vuelve a abrir el emulador correspondiente. NixDeck actualiza sus rutas al abrirlo. Comprueba que los archivos correspondan a los que necesita cada emulador.
 
 ## 6. Añadir los juegos a Steam
 
@@ -182,8 +182,6 @@ nixdeck steam
 Puedes usar esa interfaz para revisar y guardar la importación con Steam cerrado.
 
 Cuando añadas más juegos, vuelve a ejecutar la sincronización. Para comprobar un juego que no abre, prueba primero el emulador desde el escritorio y revisa si necesita archivos de sistema o ajustes adicionales.
-
-La importación y ejecución de juegos de Wii se ha probado en Veskalia. Todavía falta probar el proceso completo con todas las consolas.
 
 ## 7. Usar el celular como mando
 
@@ -218,8 +216,6 @@ No retires la microSD mientras un emulador esté abierto o se estén escribiendo
 | Un juego no aparece en Steam | Revisa su carpeta y formato, cierra Steam y vuelve a sincronizar. |
 | Un juego aparece pero no abre | Prueba el emulador desde el escritorio y revisa su configuración, BIOS o firmware. |
 | El organizador avisa de un conflicto | Conserva las dos ubicaciones y revisa su contenido antes de mover o borrar nada. |
-
-NixDeck sigue en desarrollo. Faltan la comprobación de BIOS, las copias de seguridad automáticas y las pruebas de los perfiles de mandos, atajos y gráficos de todos los emuladores.
 
 ## Archivos de NixDeck
 

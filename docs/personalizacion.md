@@ -68,39 +68,36 @@ Hay dos formas habituales de incorporar estos programas.
 
 #### Cuando el flake ofrece un módulo de NixOS
 
-Figma Linux Next es un ejemplo que ya está en Korunix.
+Tether es un ejemplo que ya está en Korunix.
 
-1. Abre [flake.nix](../flake.nix) y añade el proyecto dentro de `inputs`. En este caso, la línea ya existe:
+1. Añade el proyecto en `inputs` de [flake.nix](../flake.nix):
 
    ```nix
-   figma-linux-next.url = "github:arximus88/figma-linux-next";
+   tether.url = "github:zackb/tether/3b14d96104a958673f88e5c70d1481f810663052";
+   tether.inputs.nixpkgs.follows = "nixpkgs";
    ```
 
-   La dirección indica el usuario y el repositorio de GitHub. Nix guarda la versión concreta en `flake.lock`.
+   El commit de la dirección fija la versión de Tether. La segunda línea hace que utilice el mismo Nixpkgs que Korunix.
 
-2. Crea un archivo en `aplicaciones` para configurar el programa. Este es el contenido esencial de [figma.nix](../aplicaciones/figma.nix):
+2. Crea un archivo en `aplicaciones` para importar y activar su módulo. Esta es una versión reducida de [tether.nix](../aplicaciones/tether.nix):
 
    ```nix
    {inputs, ...}: {
-     imports = [
-       inputs.figma-linux-next.nixosModules.default
-     ];
+     imports = [inputs.tether.nixosModules.default];
 
-     programs.figma-linux-next.enable = true;
+     programs.tether.enable = true;
    }
    ```
 
-   La primera parte importa el módulo que ofrece el proyecto. La segunda activa el programa mediante una opción definida por ese módulo.
+3. Añade `./tether.nix` a la lista `imports` de [aplicaciones/default.nix](../aplicaciones/default.nix). Si creaste un archivo nuevo, añádelo a Git con `git add aplicaciones/tether.nix`.
 
-3. Añade `./figma.nix` a la lista `imports` de [aplicaciones/default.nix](../aplicaciones/default.nix). Si creaste un archivo nuevo, añádelo a Git con `git add aplicaciones/figma.nix`.
-
-Este ejemplo ya está configurado en Korunix. Para otro programa, utiliza el nombre del input, el módulo y las opciones que indique su documentación. No todos los flakes tienen `nixosModules.default` ni una opción `enable`.
+Tether ya está configurado en Korunix. Para incorporar otro programa, consulta qué módulo y opciones ofrece su proyecto.
 
 #### Cuando el flake ofrece un paquete
 
 Si el proyecto no proporciona un módulo de NixOS, pero sí un paquete, puedes instalarlo mediante `environment.systemPackages`.
 
-Luciole funciona de esta manera. Su dependencia está declarada en `flake.nix` y se utiliza desde [luciole.nix](../apariencia/escritorios/noctalia/luciole.nix). Esta es una versión reducida de ese método:
+Luciole y Figma Linux Next funcionan de esta manera. Su dependencia está declarada en `flake.nix` y se utiliza desde [luciole.nix](../apariencia/escritorios/noctalia/luciole.nix). Esta es una versión reducida de ese método:
 
 ```nix
 {inputs, pkgs, ...}: {
@@ -250,7 +247,7 @@ Los paneles, el dock y los widgets de Noctalia están en [ajustes.nix](../aparie
 
 Los ajustes de GNOME y sus extensiones están principalmente en [apariencia/default.nix](../apariencia/default.nix).
 
-GSConnect está instalado y habilitado desde ese archivo. La opción de NixOS se llama `programs.kdeconnect`, pero utiliza el paquete `pkgs.gnomeExtensions.gsconnect` en lugar de KDE Connect. En Umbriel no hay un complemento para conectar el celular desde la barra; para el iPhone utilizo Tether directamente.
+GSConnect se configura en ese mismo archivo mediante la opción `programs.kdeconnect`, con el paquete `pkgs.gnomeExtensions.gsconnect`. Para conectar el iPhone utilizo Tether.
 
 Si cambias algo desde los ajustes del escritorio y vuelve a su valor anterior al reconstruir, busca esa preferencia en los archivos de Korunix. Algunos ajustes se vuelven a aplicar automáticamente.
 

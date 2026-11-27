@@ -22,8 +22,6 @@ let
     "net.donnybeelo.Convey"
   ];
 in {
-  # Luciole sigue instalado; falta su icono en Hatter.
   noctalia = builtins.filter (id: id != "org.gnome.Nautilus") comunes;
-  # LocalSend usa el identificador de la versión nativa.
   gnome = map (id: "${id}.desktop") comunes;
 }

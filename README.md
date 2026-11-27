@@ -82,7 +82,7 @@ También incluye PepoMote, que permite utilizar el celular como mando.
 
 DuckStation y Xenia se descargan y actualizan automáticamente al configurar o sincronizar NixDeck. Los demás emuladores se instalan desde Nixpkgs.
 
-NixDeck sigue en desarrollo. No incluye juegos, BIOS ni claves de las consolas.
+NixDeck no incluye juegos, BIOS ni claves de las consolas.
 
 ## Aplicaciones
 
