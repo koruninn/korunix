@@ -15,7 +15,6 @@
   };
   noctaliaConfig = toml.generate "noctalia-config.toml" ajustes;
 
-  # Aplicar los ajustes de Noctalia sin borrar las preferencias personales.
   noctaliaConfigSync = pkgs.writeShellApplication {
     name = "korunix-noctalia-config-sync";
     runtimeInputs = [pkgs.coreutils pkgs.python3 pkgs.xdg-user-dirs];
@@ -28,7 +27,7 @@
 
       install -d -m 0755 -o "$owner" -g "$group" "$config_dir"
 
-      # Quitar solo los bloques que administra Korunix.
+      # Conservar las preferencias personales.
       if [ -f "$settings_file" ]; then
         tmp_file="$settings_file.korunix-tmp"
         skip_managed=false
@@ -71,7 +70,6 @@
 
       install -m 0644 -o "$owner" -g "$group" ${noctaliaConfig} "$config_dir/config.toml"
 
-      # Usar la carpeta de documentos del usuario para las notas.
       documents_dir="$(HOME="$home" xdg-user-dir DOCUMENTS)"
       if [ -n "$documents_dir" ]; then
         notes_dir="$documents_dir/Notes"

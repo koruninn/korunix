@@ -31,10 +31,9 @@
     })
   ];
 
-  # Servicio de huellas disponible también para otras integraciones PAM.
   services.fprintd.enable = true;
 
-  # Evitar que el ahorro de energía suspenda el lector USB.
+  # Mantener disponible el lector de huellas.
   services.udev.extraRules = ''
     ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1c7a", ATTR{idProduct}=="0588", TEST=="power/control", ATTR{power/control}="on"
   '';

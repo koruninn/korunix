@@ -9,7 +9,7 @@
       "$busctl" --user --timeout=2s call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus GetConnectionUnixProcessID s org.gnome.OnlineAccounts 2>/dev/null
     }
 
-    # Esperar a que GNOME desbloquee el llavero antes de reiniciar GOA.
+    # Esperar a que se desbloquee el llavero.
     for intento in {1..20}; do
       if [ "$("$busctl" --user --timeout=2s get-property org.freedesktop.secrets /org/freedesktop/secrets/collection/login org.freedesktop.Secret.Collection Locked 2>/dev/null || true)" = "b false" ]; then
         break
@@ -21,7 +21,6 @@
       ${pkgs.coreutils}/bin/sleep 1
     done
 
-    # Consultar GOA sin iniciarlo si no existe; el nombre del proceso puede variar en NixOS.
     respuesta="$(propietario || true)"
     if [ -n "$respuesta" ]; then
       read -r tipo pid <<< "$respuesta"
@@ -42,7 +41,6 @@
         fi
         ${pkgs.coreutils}/bin/sleep 0.25
       done
-      # Recuperar las cuentas en línea al volver a GNOME.
       if ! "$busctl" --user --timeout=10s call org.gnome.OnlineAccounts /org/gnome/OnlineAccounts org.freedesktop.DBus.Peer Ping; then
         exit 0
       fi
@@ -66,7 +64,7 @@ in {
   config = lib.mkIf (equipo.habilitarUmbriel or false) {
     programs.noctalia.systemd.enable = false;
 
-    # GOA puede conservar una conexión antigua al cambiar de sesión; recuperarla al entrar en GNOME.
+    # Recuperar las cuentas en línea al volver a GNOME.
     systemd.user.services.umbriel.serviceConfig.ExecStopPost = [
       "${pkgs.coreutils}/bin/touch %t/korunix-goa-after-umbriel"
     ];

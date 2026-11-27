@@ -21,7 +21,7 @@
 in {
   environment.systemPackages = [pkgs.easyeffects];
 
-  # Iniciar Easy Effects con la sesión sin cambiar el micrófono predeterminado.
+  # Mantener el micrófono predeterminado.
   systemd.user.services.easyeffects = {
     description = "Easy Effects con RNNoise y puerta de ruido para Korunix";
     wants = ["pipewire.service" "wireplumber.service"];
@@ -36,7 +36,6 @@ in {
     };
   };
 
-  # Easy Effects 8.3 guarda los presets en ~/.local/share y su base en ~/.config.
   system.activationScripts.korunixEasyEffects.text = lib.mkAfter ''
     home=${lib.escapeShellArg usuario.home}
     owner="koru"

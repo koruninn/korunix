@@ -1,5 +1,5 @@
 {equipo, pkgs, ...}: {
-  # Dejar los mandos y el consumo de energía en manos de HHD, sin otro servicio que compita.
+  # HHD controla los mandos y el consumo de energía.
   services.inputplumber.enable = false;
   services.power-profiles-daemon.enable = pkgs.lib.mkForce false;
   services.handheld-daemon = {

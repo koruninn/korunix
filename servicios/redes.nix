@@ -5,12 +5,10 @@
     nmcli=${pkgs.networkmanager}/bin/nmcli
     ip=${pkgs.iproute2}/bin/ip
 
-    # Recuperar solo el adaptador USB que usa cdc_ncm.
     [ -d "$dispositivo" ] || exit 0
     controlador="$(${pkgs.coreutils}/bin/readlink -f "$dispositivo/device/driver")"
     [ "''${controlador##*/}" = cdc_ncm ] || exit 0
 
-    # Esperar a que NetworkManager detecte el adaptador.
     estado=""
     for intento in 1 2 3 4 5 6; do
       [ -d "$dispositivo" ] || exit 0
@@ -57,7 +55,6 @@
 in {
   networking.networkmanager.enable = true;
 
-  # Comprobar antes si hay conexión sin perder la detección de portales cautivos.
   networking.networkmanager.settings.connectivity.interval = 30;
 
   services.avahi = {
@@ -72,7 +69,7 @@ in {
     openFirewall = true;
   };
 
-  # Acceso remoto a través de una red privada, sin abrir puertos en el router.
+  # Acceso remoto mediante Tailscale.
   services.tailscale.enable = true;
   environment.systemPackages = with pkgs; [
     trayscale
@@ -80,7 +77,7 @@ in {
     usbutils
   ];
 
-  # Recuperar el adaptador ASIX 0b95:1790 al conectarlo.
+  # Recuperar la conexión del adaptador Ethernet.
   services.udev.extraRules = ''
     ACTION=="add", SUBSYSTEM=="net", ATTRS{idVendor}=="0b95", ATTRS{idProduct}=="1790", TAG+="systemd", ENV{SYSTEMD_WANTS}+="korunix-asix-link@$name.service"
   '';
@@ -95,7 +92,7 @@ in {
     };
   };
 
-  # Si solo se reconecta el cable Ethernet, puede no llegar un nuevo aviso del adaptador.
+  # Recuperar la conexión al volver a enchufar el cable.
   systemd.services.korunix-asix-recheck = {
     description = "Comprobar la portadora del adaptador ASIX";
     after = ["NetworkManager.service"];
@@ -113,7 +110,7 @@ in {
         [ "$(${pkgs.coreutils}/bin/cat "$usb/idProduct" 2>/dev/null)" = 1790 ] || continue
         interfaz="''${dispositivo##*/}"
 
-        # No interrumpir conexiones activas ni las desactivadas a mano.
+        # Respetar las conexiones desactivadas a mano.
         estado="$(LC_ALL=C ${pkgs.networkmanager}/bin/nmcli -g GENERAL.STATE device show "$interfaz" 2>/dev/null || true)"
         [ "''${estado%% *}" = 20 ] || continue
         unidad="$(${pkgs.systemd}/bin/systemd-escape --template=korunix-asix-link@.service "$interfaz")"
@@ -160,7 +157,6 @@ in {
 
   networking.firewall.enable = true;
 
-  # NetworkManager necesita una URI para comprobar la conexión y detectar portales cautivos.
   networking.networkmanager.settings.connectivity.enabled = true;
   networking.networkmanager.settings.connectivity.uri = "http://fedoraproject.org/static/hotspot.txt";
   networking.networkmanager.settings.connectivity.response = "OK";
