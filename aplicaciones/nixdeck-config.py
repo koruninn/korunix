@@ -156,7 +156,7 @@ def combined_manifest(console):
         entries.append({"title": title, "target": executable,
                         "startIn": "/run/current-system/sw/bin",
                         "launchOptions": flags + " " + quoted,
-                        "appendArgsToExecutable": True})
+                        "appendArgsToExecutable": False})
 
     folder = root/"roms"/console
     if console == "ps3":
@@ -261,36 +261,49 @@ def srm():
                      "steamDirectory": str(steam), "romDirectory": "",
                      "executable": {"path": "", "shortcutPassthrough": False, "appendArgsToExecutable": False},
                      "executableArgs": "", "executableModifier": "", "startInDirectory": ""})
-    existing = {str(p.get("parserId")): p for p in old}
     for n,name,console,emu,extensions,args,glob in specs:
         if console in combined:
             continue
         pid = str(176000000000000000+n)
-        if pid in existing:
-            existing[pid]["configTitle"] = name
-            existing[pid]["steamCategories"] = [name]
-            continue
         folder = root/"roms"/console if console else root/"storage/ps3/dev_hdd0/game"
         folder.mkdir(parents=True,exist_ok=True)
         executable = "/run/current-system/sw/bin/korunix-"+emu
         if glob is None:
             exts = extensions.split("|")
             glob = "**/${title}@(" + "|".join("."+x for e in exts for x in (e,e.upper())) + ")"
-        equivalent = next((p for p in old if p.get("romDirectory") == str(folder) and (p.get("executable") or {}).get("path") == executable and (console not in ("ps3", "wiiu", None) or (p.get("parserInputs") or {}).get("glob") == glob)), None)
-        if equivalent is not None:
-            equivalent["configTitle"] = name
-            equivalent["steamCategories"] = [name]
+        matches = [
+            item for item in old
+            if str(item.get("parserId")) == pid
+            or (item.get("romDirectory") == str(folder)
+                and ((item.get("executable") or {}).get("path") == executable
+                     or (console == "xbox360" and
+                         Path((item.get("executable") or {}).get("path") or "").name.lower()
+                         .startswith("xenia"))))
+        ]
+        # Conservar las preferencias de cada consola, pero actualizar sus rutas.
+        if matches:
+            keep = next((item for item in matches if str(item.get("parserId")) == pid), matches[0])
+            old = [item for item in old if item is keep or not any(item is x for x in matches)]
+            keep.update({
+                "configTitle": name, "steamCategories": [name],
+                "steamDirectory": str(steam), "romDirectory": str(folder),
+                "executableArgs": args, "executableModifier": '"${exePath}"',
+                "startInDirectory": str(home),
+                "executable": {**(keep.get("executable") or {}), "path": executable,
+                               "shortcutPassthrough": False, "appendArgsToExecutable": False},
+                "parserType": "Glob", "parserInputs": {**(keep.get("parserInputs") or {}), "glob": glob},
+            })
             continue
         old.append({
             "parserType":"Glob", "configTitle":name,
             "steamDirectory":str(steam), "romDirectory":str(folder),
             "steamCategories":[name], "executableArgs":args,
-            "executableModifier":'"${exePath}"', "startInDirectory":"",
+            "executableModifier":'"${exePath}"', "startInDirectory":str(home),
             "titleModifier":"${fuzzyTitle}", "steamInputEnabled":"1",
             "imageProviders":["sgdb","steamCDN"], "onlineImageQueries":"${${fuzzyTitle}}",
             "imagePool":"${fuzzyTitle}", "drmProtect":False, "disabled":False,
             "userAccounts":{"specifiedAccounts":["Global"]},
-            "executable":{"path":executable,"shortcutPassthrough":False,"appendArgsToExecutable":True},
+            "executable":{"path":executable,"shortcutPassthrough":False,"appendArgsToExecutable":False},
             "parserInputs":{"glob":glob},
             "titleFromVariable":{"limitToGroups":"","caseInsensitiveVariables":False,"skipFileIfVariableWasNotFound":False},
             "fuzzyMatch":{"replaceDiacritics":True,"removeCharacters":True,"removeBrackets":True},

@@ -31,6 +31,7 @@
     set -eu
     montaje=${lib.escapeShellArg montaje}
     raiz=${lib.escapeShellArg raiz}
+    export PATH=${lib.makeBinPath [pkgs.coreutils pkgs.util-linux]}:/run/current-system/sw/bin:$PATH
 
     ${comprobarTarjeta}
     if [ ! -w "$montaje" ]; then
@@ -119,6 +120,7 @@
   xenia = pkgs.writeShellScriptBin "korunix-xenia" ''
     set -eu
     raiz=${lib.escapeShellArg raiz}
+    ${comprobarTarjeta}
     case "''${1:-}" in
       *.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]) imagen="$1"; shift ;;
       *)
