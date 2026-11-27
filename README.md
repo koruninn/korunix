@@ -131,8 +131,8 @@ No es una distribución independiente, sino una configuración de NixOS.
 
 La receta de Decky está adaptada de [Jovian-NixOS](https://github.com/Jovian-Experiments/Jovian-NixOS) y varios temas provienen de las [plantillas de la comunidad de Noctalia](https://github.com/noctalia-dev/community-templates).
 
-[Avisos de terceros](LICENSES/third-party-notices.txt)
+[Licencias y atribuciones](LICENSES/third-party-notices.txt)
 
 ## Licencia
 
-El código propio y la documentación de Korunix se comparten bajo la [licencia MIT](LICENSE). Los fondos de pantalla, las capturas y el material de terceros no están cubiertos por esta licencia; cada uno conserva las condiciones que le corresponden. Consulta los [avisos de terceros](LICENSES/third-party-notices.txt).
+Comparto mi configuración y su documentación bajo la [licencia MIT](LICENSE). Los fondos, las capturas y el material de terceros quedan fuera de esta licencia.

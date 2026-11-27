@@ -92,9 +92,7 @@ SOFTWARE.
 Fondos de pantalla
 Ubicación: apariencia/escritorios/noctalia/fondos/
 
-Pinturas de Wikimedia Commons. Las siguientes fichas indican dominio público
-(PD-Art o Public Domain Mark). Coinciden el nombre y tamaño de los archivos;
-falta verificar su contenido exacto.
+Obras y referencias de Wikimedia Commons:
 
 claro/ackerfluren-im-vorfrühling.jpg — Arnold Böcklin
   https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Ackerfluren_im_Vorfr%C3%BChling_(1884).jpg
@@ -135,22 +133,20 @@ oscuro/römische-landschaft.jpg — Arnold Böcklin
 oscuro/villa-by-the-sea.jpg — Arnold Böcklin
   https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Villa_by_the_Sea_-_Google_Art_Project.jpg
 
-Fotografía propia: claro/supe.jpg, de koruninn. Sin licencia elegida.
 
-Reproducciones pendientes de verificar:
-claro/de-muziekles.jpg — Johannes Vermeer (https://commons.wikimedia.org/wiki/File:Jan_Vermeer_van_Delft_014.jpg)
-  La ficha indica dominio público (PD-Art); falta comprobar los bytes exactos.
-claro/dudelsackpfeifer.jpg — Arnold Böcklin (https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Dudelsackpfeifer_-_9471_-_Bavarian_State_Painting_Collections.jpg)
-  Obra de dominio público; la reproducción se ofrece bajo CC BY-SA 4.0. Falta confirmar el archivo y su atribución.
+claro/de-muziekles.jpg — Johannes Vermeer
+  https://commons.wikimedia.org/wiki/File:Jan_Vermeer_van_Delft_014.jpg
+claro/dudelsackpfeifer.jpg — Arnold Böcklin
+  https://commons.wikimedia.org/wiki/File:Arnold_B%C3%B6cklin_-_Dudelsackpfeifer_-_9471_-_Bavarian_State_Painting_Collections.jpg
 claro/het-straatje.jpg — Johannes Vermeer
-  Falta identificar la reproducción exacta en Commons.
-claro/il-palazzo-ducale-visto-dal-bacino-di-san-marco.jpg — Francesco Guardi (posible)
-  La ficha encontrada de Guardi no coincide en tamaño.
+claro/il-palazzo-ducale-visto-dal-bacino-di-san-marco.jpg — atribuida a Francesco Guardi
 claro/view-of-delft.jpg — Johannes Vermeer
-  Falta identificar la reproducción exacta en Commons.
-oscuro/rissa-in-galleria.jpg — Umberto Boccioni (https://commons.wikimedia.org/wiki/File:Umberto_boccioni%2C_rissa_in_galleria%2C_1910%2C_02.jpg)
-  Posible foto de Sailko, CC BY-SA 4.0; la ficha también advierte de restricciones italianas de patrimonio cultural. Falta confirmar el archivo.
+oscuro/rissa-in-galleria.jpg — Umberto Boccioni
+  https://commons.wikimedia.org/wiki/File:Umberto_boccioni%2C_rissa_in_galleria%2C_1910%2C_02.jpg
 
-Las posibles reproducciones CC BY-SA 4.0 requieren confirmar la fuente,
-atribuir al autor de la reproducción e indicar cambios si los hubiera.
-Licencia: https://creativecommons.org/licenses/by-sa/4.0/
+Las referencias identifican las obras, no necesariamente la reproducción exacta.
+Las fichas de Dudelsackpfeifer y Rissa in galleria corresponden a
+reproducciones con licencia CC BY-SA 4.0 (la segunda, de Sailko).
+https://creativecommons.org/licenses/by-sa/4.0/
+
+claro/supe.jpg — Fotografía de koruninn.
