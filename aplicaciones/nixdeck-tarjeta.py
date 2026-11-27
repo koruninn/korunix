@@ -40,7 +40,7 @@ def extraible(disco, dispositivos):
     elif not (disco.get("rm") or padre.get("rm")):
         return False
 
-    # No preparar tarjetas desde las que esté arrancado el sistema.
+    # No modificar el disco desde el que arrancó NixOS.
     for otro in dispositivos.values():
         actual = otro
         visitados = set()
@@ -72,7 +72,6 @@ def unica(lista):
 
 def comprobar(montaje):
     tarjeta = unica(discos())
-    # Acceder a la carpeta activa el montaje automático de systemd.
     os.listdir(montaje)
     actual = unica(discos())
     if actual["maj:min"] != tarjeta["maj:min"]:

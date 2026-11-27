@@ -36,7 +36,6 @@
       ]}
       export GST_PLUGIN_PATH="$GST_PLUGIN_PATH_1_0"
 
-      # Comprobar los elementos antes de esperar la cámara.
       for elemento in pipewiresrc capsfilter queue y4menc fdsink; do
         if ! gst-inspect-1.0 "$elemento" >/dev/null 2>&1; then
           echo "Falta el complemento de GStreamer: $elemento" >&2
@@ -56,13 +55,12 @@
           ' 2>/dev/null
       }
 
-      # El identificador cambia cuando Tether vuelve a crear la cámara.
       until serial="$(buscar_camara)"; do
         sleep 3
       done
 
       echo "Conectando la cámara del iPhone (PipeWire $serial)."
-      # FFmpeg evita que la imagen se congele al pasar a V4L2.
+      # Mantener fluida la imagen de la cámara.
       (
         gst-launch-1.0 -q pipewiresrc target-object="$serial" \
           ! video/x-raw,format=I420 ! queue ! y4menc ! fdsink fd=1 sync=false |
@@ -78,7 +76,7 @@
       trap detener EXIT
       trap 'exit 0' TERM INT
 
-      # Volver a conectar si desaparece la fuente de PipeWire.
+      # Volver a conectar cuando se reinicie la cámara.
       while kill -0 "$pid" 2>/dev/null && [ "$(buscar_camara)" = "$serial" ]; do
         sleep 3
       done
@@ -88,7 +86,7 @@ in lib.mkIf config.programs.tether.enable {
   boot.extraModulePackages = [loopback];
   boot.kernelModules = ["v4l2loopback"];
 
-  # Esta cámara es independiente de la cámara virtual de OBS.
+  # No utilizar la cámara virtual de OBS.
   services.udev.extraRules = ''
     SUBSYSTEM=="video4linux", KERNEL=="video20", ATTR{name}=="iPhone (Tether)", OWNER="${usuario.name}", MODE="0600"
   '';

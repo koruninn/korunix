@@ -1,5 +1,5 @@
 {config, lib, pkgs, ...}: let
-  # Bibliotecas para programas externos sin interferir con las aplicaciones de NixOS.
+  # Compatibilidad con programas externos.
   extras = p: with p; [
     libglvnd
     libxkbcommon
@@ -24,7 +24,6 @@
       echo "Korunix: el AppImage debe tener permiso de ejecución: $imagen" >&2
       exit 1
     fi
-    # DuckStation necesita montar el AppImage sin extraerlo.
     case "$(${pkgs.coreutils}/bin/basename "$imagen")" in
       [Dd]uck[Ss]tation*.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee])
         if [ -x /run/current-system/sw/bin/korunix-duckstation ]; then
@@ -58,7 +57,6 @@ in {
   programs.appimage = {
     enable = true;
     package = pkgs.appimage-run.override {extraPkgs = extras;};
-    # Registrar las extensiones permite montar DuckStation con un nombre sin extensión.
     binfmt = false;
   };
 

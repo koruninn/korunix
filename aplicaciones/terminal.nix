@@ -4,7 +4,7 @@
     runtimeInputs = [pkgs.python3 pkgs.glib];
     text = ''
       export XDG_DATA_DIRS="${pkgs.glib.getSchemaDataDirPath pkgs.gsettings-desktop-schemas}:''${XDG_DATA_DIRS:-/run/current-system/sw/share}"
-      # Cambiar solo el atajo de Korunix y respetar los demás.
+      # Conservar los demás atajos.
       python3 - <<'PY'
       import ast
       import subprocess
@@ -41,7 +41,6 @@ in {
     settings.default = ["org.gnome.Ptyxis.desktop"];
   };
 
-  # Ocultar XTerm del menú.
   services.xserver.excludePackages = [pkgs.xterm];
   services.xserver.desktopManager.xterm.enable = false;
 }

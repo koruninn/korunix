@@ -75,7 +75,6 @@
     exec "$@"
   '';
 
-  # Mantener los mismos lanzadores aunque se actualicen los emuladores.
   emuladores = [
     { id = "azahar"; nombre = "Azahar"; paquete = pkgs.azahar; }
     { id = "cemu"; nombre = "Cemu"; paquete = pkgs.cemu; }
@@ -93,7 +92,6 @@
       exec ${preparar} ${emulador.id} ${lib.getExe emulador.paquete} "$@"
     '';
 
-  # Conservar los iconos y las asociaciones de archivos de cada emulador.
   escritorio = emulador: let
     comando = pkgs.writeShellScript "korunix-escritorio-${emulador.id}" ''
       export PATH="${emulador.paquete}/bin:$PATH"
@@ -117,7 +115,7 @@
     done
   '';
 
-  # Xenia se descarga por separado; el lanzador acepta su ruta y los argumentos del juego.
+  # Xenia se descarga en la microSD.
   xenia = pkgs.writeShellScriptBin "korunix-xenia" ''
     set -eu
     raiz=${lib.escapeShellArg raiz}
@@ -144,7 +142,6 @@
     exec ${lib.getExe pkgs.steam-rom-manager} "$@"
   '';
 
-  # Dar a DuckStation las bibliotecas que necesita sin cambiar las del resto del sistema.
   duckstationSteamRun = (pkgs.steam.override {
     extraPkgs = p: lib.unique (
       (p.appimageTools.defaultFhsEnvArgs.targetPkgs p)
@@ -153,7 +150,7 @@
     );
   }).run;
 
-  # DuckStation necesita que su AppImage se monte sin extraerlo.
+  # DuckStation necesita montar el AppImage sin extraerlo.
   duckstationRuntime = pkgs.writeShellScript "korunix-duckstation-runtime" ''
     set -eu
     imagen="$1"
@@ -185,8 +182,7 @@
     trap 'exit 130' INT
     trap 'exit 143' TERM
 
-    # Usar un nombre sin extensión para evitar el lanzador automático de AppImages.
-    # Conservar el archivo original; copiarlo solo si no se puede enlazar.
+    # Evitar que el lanzador de AppImages intervenga.
     if ! ${pkgs.coreutils}/bin/ln -- "$imagen" "$runtime" 2>/dev/null; then
       ${pkgs.coreutils}/bin/cp --reflink=auto --preserve=mode -- "$imagen" "$runtime"
     fi
@@ -212,14 +208,13 @@
       exit 1
     fi
 
-    # Ejecutar DuckStation con el montaje original y las bibliotecas de Steam.
     ${lib.getExe duckstationSteamRun} env -u LD_LIBRARY_PATH \
       APPIMAGE="$imagen" APPDIR="$appdir" "$appdir/AppRun" "$@"
   '';
 
   duckstation = pkgs.writeShellScriptBin "korunix-duckstation" ''
     imagen=${lib.escapeShellArg "${raiz}/appimages/DuckStation-x64.AppImage"}
-    # Aceptar también las rutas que usaban los parsers anteriores.
+    # Conservar los accesos directos existentes.
     case "''${1:-}" in
       *.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee]) imagen="$1"; shift ;;
     esac
@@ -312,14 +307,13 @@ EOF
 
 
 in {
-  # Montar la tarjeta por su etiqueta, sin impedir el arranque si falta.
+  # La Ally puede arrancar sin la microSD.
   fileSystems."${montaje}" = {
     device = "/dev/disk/by-label/NixDeck";
     fsType = "ext4";
     options = ["nofail" "x-systemd.automount" "x-systemd.device-timeout=5s"];
   };
 
-  # Indicar a PepoMote dónde guarda NixDeck los ajustes de los emuladores.
   environment.sessionVariables = {
     PEPOMOTE_DOLPHIN_DIR = "${raiz}/emulators/dolphin/config/dolphin-emu";
     PEPOMOTE_CEMU_DIR = "${raiz}/emulators/cemu/config/Cemu";

@@ -1,4 +1,4 @@
-# Organizar los datos sin sobrescribir ni mezclar partidas.
+# Conservar las partidas existentes.
 set -eu
 raiz="$1"
 modo="$2"
@@ -47,7 +47,6 @@ vincular() {
   ln -sT -- "$(realpath --relative-to="$(dirname -- "$origen")" -- "$destino")" "$origen"
 }
 
-# Conservar los archivos de BIOS de ambas ubicaciones.
 vincular_archivo() {
   local origen="$raiz/$1" destino="$raiz/$2"
   if [ -L "$origen" ]; then return 0; fi
@@ -57,7 +56,6 @@ vincular_archivo() {
       avisar "Archivos distintos conservados: $origen / $destino"
       return 0
     fi
-    # Guardar el original sin reemplazar copias anteriores.
     if [ -e "$origen.nixdeck-respaldo" ]; then return 0; fi
     mv -T --no-clobber -- "$origen" "$origen.nixdeck-respaldo"
   elif [ -f "$origen" ] && [ ! -e "$destino" ]; then
@@ -70,7 +68,7 @@ vincular_archivo() {
   fi
 }
 
-# Evitar dos migraciones al mismo tiempo, no impedir que se juegue.
+# Evitar que se muevan los datos dos veces a la vez.
 exec 9>"$raiz/emulators/.nixdeck-organizar.lock"
 flock -x 9
 
@@ -97,7 +95,7 @@ organizar() {
     dolphin)
       base=emulators/dolphin/data/dolphin-emu
       vincular "$base/GC" saves/gc
-      # Conservar todo el almacenamiento de Wii, no solo sus partidas.
+      # Conservar también los canales y datos de Wii.
       vincular "$base/Wii" storage/wii
       vincular saves/wii storage/wii/title
       vincular "$base/StateSaves" states/dolphin

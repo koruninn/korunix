@@ -103,7 +103,7 @@ def melonds():
     settings(cfg, sections, toml=True)
 
 def combined_manifest(console):
-    # Regenerar la lista de juegos de PS3 y Wii U al abrir o sincronizar Steam ROM Manager.
+    # Actualizar los juegos de PS3 y Wii U.
     import struct
     import xml.etree.ElementTree as ET
 
@@ -175,7 +175,6 @@ def combined_manifest(console):
     else:
         for game in files(folder, {".wua", ".wud", ".wux"}):
             add(game.stem, game)
-        # Preferir el ejecutable que está en la carpeta code.
         by_game = {}
         for rpx in files(folder, {".rpx"}):
             game = rpx.parent.parent if rpx.parent.name.lower() == "code" else rpx.parent
@@ -189,12 +188,11 @@ def combined_manifest(console):
     return dest
 
 def srm():
-    # Steam conserva su ubicación original.
     home = Path(sys.argv[3])
     dest = root/"storage/steam-rom-manager/userData"
     dest.mkdir(parents=True, exist_ok=True)
     target = dest/"userConfigurations.json"
-    # Importar los ajustes anteriores una sola vez, sin sobrescribir.
+    # Conservar los ajustes existentes.
     if not target.exists():
         conf = Path(os.environ.get("XDG_CONFIG_HOME", str(home/".config")))
         for src in [conf/"Steam ROM Manager/userData", conf/"steam-rom-manager/userData"]:
@@ -213,8 +211,6 @@ def srm():
     steam = home/".steam/steam"
     if not steam.is_dir() and (home/".local/share/Steam").is_dir():
         steam = home/".local/share/Steam"
-    # Steam ROM Manager 2.5.44 actualiza el formato v22 por su cuenta.
-    # Conservar los identificadores y ajustes existentes.
     specs = [
         (1, "PS1", "psx", "duckstation", "cue|chd|pbp|m3u|iso", '-batch -fullscreen -- "${filePath}"', None),
         (2, "PS2", "ps2", "pcsx2", "iso|chd|cso|zso|gz|bin|mdf|nrg", '-batch -fullscreen -- "${filePath}"', None),
@@ -236,10 +232,9 @@ def srm():
     ]
     image = dict.fromkeys(["long","tall","hero","logo","icon"], "")
     controllers = dict.fromkeys(["ps4","ps5","ps5_edge","xbox360","xboxone","xboxelite","switch_joycon_left","switch_joycon_right","switch_pro","neptune","steamcontroller_gordon"])
-    # No reutilizar los identificadores de GB y GBC.
     obsolete = {"176000000000000004", "176000000000000005", "176000000000000010", "176000000000000014", "176000000000000015"}
     old = [p for p in old if str(p.get("parserId")) not in obsolete]
-    # Unir los parsers anteriores de PS3 y Wii U sin tocar los demás.
+    # Unificar las reglas de PS3 y Wii U.
     combined = {"ps3": (3, "PS3", "rpcs3"), "wiiu": (9, "Wii U", "cemu")}
     for console, (number, title, emu) in combined.items():
         pid = str(176000000000000000+number)
@@ -252,7 +247,7 @@ def srm():
                    (item.get("romDirectory") in sources and (item.get("executable") or {}).get("path") == executable)]
         if matches:
             keep = next((item for item in matches if str(item.get("parserId")) == pid), matches[0])
-            # Conservar el identificador y las imágenes.
+            # Conservar las carátulas de Steam.
             old = [item for item in old if item is keep or not any(item is x for x in matches)]
         else:
             keep = {"parserId": pid, "version": 28,
