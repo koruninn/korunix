@@ -24,13 +24,6 @@
       echo "Korunix: el AppImage debe tener permiso de ejecución: $imagen" >&2
       exit 1
     fi
-    case "$(${pkgs.coreutils}/bin/basename "$imagen")" in
-      [Dd]uck[Ss]tation*.[Aa][Pp][Pp][Ii][Mm][Aa][Gg][Ee])
-        if [ -x /run/current-system/sw/bin/korunix-duckstation ]; then
-          exec /run/current-system/sw/bin/korunix-duckstation "$imagen" "$@"
-        fi
-        ;;
-    esac
     exec ${lib.getExe appimage} "$imagen" "$@"
   '';
   escritorio = pkgs.makeDesktopItem {
