@@ -64,6 +64,10 @@
           ];
         };
 
+        "org/gnome/settings-daemon/plugins/power" = {
+          power-button-action = "suspend";
+        };
+
         "org/gnome/settings-daemon/plugins/media-keys" = {
           custom-keybindings = ["/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/korunix-terminal/"];
         };
