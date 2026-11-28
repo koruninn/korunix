@@ -33,8 +33,8 @@
 
   services.fprintd.enable = true;
 
-  # Mantener disponible el lector de huellas.
+  # Permitir que el lector de huellas entre en reposo.
   services.udev.extraRules = ''
-    ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1c7a", ATTR{idProduct}=="0588", TEST=="power/control", ATTR{power/control}="on"
+    ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1c7a", ATTR{idProduct}=="0588", TEST=="power/control", ATTR{power/control}="auto"
   '';
 }
