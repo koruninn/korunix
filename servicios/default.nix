@@ -1,6 +1,7 @@
 {...}: {
   imports = [
     ./arranque.nix
+    ./almacenamiento.nix
     ./sesiones.nix
     ./decky.nix
     ./umbriel.nix
