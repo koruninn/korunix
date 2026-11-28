@@ -14,7 +14,7 @@ Los archivos `.nix` son archivos de texto. Puedes abrirlos con cualquier editor,
 | [hardware.nix](../hardware.nix) | Particiones del disco y soporte de hardware. |
 | [aplicaciones](../aplicaciones) | Programas instalados y su configuración. |
 | [apariencia](../apariencia) | Escritorios, fondos, colores, iconos y cursor. |
-| [servicios](../servicios) | Mandos, huellas, redes, arranque y otras funciones del sistema. |
+| [servicios](../servicios) | Mandos, redes, arranque y otras funciones del sistema. |
 | [modulos/base](../modulos/base) | Audio, energía y herramientas básicas. |
 | [flake.nix](../flake.nix) | Dependencias y archivos que forman el sistema. |
 | [flake.lock](../flake.lock) | Versiones exactas de las dependencias. Nix lo genera y actualiza. |
