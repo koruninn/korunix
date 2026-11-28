@@ -18,9 +18,7 @@ if not isinstance(hhd, dict):
 settings = hhd.setdefault("settings", {})
 if not isinstance(settings, dict):
     raise ValueError("Los ajustes de HHD no son válidos.")
-if path.exists() and settings.get("powerbuttond") is False:
-    return_value = False
-else:
+if not path.exists() or settings.get("powerbuttond") is not False:
     settings["powerbuttond"] = False
     with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as f:
         yaml.safe_dump(state, f, sort_keys=False)
