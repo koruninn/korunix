@@ -68,30 +68,24 @@ Hay dos formas habituales de incorporar estos programas.
 
 #### Cuando el flake ofrece un módulo de NixOS
 
-Tether es un ejemplo que ya está en Korunix.
+Nix Flatpak es un ejemplo que ya está en Korunix.
 
-1. Añade el proyecto en `inputs` de [flake.nix](../flake.nix):
+1. Declara el proyecto en `inputs` de [flake.nix](../flake.nix):
 
    ```nix
-   tether.url = "github:zackb/tether/3b14d96104a958673f88e5c70d1481f810663052";
-   tether.inputs.nixpkgs.follows = "nixpkgs";
+   nix-flatpak.url = "github:gmodena/nix-flatpak?ref=latest";
    ```
 
-   El commit de la dirección fija la versión de Tether. La segunda línea hace que utilice el mismo Nixpkgs que Korunix.
-
-2. Crea un archivo en `aplicaciones` para importar y activar su módulo. Esta es una versión reducida de [tether.nix](../aplicaciones/tether.nix):
+2. Importa su módulo y activa Flatpak. Puedes ver cómo se hace en [aplicaciones/flatpak.nix](../aplicaciones/flatpak.nix):
 
    ```nix
    {inputs, ...}: {
-     imports = [inputs.tether.nixosModules.default];
-
-     programs.tether.enable = true;
+     imports = [inputs.nix-flatpak.nixosModules.nix-flatpak];
+     services.flatpak.enable = true;
    }
    ```
 
-3. Añade `./tether.nix` a la lista `imports` de [aplicaciones/default.nix](../aplicaciones/default.nix). Si creaste un archivo nuevo, añádelo a Git con `git add aplicaciones/tether.nix`.
-
-Tether ya está configurado en Korunix. Para incorporar otro programa, consulta qué módulo y opciones ofrece su proyecto.
+3. Si creas un módulo nuevo, añádelo a los imports de [aplicaciones/default.nix](../aplicaciones/default.nix) y a Git antes de reconstruir.
 
 #### Cuando el flake ofrece un paquete
 
@@ -247,7 +241,7 @@ Los paneles, el dock y los widgets de Noctalia están en [ajustes.nix](../aparie
 
 Los ajustes de GNOME y sus extensiones están principalmente en [apariencia/default.nix](../apariencia/default.nix).
 
-GSConnect se configura en ese mismo archivo mediante la opción `programs.kdeconnect`, con el paquete `pkgs.gnomeExtensions.gsconnect`. Para conectar el iPhone utilizo Tether.
+GSConnect se configura en ese mismo archivo mediante la opción `programs.kdeconnect`, con el paquete `pkgs.gnomeExtensions.gsconnect`. Para compartir archivos con el iPhone utilizo LocalSend.
 
 Si cambias algo desde los ajustes del escritorio y vuelve a su valor anterior al reconstruir, busca esa preferencia en los archivos de Korunix. Algunos ajustes se vuelven a aplicar automáticamente.
 
@@ -268,49 +262,7 @@ El tema de iconos se configura en [hatter.nix](../apariencia/hatter.nix) y el cu
 
 ## Conectar el iPhone
 
-[Tether](https://github.com/zackb/tether) permite conectar un iPhone con Linux. Korunix lo instala y lo inicia automáticamente al iniciar sesión.
-
-### Emparejar el iPhone
-
-1. Descarga [Tether - Linux Companion](https://apps.apple.com/us/app/tether-linux-companion/id6762097135) desde la App Store.
-2. Conecta el iPhone y la Ally a la misma red.
-3. Abre Tether en ambos equipos y acepta la solicitud de emparejamiento.
-
-Puedes compartir archivos, sincronizar el portapapeles y usar la cámara por Wi-Fi. Para los mensajes, contactos, notificaciones y llamadas, consulta cómo emparejar el iPhone por Bluetooth en la [guía de Tether](https://github.com/zackb/tether/blob/main/docs/BLUETOOTH.md).
-
-### Usar el iPhone como webcam
-
-1. Abre la pestaña Camera de Tether en el iPhone y pulsa Start Streaming.
-2. En la aplicación que quieras utilizar, selecciona la cámara `iPhone (Tether)`.
-
-Mantén Tether abierto en el iPhone mientras transmites. iOS detiene la cámara cuando la aplicación pasa a segundo plano.
-
-Tether entrega el vídeo a PipeWire. Korunix utiliza GStreamer y FFmpeg para llevarlo a una cámara virtual de Linux (`/dev/video20`), de modo que también puedan utilizarla las aplicaciones que trabajan con V4L2. No es la misma cámara virtual de OBS y no hace falta iniciar OBS para utilizarla.
-
-### Si no aparece la cámara
-
-Comprueba primero que el iPhone esté conectado y transmitiendo:
-
-```sh
-tether status
-```
-
-Si no aparece la cámara en las aplicaciones, comprueba el servicio que entrega el vídeo:
-
-```sh
-systemctl --user status korunix-camara-iphone.service
-journalctl --user -u korunix-camara-iphone.service -n 30 --no-pager
-```
-
-Puedes reiniciarlo sin reconstruir NixOS:
-
-```sh
-systemctl --user restart korunix-camara-iphone.service
-```
-
-Si Tether no conecta, reinicia su servicio con `systemctl --user restart tetherd.service` y vuelve a iniciar la transmisión desde el iPhone.
-
-Los ajustes de red, Bluetooth y del servicio de Tether están en [aplicaciones/tether.nix](../aplicaciones/tether.nix). La cámara virtual se configura en [aplicaciones/tether-camara.nix](../aplicaciones/tether-camara.nix). Si cambias el número de dispositivo de vídeo, revisa todas las referencias a ese número en el archivo y comprueba que no esté ocupado por otra cámara.
+Para compartir archivos utilizo LocalSend. Instálalo también en el iPhone, conecta ambos equipos a la misma red y abre la aplicación en los dos.
 
 ### Duplicar la pantalla del iPhone
 
