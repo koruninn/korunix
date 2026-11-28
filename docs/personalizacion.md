@@ -155,9 +155,9 @@ Korunix incluye Gear Lever para gestionar estos archivos y soporte adicional en 
 
 Gear Lever necesita saber de dónde descargar una versión nueva. Algunos AppImages ya incluyen esa información; otros necesitan una fuente de actualización.
 
-Las fuentes de los AppImages de Korunix están en [aplicaciones/appimages.nix](../aplicaciones/appimages.nix). La lista `nixdeck` contiene DuckStation y Xenia, que se gestionan desde NixDeck. No los integres de nuevo en Gear Lever.
+Las fuentes de actualización de Gear Lever están en [aplicaciones/appimages.nix](../aplicaciones/appimages.nix). Los emuladores y sus AppImages se gestionan desde EmuDeck. No los integres de nuevo en Gear Lever.
 
-Para los demás AppImages, primero integra el archivo desde Gear Lever. Puedes consultar su ubicación con:
+Para añadir otro AppImage, primero integra el archivo desde Gear Lever. Puedes consultar su ubicación con:
 
 ```sh
 gearlever --list-installed
@@ -423,6 +423,8 @@ Si dos módulos asignan valores incompatibles a una opción, puede aparecer un e
 - `lib.mkBefore` y `lib.mkAfter`: cambian el orden al combinar listas.
 
 En Korunix, [modulos/base/energia.nix](../modulos/base/energia.nix) activa Power Profiles Daemon, un servicio que gestiona los perfiles de energía. [servicios/mandos.nix](../servicios/mandos.nix) lo desactiva con `mkForce false` para evitar que interfiera con Handheld Daemon.
+
+El botón de encendido lo gestiona el sistema. Antes de iniciar HHD, [hhd-encendido.py](../servicios/hhd-encendido.py) desactiva su gestor del botón sin cambiar los demás ajustes. [energia.nix](../modulos/base/energia.nix) y [apariencia/default.nix](../apariencia/default.nix) establecen la suspensión. El lector de huellas permanece desactivado porque interfería con esa función.
 
 No uses `mkForce` para tapar cualquier error de configuración. Primero revisa qué módulos están definiendo la misma opción.
 
