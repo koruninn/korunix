@@ -205,7 +205,6 @@ Just es una herramienta que permite guardar comandos largos bajo nombres cortos.
 | `just formatear` | Ordena el formato de los archivos Nix. |
 | `just volver` | Vuelve a la generación anterior del sistema. |
 | `just limpiar` | Elimina generaciones de más de 30 días y optimiza el almacén de Nix. |
-| `just huellas` | Abre el menú para registrar las huellas del usuario. |
 
 ## 7. Si algo deja de funcionar
 
