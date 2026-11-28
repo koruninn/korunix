@@ -50,7 +50,7 @@ Una sesión de Steam Big Picture sobre Gamescope, similar a la de SteamOS.
 
 Incluye Decky Loader y CSS Loader para personalizar Steam. Los complementos y los temas se instalan automáticamente, con mis ajustes de apariencia y los iconos de los mandos de la Ally.
 
-Handheld Daemon se encarga de los mandos integrados, los botones especiales y el consumo de energía de la Ally.
+Handheld Daemon se encarga de los mandos integrados, los botones especiales y el consumo de energía de la Ally. El botón de encendido suspende el equipo desde cualquiera de los tres escritorios. No utilizo el lector de huellas porque interfería con la suspensión.
 
 También están disponibles Heroic, Lutris y Prism Launcher.
 
@@ -58,31 +58,13 @@ También están disponibles Heroic, Lutris y Prism Launcher.
 | --- | --- | --- |
 | ![Inicio del modo consola](capturas/modo-consola/modo-consola-inicio.png) | ![Menú del modo consola](capturas/modo-consola/modo-consola-menu.png) | ![Ajustes del modo consola](capturas/modo-consola/modo-consola-ajustes.png) |
 
-## NixDeck
+## EmuDeck
 
-NixDeck se encarga de la emulación dentro de Korunix. Utiliza Steam ROM Manager para integrar los juegos de otras consolas en la biblioteca de Steam.
+Utilizo EmuDeck para instalar y configurar los emuladores. Steam ROM Manager añade los juegos a la biblioteca de Steam y permite abrirlos desde el modo consola.
 
-Los juegos, las partidas guardadas y las configuraciones de los emuladores se almacenan en una microSD. La tarjeta se reconoce por la etiqueta NixDeck, aunque se cambie por otra. El sistema puede arrancar con o sin ella.
+Korunix incluye las dependencias y el acceso directo de EmuDeck. Los juegos y las partidas se guardan principalmente en una microSD con la etiqueta EmuDeck. Si reinstalo NixOS, puedo conservar la tarjeta y recuperar la instalación desde EmuDeck.
 
-| Consola | Emulador |
-| --- | --- |
-| PlayStation | DuckStation |
-| PlayStation 2 | PCSX2 |
-| PlayStation 3 | RPCS3 |
-| PSP | PPSSPP |
-| GameCube y Wii | Dolphin |
-| Wii U | Cemu |
-| Nintendo Switch | Eden |
-| Nintendo 3DS | Azahar |
-| Nintendo DS | melonDS |
-| Game Boy Advance | mGBA |
-| Xbox 360 | Xenia |
-
-También incluye PepoMote, que permite utilizar el celular como mando.
-
-DuckStation y Xenia se descargan y actualizan automáticamente al configurar o sincronizar NixDeck. Los demás emuladores se instalan desde Nixpkgs.
-
-NixDeck no incluye juegos, BIOS ni claves de las consolas.
+La [guía de EmuDeck](docs/emudeck.md) explica cómo recuperar los emuladores y los juegos en Steam.
 
 ## Aplicaciones
 
@@ -120,14 +102,14 @@ No es una distribución independiente, sino una configuración de NixOS.
 
 - [Instalación y mantenimiento](docs/configuracion-y-mantenimiento.md)
 - [Estructura y personalización](docs/personalizacion.md)
-- [NixDeck](docs/nixdeck.md)
+- [EmuDeck](docs/emudeck.md)
 
 ## Créditos
 
 - [NixOS y Nixpkgs](https://github.com/NixOS/nixpkgs) y [NixOS Hardware](https://github.com/NixOS/nixos-hardware).
 - [Umbriel](https://github.com/noctalia-dev/umbriel), [Noctalia](https://github.com/noctalia-dev/noctalia), [Luciole](https://github.com/noctalia-dev/luciole) y [GNOME](https://www.gnome.org/).
 - [Hatter](https://github.com/Mibea/Hatter), [Bibata](https://github.com/ful1e5/Bibata_Cursor) y [ChromaLeon](https://github.com/Fabito02/ChromaLeon).
-- [Handheld Daemon](https://github.com/hhd-dev/hhd), [Gamescope](https://github.com/ValveSoftware/gamescope), [Decky Loader](https://github.com/SteamDeckHomebrew/decky-loader), [Steam ROM Manager](https://github.com/SteamGridDB/steam-rom-manager) y [PepoMote](https://github.com/PepoTechYT/PepoMote).
+- [Handheld Daemon](https://github.com/hhd-dev/hhd), [Gamescope](https://github.com/ValveSoftware/gamescope), [Decky Loader](https://github.com/SteamDeckHomebrew/decky-loader), [Steam ROM Manager](https://github.com/SteamGridDB/steam-rom-manager) y [EmuDeck](https://github.com/dragoonDorise/EmuDeck).
 - [CSS Loader](https://github.com/DeckThemes/SDH-CssLoader) y los autores de los [temas de DeckThemes](https://deckthemes.com/).
 - [GSConnect](https://github.com/GSConnect/gnome-shell-extension-gsconnect) y [v4l2loopback](https://github.com/umlaeute/v4l2loopback).
 
