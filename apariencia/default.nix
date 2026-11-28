@@ -29,6 +29,7 @@
     gnomeExtensions.advanced-media-controller
     gnomeExtensions.extension-list
     gnomeExtensions.appindicator
+    gnomeExtensions.runcat
     gnomeExtensions.legacy-gtk3-theme-scheme-auto-switcher
     gnome-extension-manager
   ];
@@ -61,6 +62,7 @@
             pkgs.gnomeExtensions.advanced-media-controller.extensionUuid
             pkgs.gnomeExtensions.extension-list.extensionUuid
             pkgs.gnomeExtensions.appindicator.extensionUuid
+            pkgs.gnomeExtensions.runcat.extensionUuid
             pkgs.gnomeExtensions.gsconnect.extensionUuid
             pkgs.gnomeExtensions.legacy-gtk3-theme-scheme-auto-switcher.extensionUuid
           ];
