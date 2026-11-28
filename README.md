@@ -106,7 +106,6 @@ El tema de iconos es Hatter y el cursor es Bibata.
 - Transmisión de juegos mediante Sunshine.
 - Transferencia de archivos mediante LocalSend.
 - Duplicación de pantalla mediante UxPlay.
-- Integración con iPhone mediante [Tether](https://github.com/zackb/tether), incluida la posibilidad de usarlo como webcam.
 - Compatibilidad con AppImages.
 - Limpieza automática de generaciones antiguas de NixOS.
 
@@ -131,7 +130,7 @@ No es una distribución independiente, sino una configuración de NixOS.
 - [Hatter](https://github.com/Mibea/Hatter), [Bibata](https://github.com/ful1e5/Bibata_Cursor) y [ChromaLeon](https://github.com/Fabito02/ChromaLeon).
 - [Handheld Daemon](https://github.com/hhd-dev/hhd), [Gamescope](https://github.com/ValveSoftware/gamescope), [Decky Loader](https://github.com/SteamDeckHomebrew/decky-loader), [Steam ROM Manager](https://github.com/SteamGridDB/steam-rom-manager) y [PepoMote](https://github.com/PepoTechYT/PepoMote).
 - [CSS Loader](https://github.com/DeckThemes/SDH-CssLoader) y los autores de los [temas de DeckThemes](https://deckthemes.com/).
-- [Tether](https://github.com/zackb/tether), [GSConnect](https://github.com/GSConnect/gnome-shell-extension-gsconnect), [GStreamer](https://gstreamer.freedesktop.org/), [FFmpeg](https://ffmpeg.org/) y [v4l2loopback](https://github.com/umlaeute/v4l2loopback).
+- [GSConnect](https://github.com/GSConnect/gnome-shell-extension-gsconnect) y [v4l2loopback](https://github.com/umlaeute/v4l2loopback).
 
 La receta de Decky está adaptada de [Jovian-NixOS](https://github.com/Jovian-Experiments/Jovian-NixOS) y varios temas provienen de las [plantillas de la comunidad de Noctalia](https://github.com/noctalia-dev/community-templates).
 
