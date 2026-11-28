@@ -12,7 +12,8 @@
   boot.loader.efi.canTouchEfiVariables = true;
   boot.loader.systemd-boot.edk2-uefi-shell.enable = true;
 
-  boot.kernelPackages = pkgs.linuxPackages_latest;
+  # Usar el kernel de soporte prolongado.
+  boot.kernelPackages = pkgs.linuxPackages;
   # Mantener limpio el arranque sin perder el registro de errores.
   boot.consoleLogLevel = 3;
   boot.kernelParams = lib.mkBefore ["quiet" "splash" "boot.shell_on_fail"];
