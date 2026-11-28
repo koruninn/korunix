@@ -100,7 +100,6 @@ El tema de iconos es Hatter y el cursor es Bibata.
 
 ## Otros detalles
 
-- Lector de huellas de la ROG Ally.
 - Reducción de ruido del micrófono.
 - Acceso remoto mediante Tailscale y SSH.
 - Transmisión de juegos mediante Sunshine.
