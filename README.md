@@ -115,8 +115,6 @@ No es una distribución independiente, sino una configuración de NixOS.
 
 La receta de Decky está adaptada de [Jovian-NixOS](https://github.com/Jovian-Experiments/Jovian-NixOS) y varios temas provienen de las [plantillas de la comunidad de Noctalia](https://github.com/noctalia-dev/community-templates).
 
-[Licencias y atribuciones](LICENSES/third-party-notices.txt)
-
 ## Licencia
 
-Comparto mi configuración y su documentación bajo la [licencia MIT](LICENSE). Los fondos, las capturas y el material de terceros quedan fuera de esta licencia.
+Comparto mi configuración y su documentación bajo la [licencia MIT](LICENSE). Los fondos, las capturas y el material de terceros quedan fuera de esta licencia. Las licencias y atribuciones de terceros se conservan en el mismo archivo.
