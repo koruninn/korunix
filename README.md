@@ -109,9 +109,8 @@ No es una distribución independiente, sino una configuración de NixOS.
 - [NixOS y Nixpkgs](https://github.com/NixOS/nixpkgs) y [NixOS Hardware](https://github.com/NixOS/nixos-hardware).
 - [Umbriel](https://github.com/noctalia-dev/umbriel), [Noctalia](https://github.com/noctalia-dev/noctalia), [Luciole](https://github.com/noctalia-dev/luciole) y [GNOME](https://www.gnome.org/).
 - [Hatter](https://github.com/Mibea/Hatter), [Bibata](https://github.com/ful1e5/Bibata_Cursor) y [ChromaLeon](https://github.com/Fabito02/ChromaLeon).
-- [Handheld Daemon](https://github.com/hhd-dev/hhd), [Gamescope](https://github.com/ValveSoftware/gamescope), [Decky Loader](https://github.com/SteamDeckHomebrew/decky-loader), [Steam ROM Manager](https://github.com/SteamGridDB/steam-rom-manager) y [EmuDeck](https://github.com/dragoonDorise/EmuDeck).
+- [Handheld Daemon](https://github.com/hhd-dev/hhd), [Gamescope](https://github.com/ValveSoftware/gamescope), [Decky Loader](https://github.com/SteamDeckHomebrew/decky-loader) y [EmuDeck](https://github.com/dragoonDorise/EmuDeck).
 - [CSS Loader](https://github.com/DeckThemes/SDH-CssLoader) y los autores de los [temas de DeckThemes](https://deckthemes.com/).
-- [GSConnect](https://github.com/GSConnect/gnome-shell-extension-gsconnect).
 
 La receta de Decky está adaptada de [Jovian-NixOS](https://github.com/Jovian-Experiments/Jovian-NixOS) y varios temas provienen de las [plantillas de la comunidad de Noctalia](https://github.com/noctalia-dev/community-templates).
 
