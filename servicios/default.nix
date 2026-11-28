@@ -11,6 +11,7 @@
     ./microfono.nix
     ./mprisence.nix
     ./redes.nix
-    ./huella.nix
   ];
+
+  services.fprintd.enable = false;
 }
