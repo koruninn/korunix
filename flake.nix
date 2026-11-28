@@ -31,18 +31,6 @@
       flake = false;
     };
 
-    # Soporte para el lector de huellas de la Ally.
-    libfprint-egismoc-sdcp = {
-      url = "github:TenSeventy7/libfprint-egismoc-sdcp/4d128d4f6f0b46182572126e84df88a73ac27859";
-      flake = false;
-    };
-
-    # Parches para el sensor 1c7a:0588.
-    ally-fingerprint-patches = {
-      url = "github:podothecat/decky-fingerprint-unlock/d5b077c3cfad098909a2849529a27aff55e5354f";
-      flake = false;
-    };
-
     # Lanzadores de juegos de HoYoverse.
     aagl.url = "github:ezKEa/aagl-gtk-on-nix";
     aagl.inputs.nixpkgs.follows = "nixpkgs";
