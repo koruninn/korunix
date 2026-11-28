@@ -51,9 +51,6 @@
 
     figma-linux-next.url = "github:arximus88/figma-linux-next";
 
-    tether.url = "github:zackb/tether/3b14d96104a958673f88e5c70d1481f810663052";
-    tether.inputs.nixpkgs.follows = "nixpkgs";
-
     millennium.url = "github:SteamClientHomebrew/Millennium?dir=packages/nix";
   };
 
