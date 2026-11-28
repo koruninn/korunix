@@ -15,7 +15,6 @@
     ./predeterminadas.nix
     ./steam.nix
     ./terminal.nix
-    ./tether.nix
     ./uxplay.nix
   ];
 }
