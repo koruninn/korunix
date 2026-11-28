@@ -12,6 +12,11 @@
     };
   };
 
+  # Dejar la suspensión en manos del sistema, sin cambiar los demás ajustes de HHD.
+  systemd.services.handheld-daemon.preStart = ''
+    ${pkgs.python3.withPackages (p: [p.pyyaml])}/bin/python3 ${./hhd-encendido.py}
+  '';
+
   hardware.graphics = {
     enable = true;
     enable32Bit = true;
