@@ -46,14 +46,8 @@
     mkdir -p "$raiz"/saves/{psx,ps2,ps3,psp,switch,n3ds,nds,gba,gc,wii,wiiu,xbox360}
     mkdir -p "$raiz"/states/{psx,ps2,psp,n3ds,nds,gba,dolphin}
 
-    if [ "$1" = srm ]; then
-      shift
-      exec ${lib.getExe pkgs.python3} ${./nixdeck-config.py} "$raiz" srm ${lib.escapeShellArg usuario.home}
-    fi
-
     if [ "$1" = organizar ]; then
       ${organizarDatos} "$raiz" organizar
-      ${lib.getExe pkgs.python3} ${./nixdeck-config.py} "$raiz" srm ${lib.escapeShellArg usuario.home}
       printf '%s\n' "$raiz"
       exit 0
     fi
@@ -135,13 +129,6 @@
     esac
     exec ${preparar} xenia ${lib.getExe pkgs.appimage-run} "$imagen" \
       --storage_root="$raiz/storage/xbox360" --content_root="$raiz/saves/xbox360" "$@"
-  '';
-
-  srm = pkgs.writeShellScriptBin "steam-rom-manager" ''
-    set -eu
-    ${preparar} srm
-    export PORTABLE_EXECUTABLE_DIR=${lib.escapeShellArg "${raiz}/storage/steam-rom-manager"}
-    exec ${lib.getExe pkgs.steam-rom-manager} "$@"
   '';
 
   duckstationSteamRun = (pkgs.steam.override {
@@ -249,8 +236,6 @@
 NixDeck
 
   nixdeck configurar       Preparar la microSD.
-  nixdeck sincronizar      Añadir los juegos a Steam.
-  nixdeck steam            Abrir Steam ROM Manager.
   nixdeck firmware         Instalar el firmware de PS3.
 EOF
     }
@@ -274,19 +259,6 @@ EOF
         ${preparar} organizar
         exec ${actualizarAppImages}
         ;;
-      sincronizar)
-        if ${pkgs.procps}/bin/pgrep -u "$(id -u)" -x steam >/dev/null ||
-           ${pkgs.procps}/bin/pgrep -u "$(id -u)" -x steam-rom-manager >/dev/null; then
-          echo "NixDeck: cierra Steam y Steam ROM Manager antes de sincronizar." >&2
-          exit 1
-        fi
-        ${preparar} organizar
-        ${actualizarAppImages}
-        exec ${srm}/bin/steam-rom-manager add
-        ;;
-      steam)
-        exec ${srm}/bin/steam-rom-manager
-        ;;
       firmware)
         ${comprobarTarjeta}
         firmware=${lib.escapeShellArg "${raiz}/bios/ps3/PS3UPDAT.PUP"}
@@ -309,13 +281,6 @@ EOF
 
 
 in {
-  # La Ally puede arrancar sin la microSD.
-  fileSystems."${montaje}" = {
-    device = "/dev/disk/by-label/NixDeck";
-    fsType = "ext4";
-    options = ["nofail" "x-systemd.automount" "x-systemd.device-timeout=5s"];
-  };
-
   environment.sessionVariables = {
     PEPOMOTE_DOLPHIN_DIR = "${raiz}/emulators/dolphin/config/dolphin-emu";
     PEPOMOTE_CEMU_DIR = "${raiz}/emulators/cemu/config/Cemu";
@@ -324,8 +289,6 @@ in {
 
   environment.systemPackages =
     [
-      pkgs.steam-rom-manager
-      (lib.hiPrio srm)
       nixdeck
       xenia
       xeniaDesktop
