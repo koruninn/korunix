@@ -22,23 +22,6 @@
         "type": "github"
       }
     },
-    "ally-fingerprint-patches": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1786284849,
-        "narHash": "sha256-hotXKdILygycotJQy6fDZMzMa2Vd8CnYMZTJpxElbys=",
-        "owner": "podothecat",
-        "repo": "decky-fingerprint-unlock",
-        "rev": "d5b077c3cfad098909a2849529a27aff55e5354f",
-        "type": "github"
-      },
-      "original": {
-        "owner": "podothecat",
-        "repo": "decky-fingerprint-unlock",
-        "rev": "d5b077c3cfad098909a2849529a27aff55e5354f",
-        "type": "github"
-      }
-    },
     "figma-linux-next": {
       "inputs": {
         "nixpkgs": "nixpkgs"
@@ -70,23 +53,6 @@
       "original": {
         "owner": "edolstra",
         "repo": "flake-compat",
-        "type": "github"
-      }
-    },
-    "libfprint-egismoc-sdcp": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1753778526,
-        "narHash": "sha256-ij+g5iuWJqMNTDvqTTYWB9BD3Zi+1PzG075rcFULC4w=",
-        "owner": "TenSeventy7",
-        "repo": "libfprint-egismoc-sdcp",
-        "rev": "4d128d4f6f0b46182572126e84df88a73ac27859",
-        "type": "github"
-      },
-      "original": {
-        "owner": "TenSeventy7",
-        "repo": "libfprint-egismoc-sdcp",
-        "rev": "4d128d4f6f0b46182572126e84df88a73ac27859",
         "type": "github"
       }
     },
@@ -306,9 +272,7 @@
     "root": {
       "inputs": {
         "aagl": "aagl",
-        "ally-fingerprint-patches": "ally-fingerprint-patches",
         "figma-linux-next": "figma-linux-next",
-        "libfprint-egismoc-sdcp": "libfprint-egismoc-sdcp",
         "luciole": "luciole",
         "millennium": "millennium",
         "nix-flatpak": "nix-flatpak",
