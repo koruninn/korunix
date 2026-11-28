@@ -115,11 +115,13 @@ git grep -n -i veskalia -- '*.nix' '*.py' '*.sh' justfile
 
 Si lo cambias, sustituye también `veskalia` en los comandos de esta guía y en el [justfile](../justfile).
 
-### NixDeck
+### EmuDeck
 
-La microSD de los emuladores se reconoce por la etiqueta NixDeck. No hace falta cambiar su UUID en la configuración. Sigue la [guía de NixDeck](nixdeck.md) después de instalar Korunix.
+La microSD de los emuladores se reconoce por la etiqueta EmuDeck. Si ya tienes una tarjeta preparada, consérvala sin formatear. Korunix instala las dependencias necesarias; sigue la [guía de EmuDeck](emudeck.md) para recuperar tu instalación y añadir la tarjeta a Steam.
 
-### Conectar el iPhone
+### Suspensión
+
+Una pulsación corta del botón de encendido suspende el equipo y otra lo reactiva. Korunix configura HHD para dejar esa función al sistema y mantiene desactivado el lector de huellas, que interfería con el botón.
 
 ### Otros equipos
 
