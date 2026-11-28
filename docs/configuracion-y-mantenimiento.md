@@ -121,8 +121,6 @@ La microSD de los emuladores se reconoce por la etiqueta NixDeck. No hace falta 
 
 ### Conectar el iPhone
 
-Tether se instala junto con Korunix. Si utilizas un iPhone, consulta [cómo conectarlo y utilizar su cámara](personalizacion.md#conectar-el-iphone) después de aplicar la configuración.
-
 ### Otros equipos
 
 La carpeta [plantilla-equipo](../plantilla-equipo) contiene archivos de ejemplo para organizar la configuración de otro equipo. No se instala por sí sola: hay que incorporarla a `flake.nix` y revisar los módulos compartidos.
